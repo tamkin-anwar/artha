@@ -516,10 +516,10 @@
     <div class="notes-section" id="all-section">
         <div class="notes-section-label"{{ ' hidden' if not pinned_notes }}><i data-lucide="layout-grid"></i>All notes</div>
         <div class="notes-grid" id="all-grid">
-            {% for note in other_notes %}{{ note_card(note, loop.index0) }}{% endfor %}
             <div class="note-card note-card-add" id="ghost-add-card" tabindex="0" role="button" aria-label="Create new note">
                 <i data-lucide="plus"></i><span>New note</span>
             </div>
+            {% for note in other_notes %}{{ note_card(note, loop.index0) }}{% endfor %}
         </div>
     </div>
 
@@ -916,8 +916,11 @@
         refreshIcons();
     }
 
-    function insertGhostBeforeAdd(card) {
-        allGrid.insertBefore(card, ghostAddCard);
+    // New/restored notes go right after the ghost "+ New note" card —
+    // i.e. at the top of the real notes, newest first — not appended
+    // to the end, so a just-created note is immediately visible.
+    function insertAtTopOfAllGrid(card) {
+        allGrid.insertBefore(card, ghostAddCard.nextSibling);
     }
 
     function revealNotesPage() {
@@ -968,9 +971,9 @@
         setTimeout(function () {
             card.classList.remove("exiting-pin");
             if (note.pinned) {
-                pinnedGrid.appendChild(card);
+                pinnedGrid.insertBefore(card, pinnedGrid.firstChild);
             } else {
-                insertGhostBeforeAdd(card);
+                insertAtTopOfAllGrid(card);
             }
             card.style.animation = "none";
             void card.offsetWidth;
@@ -1215,8 +1218,8 @@
             .then(function (note) {
                 if (!note || note.message) return;
                 revealNotesPage();
-                var card = buildNoteCard(note, allGrid.children.length - 1);
-                insertGhostBeforeAdd(card);
+                var card = buildNoteCard(note, 0);
+                insertAtTopOfAllGrid(card);
                 openNoteModal(card, note.id);
             })
             .catch(function (err) { console.error("Error creating note:", err); });
@@ -1238,9 +1241,12 @@
                 if (!result.ok) return;
                 revealNotesPage();
                 var note = result.data;
-                var targetGrid = note.pinned ? pinnedGrid : allGrid;
-                var card = buildNoteCard(note, targetGrid.children.length);
-                if (note.pinned) targetGrid.appendChild(card); else insertGhostBeforeAdd(card);
+                var card = buildNoteCard(note, 0);
+                if (note.pinned) {
+                    pinnedGrid.insertBefore(card, pinnedGrid.firstChild);
+                } else {
+                    insertAtTopOfAllGrid(card);
+                }
                 updatePinnedVisibility();
                 applyFilterToCard(card);
             })

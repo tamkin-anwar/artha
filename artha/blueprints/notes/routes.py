@@ -83,7 +83,10 @@ def notes_page():
 
     notes = (
         Note.query.filter_by(user_id=current_user.id)
-        .order_by(Note.pinned.desc(), Note.position.asc(), Note.id.asc())
+        # Newest first (by creation order) rather than oldest first —
+        # matches Keep/Notes/Notion convention so a just-created note is
+        # immediately visible without scrolling past everything else.
+        .order_by(Note.pinned.desc(), Note.position.desc(), Note.id.desc())
         .all()
     )
     pinned_notes = [n for n in notes if n.pinned]
