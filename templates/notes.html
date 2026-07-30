@@ -1394,7 +1394,17 @@
             var list = li.parentElement;
             var parent = list.parentElement;
             var nextSibling = list.nextSibling;
-            list.remove();
+            if (list.children.length === 1) {
+                // the only item in this list (just created by a toolbar
+                // click, nothing typed yet) — safe to remove the whole list
+                list.remove();
+            } else {
+                // an empty trailing item in an otherwise real list (e.g.
+                // the user pressed Enter after typed content) — only drop
+                // that one item; the real items stay put, and the new
+                // block goes after the list instead of inside it
+                li.remove();
+            }
             return { parent: parent, nextSibling: nextSibling };
         }
 
