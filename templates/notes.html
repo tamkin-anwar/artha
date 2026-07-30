@@ -319,22 +319,25 @@
     }
     #note-title-input::placeholder { color: var(--text-muted); }
 
-    .note-modal-close {
+    .note-modal-close, .note-modal-pin-btn {
         background: none; border: none; color: var(--text-muted);
-        cursor: pointer; padding: 6px; margin: -6px -6px 0 0; border-radius: 8px;
+        cursor: pointer; padding: 6px; margin: -6px 0 0; border-radius: 8px;
         transition: background 0.12s ease, color 0.12s ease;
         flex-shrink: 0;
     }
-    .note-modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .note-modal-close i { width: 18px; height: 18px; display: block; }
+    .note-modal-close:hover, .note-modal-pin-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .note-modal-close i, .note-modal-pin-btn i { width: 18px; height: 18px; display: block; }
+    .note-modal-close { margin-right: -6px; }
+    .note-modal-pin-btn.active { color: var(--gold); }
+    .note-modal-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
     #note-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
 
     .notes-divider { height: 1px; background: var(--gold); opacity: 0.3; margin: 14px 0 18px; }
 
     .note-modal-controls {
-        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-        margin-bottom: 16px;
+        display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
+        margin-bottom: 14px;
     }
     .note-control-group { display: flex; align-items: center; gap: 6px; }
     .note-control-label { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; margin-right: 2px; }
@@ -377,20 +380,6 @@
     .note-due-clear-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
     .note-due-clear-btn i { width: 14px; height: 14px; }
 
-    .note-modal-pin-btn {
-        margin-left: auto;
-        display: flex; align-items: center; gap: 6px;
-        background: var(--bg-card); border: 1px solid var(--border-subtle);
-        border-radius: 999px; padding: 6px 12px;
-        font-size: 12px; font-weight: 500; color: var(--text-secondary);
-        cursor: pointer;
-        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-    }
-    .note-modal-pin-btn i { width: 14px; height: 14px; }
-    .note-modal-pin-btn:hover { background: var(--bg-hover); }
-    .note-modal-pin-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
-    .note-modal-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
-
     /* Toolbar (unchanged visual language from the previous editor) */
     .notes-toolbar {
         display: flex; gap: 1px; align-items: center; flex-wrap: wrap;
@@ -427,7 +416,7 @@
     #note-content-editable h3 { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 8px 0 4px; }
     #note-content-editable blockquote { border-left: 3px solid var(--gold); padding-left: 16px; color: var(--text-secondary); font-style: italic; margin: 8px 0; }
     #note-content-editable li { margin: 4px 0; padding-left: 4px; }
-    #note-content-editable ol { padding-left: 24px; margin: 8px 0; }
+    #note-content-editable ol { padding-left: 24px; margin: 8px 0; list-style: decimal; }
     #note-content-editable ol li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
     #note-content-editable ul { padding-left: 24px; margin: 8px 0; list-style: disc; }
     #note-content-editable ul li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
@@ -552,6 +541,9 @@
     <div class="note-modal" id="note-modal" role="dialog" aria-modal="true" aria-label="Edit note">
         <div class="note-modal-header">
             <input type="text" id="note-title-input" placeholder="Untitled" autocomplete="off">
+            <button type="button" class="note-modal-pin-btn" id="note-modal-pin-btn" aria-pressed="false" aria-label="Pin note">
+                <i data-lucide="pin"></i>
+            </button>
             <button type="button" class="note-modal-close" id="note-modal-close" aria-label="Close">
                 <i data-lucide="x"></i>
             </button>
@@ -581,9 +573,6 @@
                     <i data-lucide="x"></i>
                 </button>
             </div>
-            <button type="button" class="note-modal-pin-btn" id="note-modal-pin-btn" aria-pressed="false">
-                <i data-lucide="pin"></i><span>Pin</span>
-            </button>
         </div>
 
         <div class="notes-toolbar" id="notes-toolbar">
@@ -1378,9 +1367,79 @@
         sel.addRange(range);
     }
 
-    function insertChecklistItem() {
-        contentEditable.focus();
+    function isPlaceholderEmpty(text) {
+        return (text || "").replace(/​/g, "").trim() === "";
+    }
+
+    // If the caret is still sitting inside an empty placeholder left by
+    // a *previous* block-insertion click (an empty list or empty
+    // checklist item nobody's typed into yet), remove it and report
+    // where the next block should go instead. Without this, clicking a
+    // second block-type button before typing anything nests the new
+    // block inside the old one instead of replacing it — e.g. Bullet
+    // list then Checklist produced a bullet with a checkbox nested
+    // inside it, and the caret ended up inside both a <ul> and an <ol>
+    // at once, which is also why both toolbar buttons could show
+    // "active" simultaneously.
+    function clearEmptyPlaceholder() {
         var sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !contentEditable.contains(sel.anchorNode)) return null;
+
+        var node = sel.anchorNode;
+        var el = node.nodeType === 1 ? node : node.parentElement;
+        if (!el) return null;
+
+        var li = el.closest && el.closest("li");
+        if (li && contentEditable.contains(li) && isPlaceholderEmpty(li.textContent)) {
+            var list = li.parentElement;
+            var parent = list.parentElement;
+            var nextSibling = list.nextSibling;
+            list.remove();
+            return { parent: parent, nextSibling: nextSibling };
+        }
+
+        var checklistItem = el.closest && el.closest(".note-checklist-item");
+        if (checklistItem && contentEditable.contains(checklistItem)) {
+            var textEl = checklistItem.querySelector(".note-checklist-text");
+            if (textEl && isPlaceholderEmpty(textEl.textContent)) {
+                var parent2 = checklistItem.parentElement;
+                var nextSibling2 = checklistItem.nextSibling;
+                checklistItem.remove();
+                return { parent: parent2, nextSibling: nextSibling2 };
+            }
+        }
+
+        return null;
+    }
+
+    function insertAtCaretOrPlaceholder(node) {
+        var placeholder = clearEmptyPlaceholder();
+        if (placeholder) {
+            placeholder.parent.insertBefore(node, placeholder.nextSibling);
+            return;
+        }
+
+        // Caret might still be inside a *non-empty* list item or
+        // checklist item (the user typed something, then picked a
+        // different block type) — insert as a sibling after that
+        // container's own list/item instead of nesting inside it.
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount && contentEditable.contains(sel.anchorNode)) {
+            var anchorNode = sel.anchorNode;
+            var el = anchorNode.nodeType === 1 ? anchorNode : anchorNode.parentElement;
+            var li = el && el.closest && el.closest("li");
+            if (li && contentEditable.contains(li)) {
+                var list = li.parentElement;
+                list.parentElement.insertBefore(node, list.nextSibling);
+                return;
+            }
+            var existingChecklistItem = el && el.closest && el.closest(".note-checklist-item");
+            if (existingChecklistItem && contentEditable.contains(existingChecklistItem)) {
+                existingChecklistItem.parentElement.insertBefore(node, existingChecklistItem.nextSibling);
+                return;
+            }
+        }
+
         var range;
         if (sel && sel.rangeCount && contentEditable.contains(sel.anchorNode)) {
             range = sel.getRangeAt(0);
@@ -1389,9 +1448,14 @@
             range.selectNodeContents(contentEditable);
             range.collapse(false);
         }
-        var item = buildChecklistItemNode();
         range.deleteContents();
-        range.insertNode(item);
+        range.insertNode(node);
+    }
+
+    function insertChecklistItem() {
+        contentEditable.focus();
+        var item = buildChecklistItemNode();
+        insertAtCaretOrPlaceholder(item);
         placeCaretInText(item.querySelector(".note-checklist-text"));
     }
 
@@ -1461,23 +1525,13 @@
 
     function insertList(ordered) {
         contentEditable.focus();
-        var sel = window.getSelection();
-        if (!sel) return;
-        var range;
-        if (sel.rangeCount && contentEditable.contains(sel.anchorNode)) {
-            range = sel.getRangeAt(0);
-        } else {
-            range = document.createRange();
-            range.selectNodeContents(contentEditable);
-            range.collapse(false);
-        }
         var list = document.createElement(ordered ? "ol" : "ul");
         var li = document.createElement("li");
         var caret = document.createTextNode("​");
         li.appendChild(caret);
         list.appendChild(li);
-        range.deleteContents();
-        range.insertNode(list);
+        insertAtCaretOrPlaceholder(list);
+        var sel = window.getSelection();
         var caretRange = document.createRange();
         caretRange.setStart(caret, 0);
         caretRange.setEnd(caret, 1);
