@@ -40,4 +40,4 @@ It focuses on **clarity, speed, and control** — no accounts, no tracking, no t
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python app.py
+python wsgi.py

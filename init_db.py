@@ -5,7 +5,11 @@ import shutil
 import datetime
 import traceback
 import argparse
-from app import db, app
+
+from artha import create_app
+from artha.extensions import db
+
+app = create_app("development")
 
 # Configure logging
 logging.basicConfig(
