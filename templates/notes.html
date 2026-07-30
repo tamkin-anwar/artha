@@ -465,10 +465,6 @@
         font-size: 11px; color: var(--gold); opacity: 0; transition: opacity 0.3s ease; margin-right: 4px;
     }
     .notes-autosave-indicator.visible { opacity: 1; }
-    .notes-action-btn-save {
-        background: var(--gold); color: #000; font-weight: 600; font-size: 13px;
-        border: none; border-radius: 8px; padding: 7px 16px; cursor: pointer;
-    }
     .notes-action-btn-delete { background: none; border: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 7px 10px; }
 
     @media (prefers-reduced-motion: reduce) {
@@ -610,7 +606,6 @@
             <span class="notes-word-count" id="notes-word-count">0 words</span>
             <div style="display:flex; align-items:center; gap:4px;">
                 <span class="notes-autosave-indicator" id="notes-autosave-indicator"></span>
-                <button type="button" class="notes-action-btn-save" id="notes-save-btn">Save</button>
                 <button type="button" class="notes-action-btn-delete" id="notes-delete-btn">Delete</button>
             </div>
         </div>
@@ -646,7 +641,6 @@
     var metaEl = document.getElementById("note-meta");
     var wordCountEl = document.getElementById("notes-word-count");
     var autosaveIndicator = document.getElementById("notes-autosave-indicator");
-    var saveBtn = document.getElementById("notes-save-btn");
     var deleteBtn = document.getElementById("notes-delete-btn");
     var colorPicker = document.getElementById("note-color-picker");
     var tagPicker = document.getElementById("note-tag-picker");
@@ -1152,7 +1146,6 @@
 
     titleInput.addEventListener("input", scheduleSave);
     contentEditable.addEventListener("input", function () { updateMeta(); scheduleSave(); });
-    saveBtn.addEventListener("click", saveNow);
 
     // -----------------------------------------------------------------
     // Color / tag / due-date / pin controls (auto-apply on change)
