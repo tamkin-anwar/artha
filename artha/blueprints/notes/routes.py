@@ -261,9 +261,12 @@ def reorder_notes():
     if {n.id for n in notes} != set(ids):
         return jsonify({"message": "Order contains unknown or unauthorized note ids."}), 403
 
+    # notes_page() sorts position DESC (newest/most-recently-arranged
+    # first), so the first id in the submitted order — the top card —
+    # must get the *highest* position, not the lowest.
     id_to_note = {n.id: n for n in notes}
-    for idx, note_id in enumerate(ids, start=1):
-        id_to_note[note_id].position = idx
+    for idx, note_id in enumerate(ids):
+        id_to_note[note_id].position = len(ids) - idx
 
     try:
         db.session.commit()

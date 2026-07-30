@@ -32,6 +32,7 @@
             </button>
             <span class="note-tag-chip"{{ ' hidden' if not note.tag }}>{{ (note.tag or '')|title }}</span>
         </div>
+        <span class="note-drag-handle" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
         <button type="button" class="note-delete-btn" aria-label="Delete note">
             <i data-lucide="trash-2"></i>
         </button>
@@ -228,6 +229,20 @@
     .note-delete-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-delete-btn { opacity: 0.85; }
     .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
+
+    .note-drag-handle {
+        display: flex; align-items: center; justify-content: center;
+        padding: 2px; margin: -2px;
+        color: var(--text-muted); opacity: 0.5;
+        cursor: grab; flex-shrink: 0;
+        transition: opacity 0.15s ease;
+    }
+    .note-drag-handle i { width: 15px; height: 15px; }
+    .note-card:hover .note-drag-handle { opacity: 0.85; }
+    .note-drag-handle:active { cursor: grabbing; }
+
+    .note-card-ghost { opacity: 0.4; }
+    .note-card-chosen { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); transform: scale(1.02); }
     .note-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
     .note-card-title {
@@ -883,6 +898,10 @@
         tagChip.className = "note-tag-chip";
         tagChip.hidden = !note.tag;
         tagChip.textContent = note.tag ? note.tag.charAt(0).toUpperCase() + note.tag.slice(1) : "";
+        var dragHandle = document.createElement("span");
+        dragHandle.className = "note-drag-handle";
+        dragHandle.setAttribute("aria-hidden", "true");
+        dragHandle.innerHTML = '<i data-lucide="grip-vertical"></i>';
         var deleteBtnEl = document.createElement("button");
         deleteBtnEl.type = "button";
         deleteBtnEl.className = "note-delete-btn";
@@ -891,6 +910,7 @@
         topLeft.appendChild(pinBtn);
         topLeft.appendChild(tagChip);
         top.appendChild(topLeft);
+        top.appendChild(dragHandle);
         top.appendChild(deleteBtnEl);
 
         var title = document.createElement("div");
@@ -1681,6 +1701,54 @@
         var mod = e.metaKey || e.ctrlKey;
         if (!mod || e.shiftKey) return;
         if (e.key.toLowerCase() === "s") { e.preventDefault(); saveNow(); }
+    });
+
+    // -----------------------------------------------------------------
+    // Drag-to-reorder
+    // -----------------------------------------------------------------
+    // sortable.min.js loads with `defer` (base.html), which executes
+    // after the whole document has parsed — after this inline script,
+    // which runs synchronously at its position. `Sortable` isn't defined
+    // yet up above, so the instantiation itself has to wait for
+    // DOMContentLoaded (by which point deferred scripts have all run).
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof Sortable === "undefined") {
+            console.warn("SortableJS not loaded — drag-to-reorder disabled.");
+            return;
+        }
+
+        function initGridSort(grid) {
+            new Sortable(grid, {
+                handle: ".note-drag-handle",
+                filter: ".note-card-add, .filtered-out",
+                animation: 200,
+                ghostClass: "note-card-ghost",
+                chosenClass: "note-card-chosen",
+                delay: 140,
+                delayOnTouchOnly: true,
+                touchStartThreshold: 8,
+                scroll: true,
+                scrollSensitivity: 60,
+                scrollSpeed: 14,
+                forceFallback: true,
+                fallbackTolerance: 6,
+                onEnd: function () {
+                    var ids = Array.from(grid.children)
+                        .filter(function (el) { return el.dataset.id; })
+                        .map(function (el) { return el.dataset.id; });
+                    if (!ids.length) return;
+                    fetch("/reorder_notes", {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: Object.assign({ "Content-Type": "application/json" }, csrfHeaders()),
+                        body: JSON.stringify({ order: ids }),
+                    }).catch(function (err) { console.error("Error saving note order:", err); });
+                },
+            });
+        }
+
+        initGridSort(pinnedGrid);
+        initGridSort(allGrid);
     });
 
     // -----------------------------------------------------------------
