@@ -15,6 +15,16 @@ class Note(db.Model):
     preview = db.Column(db.Text, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     position = db.Column(db.Integer, nullable=False, default=0, index=True)
+    pinned = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.text("0")
+    )
+    # Small fixed vocabularies enforced in artha.blueprints.notes.routes
+    # (NOTE_COLORS / NOTE_TAGS) rather than a DB enum, so the set can change
+    # without an alter-type migration. None means "unset" for both.
+    color = db.Column(db.String(20), nullable=True)
+    tag = db.Column(db.String(30), nullable=True)
+    # Date only — the UI only ever shows/edits a date, never a time of day.
+    due_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     updated_at = db.Column(
         db.DateTime,

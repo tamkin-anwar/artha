@@ -1,5 +1,6 @@
 import time
 import logging
+from datetime import datetime
 
 from flask import render_template, redirect, url_for, request, flash, session, jsonify
 from flask_login import login_required, current_user
@@ -11,6 +12,36 @@ from ...utils import is_ajax_request, derive_title_and_preview
 from . import notes_bp
 
 log = logging.getLogger(__name__)
+
+# Small fixed vocabularies for note.color / note.tag — enforced here rather
+# than as a DB enum so the set can grow without an alter-type migration.
+NOTE_COLORS = {"sage", "coral", "plum", "slate", "sky", "amber"}
+NOTE_TAGS = {"personal", "ideas", "habits", "reading"}
+
+
+def _serialize_note(note):
+    return {
+        "id": note.id,
+        "title": note.title,
+        "content": note.content,
+        "preview": note.preview,
+        "pinned": bool(note.pinned),
+        "color": note.color,
+        "tag": note.tag,
+        "due_date": note.due_date.isoformat() if note.due_date else None,
+    }
+
+
+def _parse_due_date(raw):
+    """Parse an ISO date string from the client, returning None for
+    blank/missing input and silently ignoring malformed input — autosave
+    calls are lenient by design (see update_note_fields), not a hard 400."""
+    if raw in (None, ""):
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
 
 
 @notes_bp.route("/notes", methods=["GET", "POST"])
@@ -52,10 +83,18 @@ def notes_page():
 
     notes = (
         Note.query.filter_by(user_id=current_user.id)
-        .order_by(Note.position.asc(), Note.id.asc())
+        .order_by(Note.pinned.desc(), Note.position.asc(), Note.id.asc())
         .all()
     )
-    return render_template("notes.html", notes=notes)
+    pinned_notes = [n for n in notes if n.pinned]
+    other_notes = [n for n in notes if not n.pinned]
+    return render_template(
+        "notes.html",
+        pinned_notes=pinned_notes,
+        other_notes=other_notes,
+        note_tags=sorted(NOTE_TAGS),
+        note_colors=sorted(NOTE_COLORS),
+    )
 
 
 @notes_bp.route("/notes/new", methods=["POST"])
@@ -79,10 +118,7 @@ def new_note():
         db.session.add(note)
         db.session.commit()
         return jsonify({
-            "id": note.id,
-            "title": note.title,
-            "content": note.content,
-            "preview": note.preview,
+            **_serialize_note(note),
             "created_at": note.created_at.strftime("%b %d, %Y") if note.created_at else None,
         })
     except Exception as e:
@@ -101,10 +137,7 @@ def get_note(note_id):
         return jsonify({"message": "Unauthorized"}), 403
 
     return jsonify({
-        "id": note.id,
-        "title": note.title,
-        "content": note.content,
-        "preview": note.preview,
+        **_serialize_note(note),
         "created_at": note.created_at.strftime("%b %d, %Y") if note.created_at else None,
     })
 
@@ -142,15 +175,38 @@ def update_note_fields(note_id):
         note.title = explicit_title or derived_title
         note.preview = preview
 
+    # pinned/color/tag/due_date each commit independently of title/content —
+    # a pin toggle or color pick is very often sent alone, not bundled with
+    # a text edit. Invalid color/tag values and malformed dates are ignored
+    # rather than rejected with a 400, matching this endpoint's existing
+    # "autosave is lenient by design" philosophy.
+    if "pinned" in data:
+        note.pinned = bool(data.get("pinned"))
+
+    if "color" in data:
+        color = data.get("color")
+        if color is None or color in NOTE_COLORS:
+            note.color = color
+
+    if "tag" in data:
+        tag = data.get("tag")
+        if tag is None or tag in NOTE_TAGS:
+            note.tag = tag
+
+    if "due_date" in data:
+        raw = data.get("due_date")
+        if raw in (None, ""):
+            note.due_date = None
+        else:
+            parsed = _parse_due_date(raw)
+            if parsed is not None:
+                note.due_date = parsed
+            # malformed, non-blank input: ignore rather than clear an
+            # existing due date the user didn't actually ask to remove
+
     try:
         db.session.commit()
-        return jsonify({
-            "message": "Note updated",
-            "id": note.id,
-            "title": note.title,
-            "content": note.content,
-            "preview": note.preview,
-        })
+        return jsonify({"message": "Note updated", **_serialize_note(note)})
     except Exception as e:
         db.session.rollback()
         log.error("Error auto-saving note: %s", e, exc_info=True)
@@ -233,8 +289,14 @@ def delete_note(note_id):
 
     session["last_deleted_note"] = {
         "user_id": note.user_id,
+        "title": note.title,
         "content": note.content,
+        "preview": note.preview,
         "position": int(note.position or 0),
+        "pinned": bool(note.pinned),
+        "color": note.color,
+        "tag": note.tag,
+        "due_date": note.due_date.isoformat() if note.due_date else None,
         "deleted_at": time.time(),
     }
 
@@ -283,16 +345,25 @@ def undo_delete_note():
             ).update({Note.position: Note.position + 1}, synchronize_session=False)
 
         restored = Note(
+            title=data.get("title"),
             content=data["content"],
+            preview=data.get("preview"),
             user_id=current_user.id,
             position=restored_pos,
+            pinned=bool(data.get("pinned")),
+            color=data.get("color"),
+            tag=data.get("tag"),
+            due_date=_parse_due_date(data.get("due_date")),
         )
         db.session.add(restored)
         db.session.commit()
         session.pop("last_deleted_note", None)
 
-        row_html = render_template("partials/note_row.html", note=restored)
-        return jsonify({"message": "Note restored.", "row_html": row_html})
+        return jsonify({
+            "message": "Note restored.",
+            **_serialize_note(restored),
+            "created_at": restored.created_at.strftime("%b %d, %Y") if restored.created_at else None,
+        })
     except Exception as e:
         db.session.rollback()
         log.error("Error undoing note delete: %s", e, exc_info=True)
