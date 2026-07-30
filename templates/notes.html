@@ -24,11 +24,16 @@
      tabindex="0" role="button" aria-label="Open note: {{ note.title or 'Untitled' }}"
      style="animation-delay: {{ (index if index < 12 else 12) * 40 }}ms;">
     <div class="note-card-top">
-        <span class="note-tag-chip"{{ ' hidden' if not note.tag }}>{{ (note.tag or '')|title }}</span>
-        <button type="button" class="note-pin-btn{{ ' active' if note.pinned }}"
-                aria-label="{{ 'Unpin note' if note.pinned else 'Pin note' }}"
-                aria-pressed="{{ 'true' if note.pinned else 'false' }}">
-            <i data-lucide="pin"></i>
+        <div class="note-card-top-left">
+            <button type="button" class="note-pin-btn{{ ' active' if note.pinned }}"
+                    aria-label="{{ 'Unpin note' if note.pinned else 'Pin note' }}"
+                    aria-pressed="{{ 'true' if note.pinned else 'false' }}">
+                <i data-lucide="pin"></i>
+            </button>
+            <span class="note-tag-chip"{{ ' hidden' if not note.tag }}>{{ (note.tag or '')|title }}</span>
+        </div>
+        <button type="button" class="note-delete-btn" aria-label="Delete note">
+            <i data-lucide="trash-2"></i>
         </button>
     </div>
     <div class="note-card-title{{ ' untitled' if not note.title }}">{{ note.title or 'Untitled' }}</div>
@@ -193,6 +198,7 @@
     .note-card.exiting-pin { opacity: 0; transform: scale(0.9); }
 
     .note-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .note-card-top-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .note-tag-chip {
         font-size: 10.5px; font-weight: 500; letter-spacing: 0.03em;
         padding: 3px 9px; border-radius: 999px;
@@ -212,6 +218,16 @@
     .note-card:hover .note-pin-btn { opacity: 0.85; }
     .note-pin-btn:hover { opacity: 1 !important; }
     .note-pin-btn.active { opacity: 1; color: var(--gold); }
+
+    .note-delete-btn {
+        background: none; border: none; padding: 2px; margin: -2px;
+        color: var(--text-muted); opacity: 0.5;
+        cursor: pointer; line-height: 0; flex-shrink: 0;
+        transition: opacity 0.15s ease, color 0.15s ease;
+    }
+    .note-delete-btn i { width: 15px; height: 15px; }
+    .note-card:hover .note-delete-btn { opacity: 0.85; }
+    .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
     .note-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
     .note-card-title {
@@ -834,6 +850,11 @@
             e.stopPropagation();
             togglePin(card.dataset.id, !(card.dataset.pinned === "true"));
         });
+        var deleteBtnOnCard = card.querySelector(".note-delete-btn");
+        deleteBtnOnCard.addEventListener("click", function (e) {
+            e.stopPropagation();
+            deleteNoteById(card.dataset.id, card);
+        });
     }
 
     function buildNoteCard(note, index) {
@@ -850,18 +871,27 @@
 
         var top = document.createElement("div");
         top.className = "note-card-top";
-        var tagChip = document.createElement("span");
-        tagChip.className = "note-tag-chip";
-        tagChip.hidden = !note.tag;
-        tagChip.textContent = note.tag ? note.tag.charAt(0).toUpperCase() + note.tag.slice(1) : "";
+        var topLeft = document.createElement("div");
+        topLeft.className = "note-card-top-left";
         var pinBtn = document.createElement("button");
         pinBtn.type = "button";
         pinBtn.className = "note-pin-btn" + (note.pinned ? " active" : "");
         pinBtn.setAttribute("aria-label", note.pinned ? "Unpin note" : "Pin note");
         pinBtn.setAttribute("aria-pressed", note.pinned ? "true" : "false");
         pinBtn.innerHTML = '<i data-lucide="pin"></i>';
-        top.appendChild(tagChip);
-        top.appendChild(pinBtn);
+        var tagChip = document.createElement("span");
+        tagChip.className = "note-tag-chip";
+        tagChip.hidden = !note.tag;
+        tagChip.textContent = note.tag ? note.tag.charAt(0).toUpperCase() + note.tag.slice(1) : "";
+        var deleteBtnEl = document.createElement("button");
+        deleteBtnEl.type = "button";
+        deleteBtnEl.className = "note-delete-btn";
+        deleteBtnEl.setAttribute("aria-label", "Delete note");
+        deleteBtnEl.innerHTML = '<i data-lucide="trash-2"></i>';
+        topLeft.appendChild(pinBtn);
+        topLeft.appendChild(tagChip);
+        top.appendChild(topLeft);
+        top.appendChild(deleteBtnEl);
 
         var title = document.createElement("div");
         title.className = "note-card-title" + (note.title ? "" : " untitled");
@@ -880,7 +910,10 @@
         applyDuePill(duePill, note.due_date);
 
         attachCardListeners(card);
-        refreshIcons();
+        // Not refreshIcons() here — the card is still detached from the
+        // document at this point, so lucide.createIcons() can't find its
+        // [data-lucide] elements. Callers must call it themselves after
+        // actually inserting the card into the grid.
         return card;
     }
 
@@ -1213,6 +1246,7 @@
                 revealNotesPage();
                 var card = buildNoteCard(note, 0);
                 insertAtTopOfAllGrid(card);
+                refreshIcons();
                 openNoteModal(card, note.id);
             })
             .catch(function (err) { console.error("Error creating note:", err); });
@@ -1240,19 +1274,14 @@
                 } else {
                     insertAtTopOfAllGrid(card);
                 }
+                refreshIcons();
                 updatePinnedVisibility();
                 applyFilterToCard(card);
             })
             .catch(function (err) { console.error("Error restoring note:", err); });
     }
 
-    deleteBtn.addEventListener("click", function () {
-        if (!currentNoteId) return;
-        var idToDelete = currentNoteId;
-        var card = document.querySelector('.note-card[data-id="' + idToDelete + '"]');
-
-        closeNoteModal();
-
+    function deleteNoteById(idToDelete, card) {
         fetch("/delete_note/" + idToDelete, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
             .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
             .then(function (result) {
@@ -1285,6 +1314,14 @@
                 });
             })
             .catch(function (err) { console.error("Network error deleting note:", err); });
+    }
+
+    deleteBtn.addEventListener("click", function () {
+        if (!currentNoteId) return;
+        var idToDelete = currentNoteId;
+        var card = document.querySelector('.note-card[data-id="' + idToDelete + '"]');
+        closeNoteModal();
+        deleteNoteById(idToDelete, card);
     });
 
     // -----------------------------------------------------------------
