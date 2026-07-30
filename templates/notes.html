@@ -1758,6 +1758,19 @@
     upgradeInitialCardBodies();
     updatePinnedVisibility();
     refreshIcons();
+
+    // Deep link from elsewhere in the app (e.g. Calendar's "Notes due"
+    // list) — /notes?open=<id> auto-opens that note's modal, then
+    // strips the query param so refresh/back doesn't re-trigger it.
+    var openId = new URLSearchParams(location.search).get("open");
+    if (openId) {
+        var targetCard = document.querySelector('.note-card[data-id="' + openId + '"]');
+        if (targetCard) {
+            targetCard.scrollIntoView({ block: "center" });
+            openNoteModal(targetCard, openId);
+        }
+        history.replaceState(null, "", location.pathname);
+    }
 })();
 </script>
 

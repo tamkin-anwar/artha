@@ -210,6 +210,23 @@ def calendar_page():
         within_7.sort(key=lambda e: e["date"])
         upcoming_recurring = within_7[0]
 
+    # Notes due within the visible window — due_date is a plain Date
+    # column, so it compares directly against fetch_start/fetch_end
+    # (the date objects, not the _dt datetimes built for Transaction).
+    notes_due = (
+        Note.query.filter(
+            Note.user_id == uid,
+            Note.due_date.isnot(None),
+            Note.due_date >= fetch_start,
+            Note.due_date <= fetch_end,
+        )
+        .order_by(Note.pinned.desc(), Note.due_date.asc(), Note.id.asc())
+        .all()
+    )
+    notes_by_date = defaultdict(list)
+    for n in notes_due:
+        notes_by_date[n.due_date.strftime("%Y-%m-%d")].append(n)
+
     grid_days = []
     cursor = grid_start
     while cursor <= grid_end:
@@ -226,6 +243,7 @@ def calendar_page():
             "income_dot": any(t.type == "income" for t in day_txs),
             "expense_dot": any(t.type == "expense" for t in day_txs),
             "recurring_dot": key in recurring_due_by_date,
+            "note_dot": key in notes_by_date,
             "net": float(net),
         })
         cursor += timedelta(days=1)
@@ -247,6 +265,24 @@ def calendar_page():
         for key, day_txs in by_date.items()
     }
 
+    # Kept as a separate parallel blob (not merged into calendar_data's
+    # shape) — same pattern already used for recurring_due_by_date
+    # alongside calendar_data, so renderDayDetail()'s existing
+    # transaction-rendering logic stays untouched.
+    calendar_notes = {
+        key: [
+            {
+                "id": n.id,
+                "title": n.title or "Untitled",
+                "tag": n.tag,
+                "color": n.color,
+                "pinned": n.pinned,
+            }
+            for n in day_notes
+        ]
+        for key, day_notes in notes_by_date.items()
+    }
+
     month_label = f"{cal.month_name[month]} {year}"
     prev_month_value = f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
     next_month_value = f"{year + 1}-01" if month == 12 else f"{year}-{month + 1:02d}"
@@ -259,6 +295,7 @@ def calendar_page():
         next_month_value=next_month_value,
         today_value=today.strftime("%Y-%m-%d"),
         calendar_data=calendar_data,
+        calendar_notes=calendar_notes,
         recurring_due_by_date=dict(recurring_due_by_date),
         upcoming_recurring=upcoming_recurring,
     )

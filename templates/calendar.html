@@ -61,6 +61,17 @@
     .cal-type-badge.income { background: var(--emerald-dim); color: var(--emerald); }
     .cal-type-badge.expense { background: var(--red-dim); color: var(--red); }
 
+    .cal-note-marker { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; color: var(--text-muted); }
+
+    .cal-note-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); text-decoration: none; }
+    .cal-note-row:last-child { border-bottom: none; }
+    .cal-note-row:hover .cal-note-title { color: var(--gold); }
+    .cal-note-color-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .cal-note-title { font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; transition: color 0.12s ease; }
+    .cal-note-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--bg-hover); color: var(--text-secondary); flex-shrink: 0; }
+    .cal-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin: 18px 0 4px; }
+    .cal-section-label:first-child { margin-top: 0; }
+
     .cal-day-name-short { display: none; }
 
     @keyframes cal-slide-up {
@@ -123,13 +134,14 @@
                 <button type="button"
                     class="cal-day-cell {{ 'cal-day-weekend' if d.is_weekend }} {{ 'cal-day-out-of-month' if not d.in_month }} {{ 'cal-day-selected' if d.date == today_value }}"
                     data-date="{{ d.date }}"
-                    aria-label="{{ d.date }}"
+                    aria-label="{{ d.date }}{{ ' · notes due' if d.note_dot }}"
                 >
                     {% if d.is_today %}
                         <span class="cal-day-today-badge cal-day-number">{{ d.day }}</span>
                     {% else %}
                         <span class="cal-day-number">{{ d.day }}</span>
                     {% endif %}
+                    {% if d.note_dot %}<i data-lucide="file-text" class="cal-note-marker" aria-hidden="true"></i>{% endif %}
                     <div class="cal-dots">
                         {% if d.income_dot %}<span class="cal-dot" style="background:var(--emerald);"></span>{% endif %}
                         {% if d.expense_dot %}<span class="cal-dot" style="background:var(--red);"></span>{% endif %}
@@ -158,9 +170,16 @@
 
 <script>
 window.CALENDAR_DATA = {{ calendar_data|tojson }};
+window.CALENDAR_NOTES = {{ calendar_notes|tojson }};
 window.CALENDAR_TODAY = {{ today_value|tojson }};
 
 (function () {
+    // Matches the --note-{color}-text swatch hexes from templates/notes.html.
+    var NOTE_COLOR_HEX = {
+        sage: "#3f5c2b", coral: "#a34527", plum: "#6b3d72",
+        slate: "#3d4a5c", sky: "#2c5599", amber: "#8a5f11",
+    };
+
     function formatHeaderDate(dateStr) {
         var parts = dateStr.split("-").map(Number);
         var dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12));
@@ -180,6 +199,7 @@ window.CALENDAR_TODAY = {{ today_value|tojson }};
 
         var header = formatHeaderDate(dateStr);
         var txs = window.CALENDAR_DATA[dateStr] || [];
+        var notesDue = window.CALENDAR_NOTES[dateStr] || [];
 
         var html = "";
         html += '<div style="margin-bottom:18px;">';
@@ -187,33 +207,49 @@ window.CALENDAR_TODAY = {{ today_value|tojson }};
         html += '<div style="font-size:13px; color:var(--text-secondary); margin-top:2px;">' + header.fullDate + '</div>';
         html += '</div>';
 
-        if (!txs.length) {
+        if (!txs.length && !notesDue.length) {
             html += '<div style="text-align:center; padding:40px 12px; color:var(--text-muted);">';
             html += '<div style="font-size:28px; margin-bottom:10px;" aria-hidden="true">&#128197;</div>';
-            html += '<div style="font-size:13px;">No transactions this day</div>';
+            html += '<div style="font-size:13px;">Nothing scheduled this day</div>';
             html += '</div>';
         } else {
-            var net = 0;
-            html += '<div>';
-            txs.forEach(function (t) {
-                var signedAmount = t.type === "income" ? t.amount : -t.amount;
-                net += signedAmount;
-                var color = t.type === "income" ? "var(--emerald)" : "var(--red)";
-                html += '<div class="cal-tx-row">';
-                html += '<div style="min-width:0;">';
-                html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + (t.is_recurring ? ' <span style="color:var(--gold); font-size:11px;">&#8635;</span>' : '') + '</div>';
-                html += '<span class="cal-type-badge ' + t.type + '">' + t.type + '</span>';
+            if (txs.length) {
+                var net = 0;
+                html += '<div>';
+                txs.forEach(function (t) {
+                    var signedAmount = t.type === "income" ? t.amount : -t.amount;
+                    net += signedAmount;
+                    var color = t.type === "income" ? "var(--emerald)" : "var(--red)";
+                    html += '<div class="cal-tx-row">';
+                    html += '<div style="min-width:0;">';
+                    html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + (t.is_recurring ? ' <span style="color:var(--gold); font-size:11px;">&#8635;</span>' : '') + '</div>';
+                    html += '<span class="cal-type-badge ' + t.type + '">' + t.type + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + "$" + Math.abs(t.amount).toFixed(2) + '</div>';
+                    html += '</div>';
+                });
                 html += '</div>';
-                html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + "$" + Math.abs(t.amount).toFixed(2) + '</div>';
-                html += '</div>';
-            });
-            html += '</div>';
 
-            var netColor = net >= 0 ? "var(--emerald)" : "var(--red)";
-            html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-subtle);">';
-            html += '<span style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Net</span>';
-            html += '<span style="font-family:\'JetBrains Mono\',monospace; font-size:16px; font-weight:600; color:' + netColor + ';">' + formatMoney(net) + '</span>';
-            html += '</div>';
+                var netColor = net >= 0 ? "var(--emerald)" : "var(--red)";
+                html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-subtle);">';
+                html += '<span style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Net</span>';
+                html += '<span style="font-family:\'JetBrains Mono\',monospace; font-size:16px; font-weight:600; color:' + netColor + ';">' + formatMoney(net) + '</span>';
+                html += '</div>';
+            }
+
+            if (notesDue.length) {
+                html += '<div class="cal-section-label">Notes due</div>';
+                html += '<div>';
+                notesDue.forEach(function (n) {
+                    var dotColor = NOTE_COLOR_HEX[n.color] || "var(--text-muted)";
+                    html += '<a class="cal-note-row" href="/notes?open=' + n.id + '">';
+                    html += '<span class="cal-note-color-dot" style="background:' + dotColor + ';"></span>';
+                    html += '<span class="cal-note-title">' + escapeHtml(n.title) + '</span>';
+                    if (n.tag) html += '<span class="cal-note-tag">' + escapeHtml(n.tag) + '</span>';
+                    html += '</a>';
+                });
+                html += '</div>';
+            }
         }
 
         container.innerHTML = html;
