@@ -451,6 +451,10 @@
         display: block; width: 100%; min-height: 260px; outline: none;
         background: transparent; color: var(--text-primary);
         font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.8;
+        /* Explicit, high-contrast caret — the default (currentColor) can
+           be hard to spot on a fresh empty line right after Enter, before
+           any text exists nearby to visually anchor against. */
+        caret-color: var(--gold);
     }
     #note-content-editable:empty::before { content: "Start writing..."; color: var(--text-muted); pointer-events: none; }
     #note-content-editable h1 { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; }
@@ -1630,6 +1634,11 @@
             var newItem = buildChecklistItemNode();
             item.after(newItem);
             placeCaretInText(newItem.querySelector(".note-checklist-text"));
+            // Re-assert focus after the DOM mutation above — some browsers
+            // silently drop the visible blinking caret when a Selection is
+            // set programmatically right after inserting a new sibling
+            // node, even though the Selection itself is otherwise correct.
+            contentEditable.focus();
         }
         updateMeta();
         scheduleSave();
