@@ -195,6 +195,17 @@
     .note-card:hover { transform: translateY(-3px) scale(1.012); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); }
     .note-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
+    /* SortableJS's `animation` option needs to fully own the transform
+       transition on cards while a drag is in progress, to smoothly
+       slide siblings out of the way — .note-card's own permanent hover
+       transition (above) fights it for the same property, which is
+       what actually made reordering feel janky rather than smooth.
+       Suppressing both the transition and the hover-lift effect only
+       for the duration of an active drag (toggled via onStart/onEnd)
+       leaves the hover polish intact for normal browsing. */
+    .notes-grid.dragging .note-card { transition: none !important; }
+    .notes-grid.dragging .note-card:hover { transform: none; box-shadow: none; }
+
     .note-card[data-color="sage"]  { background: var(--note-sage-bg);  border-color: var(--note-sage-border); }
     .note-card[data-color="coral"] { background: var(--note-coral-bg); border-color: var(--note-coral-border); }
     .note-card[data-color="plum"]  { background: var(--note-plum-bg);  border-color: var(--note-plum-border); }
@@ -1737,7 +1748,11 @@
                 // grabbing at all.
                 forceFallback: true,
                 fallbackTolerance: 5,
+                onStart: function () {
+                    grid.classList.add("dragging");
+                },
                 onEnd: function () {
+                    grid.classList.remove("dragging");
                     var ids = Array.from(grid.children)
                         .filter(function (el) { return el.dataset.id; })
                         .map(function (el) { return el.dataset.id; });
