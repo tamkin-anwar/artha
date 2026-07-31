@@ -355,6 +355,7 @@
         border: none; outline: none; background: transparent;
         color: var(--text-primary);
         font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500;
+        caret-color: var(--gold);
     }
     #note-title-input::placeholder { color: var(--text-muted); }
     .note-modal-header .notes-autosave-indicator {
@@ -1737,10 +1738,14 @@
         li.appendChild(caret);
         list.appendChild(li);
         insertAtCaretOrPlaceholder(list);
+        // Collapsed after the placeholder character, not selecting it —
+        // a non-collapsed Selection shows no blinking caret at all (this
+        // is what made the empty-line case invisible while the "convert
+        // existing text" case above, which uses placeCaretAtEnd, worked).
         var sel = window.getSelection();
         var caretRange = document.createRange();
-        caretRange.setStart(caret, 0);
-        caretRange.setEnd(caret, 1);
+        caretRange.setStart(caret, 1);
+        caretRange.collapse(true);
         sel.removeAllRanges();
         sel.addRange(caretRange);
     }
