@@ -357,6 +357,9 @@
         font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500;
     }
     #note-title-input::placeholder { color: var(--text-muted); }
+    .note-modal-header .notes-autosave-indicator {
+        align-self: center; margin-top: 6px; white-space: nowrap; flex-shrink: 0;
+    }
 
     .note-modal-close, .note-modal-pin-btn {
         background: none; border: none; color: var(--text-muted);
@@ -576,6 +579,7 @@
     <div class="note-modal" id="note-modal" role="dialog" aria-modal="true" aria-label="Edit note">
         <div class="note-modal-header">
             <input type="text" id="note-title-input" placeholder="Untitled" autocomplete="off">
+            <span class="notes-autosave-indicator" id="notes-autosave-indicator"></span>
             <button type="button" class="note-modal-pin-btn" id="note-modal-pin-btn" aria-pressed="false" aria-label="Pin note">
                 <i data-lucide="pin"></i>
             </button>
@@ -643,10 +647,7 @@
 
         <div class="notes-action-bar">
             <span class="notes-word-count" id="notes-word-count">0 words</span>
-            <div style="display:flex; align-items:center; gap:4px;">
-                <span class="notes-autosave-indicator" id="notes-autosave-indicator"></span>
-                <button type="button" class="notes-action-btn-delete" id="notes-delete-btn">Delete</button>
-            </div>
+            <button type="button" class="notes-action-btn-delete" id="notes-delete-btn">Delete</button>
         </div>
     </div>
 </div>
@@ -1120,7 +1121,13 @@
     }
 
     function closeNoteModal() {
-        saveNow();
+        // Optimistic: the PATCH is about to fire and virtually always
+        // succeeds, and by the time any response actually lands the modal
+        // has already morphed away — waiting for the network here would
+        // mean the confirmation never gets seen. Show it immediately instead
+        // (a real failure still surfaces via a toast, see notifyBackgroundSaveFailed).
+        if (currentNoteId) { showIndicator("Saved ✓"); hideIndicatorSoon(); }
+        saveNow({ silent: true });
 
         var targetCard = currentNoteId
             ? document.querySelector('.note-card[data-id="' + currentNoteId + '"]')
@@ -1172,16 +1179,18 @@
     // -----------------------------------------------------------------
     // Auto-save
     // -----------------------------------------------------------------
-    function saveNow() {
+    function saveNow(options) {
+        options = options || {};
         if (!currentNoteId) return;
         clearTimeout(saveTimer);
 
+        var noteId = currentNoteId;
         var title = titleInput.value.trim();
         var content = contentEditable.innerHTML;
 
-        showIndicator("Saving...");
+        if (!options.silent) showIndicator("Saving...");
 
-        fetch("/notes/" + currentNoteId + "/update", {
+        fetch("/notes/" + noteId + "/update", {
             method: "PATCH",
             credentials: "same-origin",
             headers: Object.assign({ "Content-Type": "application/json" }, csrfHeaders()),
@@ -1189,12 +1198,25 @@
         })
             .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
             .then(function (result) {
-                if (!result.ok) { showIndicator("Could not save"); hideIndicatorSoon(); return; }
+                if (!result.ok) {
+                    // On a silent (close-triggered) save the indicator already
+                    // flashed an optimistic "Saved ✓" and the modal is gone by
+                    // the time this response lands — a toast is the only way
+                    // left to surface a real failure.
+                    if (options.silent) { notifyBackgroundSaveFailed(); } else { showIndicator("Could not save"); hideIndicatorSoon(); }
+                    return;
+                }
                 updateNoteCard(result.data.id, result.data);
-                showIndicator("Saved ✓");
-                hideIndicatorSoon();
+                if (!options.silent) { showIndicator("Saved ✓"); hideIndicatorSoon(); }
             })
-            .catch(function () { showIndicator("Could not save"); hideIndicatorSoon(); });
+            .catch(function () {
+                if (options.silent) { notifyBackgroundSaveFailed(); } else { showIndicator("Could not save"); hideIndicatorSoon(); }
+            });
+    }
+    function notifyBackgroundSaveFailed() {
+        import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+            mod.showToast("Your last change couldn't be saved", "error");
+        });
     }
     function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 2000); }
     function showIndicator(text) { autosaveIndicator.textContent = text; autosaveIndicator.classList.add("visible"); }
