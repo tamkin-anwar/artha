@@ -1121,12 +1121,16 @@
     }
 
     function closeNoteModal() {
-        // Optimistic: the PATCH is about to fire and virtually always
-        // succeeds, and by the time any response actually lands the modal
-        // has already morphed away — waiting for the network here would
-        // mean the confirmation never gets seen. Show it immediately instead
-        // (a real failure still surfaces via a toast, see notifyBackgroundSaveFailed).
-        if (currentNoteId) { showIndicator("Saved ✓"); hideIndicatorSoon(); }
+        // The modal's own closing animation is done in ~300ms, so any
+        // confirmation shown *inside* it (like the header indicator used
+        // during active typing) is gone before most people register it.
+        // A toast lives outside the card, in a fixed corner, for ~2s —
+        // long enough to actually notice once the note is gone.
+        if (currentNoteId) {
+            import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                mod.showToast("Note updated", "success", 2200);
+            });
+        }
         saveNow({ silent: true });
 
         var targetCard = currentNoteId
