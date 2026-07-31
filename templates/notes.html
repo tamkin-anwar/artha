@@ -1448,6 +1448,12 @@
         var checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.setAttribute("aria-label", "Toggle checklist item");
+        // Marks the checkbox as a non-editable "island" inside the
+        // otherwise-editable text flow. Embedding a real <input> directly
+        // in contenteditable content without this is a long-documented
+        // source of caret/focus quirks in Chrome and Safari (e.g.
+        // Chromium issue 89026) — this is the standard fix.
+        checkbox.setAttribute("contenteditable", "false");
         var text = document.createElement("span");
         text.className = "note-checklist-text";
         text.appendChild(document.createTextNode("​"));
