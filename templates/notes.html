@@ -1618,8 +1618,64 @@
         document.execCommand("insertText", false, prefix);
     }
 
+    // The direct child of contentEditable containing the caret (a line's
+    // own <p>/<div>, a <ul>/<ol>, a checklist row, ...) — used so a list
+    // toggle can act on the line actually being edited, not just wherever
+    // the caret happens to sit within it.
+    function getCurrentTopLevelBlock() {
+        var sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !contentEditable.contains(sel.anchorNode)) return null;
+        var node = sel.anchorNode;
+        while (node && node.parentElement !== contentEditable) {
+            node = node.parentElement;
+        }
+        return node && node !== contentEditable ? node : null;
+    }
+
+    function placeCaretAtEnd(el) {
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
     function insertList(ordered) {
         contentEditable.focus();
+
+        // If the caret is in a line that already has real text, convert
+        // that line's own content into the new list item instead of always
+        // inserting a fresh empty one — otherwise clicking this button
+        // after typing left the typed text stranded above an unrelated
+        // blank "1." nobody asked for.
+        var block = getCurrentTopLevelBlock();
+        var isConvertibleBlock = block && block.nodeName !== "UL" && block.nodeName !== "OL" &&
+            !(block.classList && block.classList.contains("note-checklist-item"));
+        if (isConvertibleBlock && !isPlaceholderEmpty(block.textContent)) {
+            var convertedList = document.createElement(ordered ? "ol" : "ul");
+            var convertedItem = document.createElement("li");
+
+            if (block.nodeType === 3) {
+                // A bare top-level text node — e.g. the very first line,
+                // typed before Enter has ever created a wrapping <div>.
+                // Text nodes have no children to move, so relocate the
+                // node itself instead.
+                var parent = block.parentElement || contentEditable;
+                var nextSibling = block.nextSibling;
+                convertedItem.appendChild(block);
+                convertedList.appendChild(convertedItem);
+                parent.insertBefore(convertedList, nextSibling);
+            } else {
+                while (block.firstChild) convertedItem.appendChild(block.firstChild);
+                convertedList.appendChild(convertedItem);
+                block.parentElement.replaceChild(convertedList, block);
+            }
+
+            placeCaretAtEnd(convertedItem);
+            return;
+        }
+
         var list = document.createElement(ordered ? "ol" : "ul");
         var li = document.createElement("li");
         var caret = document.createTextNode("​");
