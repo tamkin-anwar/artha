@@ -131,20 +131,6 @@
         color: var(--gold);
     }
 
-    /* Suggestion chips */
-    .calc-chip {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        color: var(--text-secondary);
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 12px;
-        padding: 7px 12px;
-        border-radius: 999px;
-        cursor: pointer;
-        transition: all 0.12s ease;
-    }
-    .calc-chip:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--gold); }
-
     /* Button calculator */
     .calc-btn {
         height: 68px;
@@ -187,21 +173,13 @@
             <button type="button" id="expr-clear-btn" class="btn-secondary" style="padding:7px 14px; font-size:12px; flex-shrink:0;">Clear all</button>
         </div>
 
-        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
-            <button type="button" class="calc-chip" data-insert="salary = 3600">salary = 3600</button>
-            <button type="button" class="calc-chip" data-insert="20% of total">20% of total</button>
-            <button type="button" class="calc-chip" data-insert="tip = 18% on amount">tip = 18% on amount</button>
-            <button type="button" class="calc-chip" data-insert="monthly &times; 12">monthly &times; 12</button>
-            <button type="button" class="calc-chip" data-insert="10% off price">10% off price</button>
-        </div>
-
         <div class="expr-wrap">
             <div class="expr-stripes" aria-hidden="true"></div>
             <div class="expr-cursor-line" id="expr-cursor-line" aria-hidden="true"></div>
             <div class="expr-row">
                 <div class="expr-input-col">
                     <textarea id="expr-textarea" rows="1" spellcheck="false" autocomplete="off"
-                        placeholder="salary = 3600&#10;rent = 1597&#10;savings = salary - rent&#10;20% of savings"></textarea>
+                        placeholder="20% of 400"></textarea>
                 </div>
                 <div id="expr-results"></div>
             </div>
@@ -354,6 +332,37 @@
         return /^[a-zA-Z_][a-zA-Z0-9_]*\s*=(?!=)/.test(line);
     }
 
+    // Evaluates a line, and — for non-assignment lines only — falls back
+    // to progressively trimming trailing incomplete tokens (a dangling
+    // operator, an unfinished word already stripped to nothing) and
+    // retrying, so a line still being typed shows its last computable
+    // value instead of flickering blank on every keystroke (e.g. "Job
+    // 2000 + Salary" shows 2000 while "Salary ___" is still incomplete,
+    // matching Numi's behavior). Never attempted for assignment lines —
+    // evaluating a truncated "savings = salary - " as "savings = salary"
+    // would commit a wrong intermediate value into scope, which later
+    // lines might then silently reference.
+    function evaluateLine(originalLine, strippedLine, scope) {
+        try {
+            var result = math.evaluate(strippedLine, scope);
+            return (typeof result === "number" && Number.isFinite(result)) ? result : null;
+        } catch (err) {
+            if (isAssignmentLine(originalLine)) return null;
+
+            var trimmed = strippedLine;
+            for (var i = 0; i < 20; i++) {
+                var next = trimmed.replace(/[\s+\-*/%^().]+$/, "");
+                if (next === trimmed || !next) return null;
+                trimmed = next;
+                try {
+                    var partial = math.evaluate(trimmed, scope);
+                    if (typeof partial === "number" && Number.isFinite(partial)) return partial;
+                } catch (err2) { /* keep trimming */ }
+            }
+            return null;
+        }
+    }
+
     // Sums only bare-expression result lines (never assignment lines —
     // see isAssignmentLine's comment). Re-walks the lines and re-evaluates
     // rather than reusing evaluateAll()'s per-line results, since that
@@ -375,17 +384,12 @@
             if (!line || line.charAt(0) === "#" || /^--.*--$/.test(line)) return;
             if (isAssignmentLine(line)) return;
 
-            try {
-                var stripped = stripMemoWords(preprocess(line), scope);
-                var result = math.evaluate(stripped, scope);
-                if (typeof result === "number" && Number.isFinite(result)) {
-                    sum += result;
-                    anyContributed = true;
-                    if (line.indexOf("$") === -1) allCurrency = false;
-                }
-            } catch (err) {
-                // non-computable line — excluded from the total, same
-                // silent-skip behavior as evaluateAll()'s per-line results.
+            var stripped = stripMemoWords(preprocess(line), scope);
+            var result = evaluateLine(line, stripped, scope);
+            if (result !== null) {
+                sum += result;
+                anyContributed = true;
+                if (line.indexOf("$") === -1) allCurrency = false;
             }
         });
 
@@ -416,16 +420,12 @@
                 return;
             }
 
-            try {
-                // Step 5 — memo words, then evaluate the preprocessed line
-                var stripped = stripMemoWords(preprocess(line), scope);
-                var result = math.evaluate(stripped, scope);
-                if (typeof result === "number" && Number.isFinite(result)) {
-                    html += '<div class="expr-result-line">' + formatResult(result, line) + '</div>';
-                } else {
-                    html += '<div class="expr-result-line"></div>';
-                }
-            } catch (err) {
+            // Step 5 — memo words, then evaluate the preprocessed line
+            var stripped = stripMemoWords(preprocess(line), scope);
+            var result = evaluateLine(line, stripped, scope);
+            if (result !== null) {
+                html += '<div class="expr-result-line">' + formatResult(result, line) + '</div>';
+            } else {
                 html += '<div class="expr-result-line"></div>';
             }
         });
@@ -460,18 +460,6 @@
         textarea.value = "";
         evaluateAll();
         textarea.focus();
-    });
-
-    document.querySelectorAll(".calc-chip").forEach(function (chip) {
-        chip.addEventListener("click", function () {
-            var insertText = chip.dataset.insert;
-            textarea.value = textarea.value.length && !textarea.value.endsWith("\n")
-                ? textarea.value + "\n" + insertText
-                : textarea.value + insertText;
-            evaluateAll();
-            textarea.focus();
-            textarea.scrollTop = textarea.scrollHeight;
-        });
     });
 
     evaluateAll();
