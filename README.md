@@ -2,7 +2,7 @@
 
 A personal finance and productivity dashboard built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps.
 
-It focuses on clarity, speed, and control: no accounts, no tracking, no third-party services.
+It focuses on clarity, speed, and control: self-hosted and no tracking, with an optional AI Assistant that uses your own Anthropic API key.
 
 [Live app →](https://artha-dashboard.onrender.com)
 

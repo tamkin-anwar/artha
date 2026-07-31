@@ -2,7 +2,7 @@
     "id": "/",
     "name": "Artha",
     "short_name": "Artha",
-    "description": "A personal dashboard for finance, notes, weather, and more.",
+    "description": "A personal dashboard for finance, notes, calendar, and more.",
     "start_url": "/?source=pwa",
     "scope": "/",
     "display": "standalone",
