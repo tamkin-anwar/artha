@@ -40,7 +40,7 @@
     .cal-day-cell.cal-day-selected { border: 2px solid var(--gold); z-index: 1; }
     .cal-day-number { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
     .cal-day-cell.cal-day-selected .cal-day-number { color: var(--text-primary); }
-    .cal-day-today-badge {
+    .cal-day-cell.cal-day-is-today .cal-day-number {
         display: inline-flex; align-items: center; justify-content: center;
         width: 20px; height: 20px; border-radius: 50%;
         background: var(--gold); color: #000; font-weight: 600;
@@ -132,15 +132,11 @@
         <div id="calendar-grid" style="display:grid; grid-template-columns:repeat(7,1fr); border-top:1px solid var(--border-subtle); border-left:1px solid var(--border-subtle);">
             {% for d in grid_days %}
                 <button type="button"
-                    class="cal-day-cell {{ 'cal-day-weekend' if d.is_weekend }} {{ 'cal-day-out-of-month' if not d.in_month }} {{ 'cal-day-selected' if d.date == today_value }}"
+                    class="cal-day-cell {{ 'cal-day-weekend' if d.is_weekend }} {{ 'cal-day-out-of-month' if not d.in_month }} {{ 'cal-day-is-today' if d.is_today }} {{ 'cal-day-selected' if d.date == today_value }}"
                     data-date="{{ d.date }}"
                     aria-label="{{ d.date }}{{ ' · notes due' if d.note_dot }}"
                 >
-                    {% if d.is_today %}
-                        <span class="cal-day-today-badge cal-day-number">{{ d.day }}</span>
-                    {% else %}
-                        <span class="cal-day-number">{{ d.day }}</span>
-                    {% endif %}
+                    <span class="cal-day-number">{{ d.day }}</span>
                     {% if d.note_dot %}<i data-lucide="file-text" class="cal-note-marker" aria-hidden="true"></i>{% endif %}
                     <div class="cal-dots">
                         {% if d.income_dot %}<span class="cal-dot" style="background:var(--emerald);"></span>{% endif %}
@@ -172,8 +168,35 @@
 window.CALENDAR_DATA = {{ calendar_data|tojson }};
 window.CALENDAR_NOTES = {{ calendar_notes|tojson }};
 window.CALENDAR_TODAY = {{ today_value|tojson }};
+window.CALENDAR_MONTH_VALUE = {{ current_month_value|tojson }};
+window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
 
 (function () {
+    function localTodayString() {
+        var d = new Date();
+        var m = String(d.getMonth() + 1).padStart(2, "0");
+        var day = String(d.getDate()).padStart(2, "0");
+        return d.getFullYear() + "-" + m + "-" + day;
+    }
+
+    // The server picks the default month (no ?month= in the URL) from
+    // its own clock — on Render that's UTC — which can disagree with
+    // the viewer's actual local month right around midnight local time
+    // near a month boundary, in either direction depending on whether
+    // the viewer is ahead of or behind UTC. Every visitor's browser
+    // computes its own correct local date independently here, so this
+    // is correct for any user in any timezone, not just one. Only
+    // redirects when the server guessed (no explicit ?month= — an
+    // explicit link, e.g. from Calendar's prev/next nav, is always
+    // respected as-is) and the guess was actually wrong.
+    if (!window.CALENDAR_MONTH_EXPLICIT) {
+        var localToday = localTodayString();
+        var localMonthValue = localToday.slice(0, 7);
+        if (localMonthValue !== window.CALENDAR_MONTH_VALUE) {
+            location.replace("{{ url_for('dashboard.calendar_page') }}?month=" + localMonthValue);
+        }
+    }
+
     // Matches the --note-{color}-text swatch hexes from templates/notes.html.
     var NOTE_COLOR_HEX = {
         sage: "#3f5c2b", coral: "#a34527", plum: "#6b3d72",
@@ -284,8 +307,29 @@ window.CALENDAR_TODAY = {{ today_value|tojson }};
         });
     });
 
+    // The server computes "today" from its own clock — on Render that's
+    // UTC — which can be a day ahead of the browser's actual local date
+    // (e.g. 8pm Pacific is already past midnight UTC). Correct the
+    // highlighted "today" cell and the default-selected day to the
+    // browser's real local date rather than trusting the server's value
+    // blindly; only applies within the currently-rendered month, so a
+    // mismatch that also crosses a month boundary is a known residual
+    // edge case, not attempted here.
+    var localToday = localTodayString();
+    var defaultSelectedDate = window.CALENDAR_TODAY;
+    if (localToday !== window.CALENDAR_TODAY) {
+        var staleTodayCell = document.querySelector('.cal-day-cell[data-date="' + window.CALENDAR_TODAY + '"]');
+        if (staleTodayCell) staleTodayCell.classList.remove("cal-day-is-today", "cal-day-selected");
+
+        var correctTodayCell = document.querySelector('.cal-day-cell[data-date="' + localToday + '"]');
+        if (correctTodayCell) {
+            correctTodayCell.classList.add("cal-day-is-today", "cal-day-selected");
+            defaultSelectedDate = localToday;
+        }
+    }
+
     // Default selected day = today.
-    renderDayDetail(window.CALENDAR_TODAY);
+    renderDayDetail(defaultSelectedDate);
 })();
 </script>
 

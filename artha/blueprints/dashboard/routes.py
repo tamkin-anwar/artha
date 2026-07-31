@@ -136,6 +136,7 @@ def calendar_page():
     today = date.today()
 
     month_param = (request.args.get("month") or "").strip()
+    month_was_explicit = bool(month_param)
     if month_param:
         try:
             year, month = (int(part) for part in month_param.split("-", 1))
@@ -286,6 +287,7 @@ def calendar_page():
     month_label = f"{cal.month_name[month]} {year}"
     prev_month_value = f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
     next_month_value = f"{year + 1}-01" if month == 12 else f"{year}-{month + 1:02d}"
+    current_month_value = f"{year}-{month:02d}"
 
     return render_template(
         "calendar.html",
@@ -293,6 +295,8 @@ def calendar_page():
         month_label=month_label,
         prev_month_value=prev_month_value,
         next_month_value=next_month_value,
+        current_month_value=current_month_value,
+        month_was_explicit=month_was_explicit,
         today_value=today.strftime("%Y-%m-%d"),
         calendar_data=calendar_data,
         calendar_notes=calendar_notes,
