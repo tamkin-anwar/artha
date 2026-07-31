@@ -32,7 +32,6 @@
             </button>
             <span class="note-tag-chip"{{ ' hidden' if not note.tag }}>{{ (note.tag or '')|title }}</span>
         </div>
-        <span class="note-drag-handle" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
         <button type="button" class="note-delete-btn" aria-label="Delete note">
             <i data-lucide="trash-2"></i>
         </button>
@@ -230,19 +229,8 @@
     .note-card:hover .note-delete-btn { opacity: 0.85; }
     .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
 
-    .note-drag-handle {
-        display: flex; align-items: center; justify-content: center;
-        padding: 2px; margin: -2px;
-        color: var(--text-muted); opacity: 0.5;
-        cursor: grab; flex-shrink: 0;
-        transition: opacity 0.15s ease;
-    }
-    .note-drag-handle i { width: 15px; height: 15px; }
-    .note-card:hover .note-drag-handle { opacity: 0.85; }
-    .note-drag-handle:active { cursor: grabbing; }
-
     .note-card-ghost { opacity: 0.4; }
-    .note-card-chosen { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); transform: scale(1.02); }
+    .note-card-chosen { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); transform: scale(1.02); cursor: grabbing; }
     .note-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
     .note-card-title {
@@ -898,10 +886,6 @@
         tagChip.className = "note-tag-chip";
         tagChip.hidden = !note.tag;
         tagChip.textContent = note.tag ? note.tag.charAt(0).toUpperCase() + note.tag.slice(1) : "";
-        var dragHandle = document.createElement("span");
-        dragHandle.className = "note-drag-handle";
-        dragHandle.setAttribute("aria-hidden", "true");
-        dragHandle.innerHTML = '<i data-lucide="grip-vertical"></i>';
         var deleteBtnEl = document.createElement("button");
         deleteBtnEl.type = "button";
         deleteBtnEl.className = "note-delete-btn";
@@ -910,7 +894,6 @@
         topLeft.appendChild(pinBtn);
         topLeft.appendChild(tagChip);
         top.appendChild(topLeft);
-        top.appendChild(dragHandle);
         top.appendChild(deleteBtnEl);
 
         var title = document.createElement("div");
@@ -1719,19 +1702,23 @@
 
         function initGridSort(grid) {
             new Sortable(grid, {
-                handle: ".note-drag-handle",
-                filter: ".note-card-add, .filtered-out",
+                // No dedicated handle — the whole card is the drag
+                // surface (like reordering iOS home-screen icons: a
+                // quick tap opens, a press-and-hold-then-move drags).
+                // `filter` keeps the pin/delete buttons, the ghost
+                // "+ New note" card, and any search/tag-filtered-out
+                // card from starting a drag; `delay` is what lets a
+                // plain click still fall through to open the note
+                // instead of being swallowed as a drag attempt.
+                filter: ".note-pin-btn, .note-delete-btn, .note-card-add, .filtered-out",
                 animation: 200,
                 ghostClass: "note-card-ghost",
                 chosenClass: "note-card-chosen",
-                delay: 140,
-                delayOnTouchOnly: true,
+                delay: 150,
                 touchStartThreshold: 8,
                 scroll: true,
                 scrollSensitivity: 60,
                 scrollSpeed: 14,
-                forceFallback: true,
-                fallbackTolerance: 6,
                 onEnd: function () {
                     var ids = Array.from(grid.children)
                         .filter(function (el) { return el.dataset.id; })
