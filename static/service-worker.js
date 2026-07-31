@@ -26,13 +26,13 @@ const ASSETS_TO_CACHE = [
     "/static/vendor/chart.umd.min.js",
     "/static/vendor/chartjs-plugin-datalabels.min.js",
     "/static/vendor/sortable.min.js",
+    "/static/vendor/math.min.js",
 
     // JS modules
     "/static/js/init.js",
     "/static/js/flash.js",
     "/static/js/notes.js",
     "/static/js/transactions.js",
-    "/static/js/calculator.js",
     "/static/js/theme.js",
     "/static/js/settings.js",
     "/static/js/ai.js",

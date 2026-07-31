@@ -25,7 +25,7 @@
   --amber:          #d97706;
 
   /* Legacy custom properties — read directly via getComputedStyle() by
-     chart.js and calculator.js. Keep the names, point them at the new
+     chart.js. Keep the names, point them at the new
      palette so those scripts stay themed without any JS changes.
      --legend-color uses --text-primary (not --text-secondary) so chart
      legend/tooltip/datalabel text stays high-contrast against both the

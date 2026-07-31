@@ -3,19 +3,20 @@
 {% block content %}
 
 {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <script type="module">
-            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
-            document.addEventListener('DOMContentLoaded', function () {
-                {% for category, message in messages %}
-                    showToast({{ message|tojson }}, {{ category|tojson }});
-                {% endfor %}
-            });
-        </script>
-    {% endif %}
+    <script type="module">
+        import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+        document.addEventListener('DOMContentLoaded', function () {
+            {% for category, message in messages %}
+                showToast({{ message|tojson }}, {{ category|tojson }});
+            {% endfor %}
+            if (window.__mathLoadFailed) {
+                showToast("Could not load calculator engine — please refresh", "error");
+            }
+        });
+    </script>
 {% endwith %}
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/math.min.js') }}" onerror="window.__mathLoadFailed = true;"></script>
 
 <style>
     .calc-page-layout {
@@ -104,6 +105,32 @@
         text-overflow: ellipsis;
     }
 
+    /* Running total — sums bare-expression result lines only (not
+       variable assignments), pinned below the expression editor. */
+    .expr-total-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 10px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-subtle);
+        background: var(--bg-sidebar);
+        border-radius: 0 0 12px 12px;
+    }
+    .expr-total-label {
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+    .expr-total-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--gold);
+    }
+
     /* Suggestion chips */
     .calc-chip {
         background: var(--bg-card);
@@ -179,6 +206,11 @@
                 <div id="expr-results"></div>
             </div>
         </div>
+
+        <div class="expr-total-row">
+            <span class="expr-total-label">Total</span>
+            <span id="expr-total-value" class="expr-total-value">0</span>
+        </div>
     </div>
 
     <!-- RIGHT: Button calculator -->
@@ -226,6 +258,21 @@
     var resultsCol = document.getElementById("expr-results");
     var cursorLine = document.getElementById("expr-cursor-line");
     var clearBtn = document.getElementById("expr-clear-btn");
+    var totalValueEl = document.getElementById("expr-total-value");
+
+    // This inline script is a classic script (math.js needs a plain global,
+    // not a module), so pulling in the app's real currency formatter — an
+    // ES module export — needs a dynamic import bridged into this closure,
+    // same pattern templates/notes.html uses for toast.js. Every call site
+    // below guards on __formatMoney being loaded yet and falls back to
+    // formatPlainNumber if not, so the async load race is harmless; the
+    // re-run on resolve just avoids a flash of unformatted currency lines.
+    var __formatMoney = null;
+    import("{{ url_for('static', filename='js/currency.js') }}").then(function (mod) {
+        __formatMoney = mod.formatMoney;
+        evaluateAll();
+        refreshCalcDisplay();
+    });
 
     // -----------------------------------------------------------------
     // Natural-language preprocessing — order matters.
@@ -258,9 +305,92 @@
         return line;
     }
 
-    function formatCurrency(n) {
+    // Plain, clean number — no forced currency symbol, no padded trailing
+    // .00 on whole numbers (2205, not $2,205.00). This is the default;
+    // formatResult() below only reaches for real currency formatting when
+    // the line actually asked for it with a literal $.
+    function formatPlainNumber(n) {
         var sign = n < 0 ? "-" : "";
-        return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return sign + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    // rawLine must be the *pre-preprocess* line — preprocess() strips $ as
+    // one of its steps, so by the time a line has gone through it there's
+    // no way to tell currency intent apart from a plain number anymore.
+    function formatResult(n, rawLine) {
+        if (rawLine.indexOf("$") !== -1 && __formatMoney) return __formatMoney(n);
+        return formatPlainNumber(n);
+    }
+
+    // Best-effort support for Numi-style label words mixed with numbers
+    // ("Job 2000 + Salary 2000" -> "2000 + 2000"). Runs after preprocess()
+    // (so word-operators like "plus"/"times" have already had first crack
+    // at any bare words and been converted to symbols) and needs the
+    // current `scope`, which only exists mid-loop in evaluateAll() — so
+    // this can't live inside preprocess() itself, which is a pure,
+    // scope-unaware per-line regex pipeline.
+    //
+    // A bare word token is stripped unless it's:
+    //   (a) an assignment target ("savings = ...", not "savings ==")
+    //   (b) already a real variable in this note's scope ("savings" used
+    //       later as a reference)
+    //   (c) a real math.js function/constant name (pi, sin, sqrt, ...)
+    // Not a full NLP parser — simple label-before-number cases work,
+    // nothing more is promised.
+    function stripMemoWords(line, scope) {
+        return line.replace(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g, function (token, offset, fullString) {
+            var rest = fullString.slice(offset + token.length);
+            if (/^\s*=(?!=)/.test(rest)) return token;
+            if (Object.prototype.hasOwnProperty.call(scope, token)) return token;
+            if (token in math) return token;
+            return "";
+        });
+    }
+
+    // A variable-assignment line ("savings = salary - rent") — used to
+    // exclude these from the running Total below, since they're steps
+    // toward a value, not separate line items to add up.
+    function isAssignmentLine(line) {
+        return /^[a-zA-Z_][a-zA-Z0-9_]*\s*=(?!=)/.test(line);
+    }
+
+    // Sums only bare-expression result lines (never assignment lines —
+    // see isAssignmentLine's comment). Re-walks the lines and re-evaluates
+    // rather than reusing evaluateAll()'s per-line results, since that
+    // function only builds an HTML string today; cheap enough at the line
+    // counts a note actually reaches that a shared structured-results
+    // refactor isn't worth it here.
+    //
+    // Currency formatting is unanimous, not "any": the Total only renders
+    // via formatMoney() if every contributing line had a literal $ — a
+    // total made of a $400 line and a bare 20 line and shown as "$420"
+    // would silently claim the 20 was money too, which may not be true.
+    function computeTotal(lines, scope) {
+        var sum = 0;
+        var anyContributed = false;
+        var allCurrency = true;
+
+        lines.forEach(function (rawLine) {
+            var line = rawLine.trim();
+            if (!line || line.charAt(0) === "#" || /^--.*--$/.test(line)) return;
+            if (isAssignmentLine(line)) return;
+
+            try {
+                var stripped = stripMemoWords(preprocess(line), scope);
+                var result = math.evaluate(stripped, scope);
+                if (typeof result === "number" && Number.isFinite(result)) {
+                    sum += result;
+                    anyContributed = true;
+                    if (line.indexOf("$") === -1) allCurrency = false;
+                }
+            } catch (err) {
+                // non-computable line — excluded from the total, same
+                // silent-skip behavior as evaluateAll()'s per-line results.
+            }
+        });
+
+        if (!anyContributed) return "0";
+        return (allCurrency && __formatMoney) ? __formatMoney(sum) : formatPlainNumber(sum);
     }
 
     function evaluateAll() {
@@ -287,10 +417,11 @@
             }
 
             try {
-                // Step 5 — evaluate the preprocessed line
-                var result = math.evaluate(preprocess(line), scope);
+                // Step 5 — memo words, then evaluate the preprocessed line
+                var stripped = stripMemoWords(preprocess(line), scope);
+                var result = math.evaluate(stripped, scope);
                 if (typeof result === "number" && Number.isFinite(result)) {
-                    html += '<div class="expr-result-line">' + formatCurrency(result) + '</div>';
+                    html += '<div class="expr-result-line">' + formatResult(result, line) + '</div>';
                 } else {
                     html += '<div class="expr-result-line"></div>';
                 }
@@ -300,6 +431,7 @@
         });
 
         resultsCol.innerHTML = html;
+        if (totalValueEl) totalValueEl.textContent = computeTotal(lines, scope);
         autoGrow();
         updateCursorLine();
     }
@@ -368,7 +500,7 @@
         try {
             var result = math.evaluate(currentExpr);
             if (typeof result === "number" && Number.isFinite(result)) {
-                calcResultDisplay.textContent = formatCurrency(result);
+                calcResultDisplay.textContent = formatPlainNumber(result);
             }
         } catch (err) {
             // Incomplete expression (e.g. ends in an operator) — keep
@@ -439,7 +571,7 @@
         try {
             var result = math.evaluate(currentExpr);
             if (typeof result === "number" && Number.isFinite(result)) {
-                calcResultDisplay.textContent = formatCurrency(result);
+                calcResultDisplay.textContent = formatPlainNumber(result);
                 appendResultLineToExpr(result);
                 currentExpr = String(result);
                 calcExprLine.textContent = " ";
