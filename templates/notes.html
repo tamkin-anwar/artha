@@ -174,6 +174,15 @@
         flex-direction: column;
         gap: 8px;
         min-height: 132px;
+        /* Whole-card press-and-hold dragging (see the Sortable config)
+           needs to own the gesture outright — without these, a slow
+           mousedown+move over the card's text reads to the browser as
+           a text-selection or trackpad-scroll attempt and competes
+           with (or defeats) SortableJS's own drag detection, which is
+           what "doesn't grab properly" actually was. */
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
         /* backwards (not both/forwards): holds the pre-animation
            (opacity:0) state during the stagger delay, but lets go once
            the animation ends instead of permanently pinning opacity via
@@ -1719,6 +1728,15 @@
                 scroll: true,
                 scrollSensitivity: 60,
                 scrollSpeed: 14,
+                // `delay` (needed so a plain click still opens the note
+                // instead of every press being read as a drag attempt)
+                // is only reliable with forceFallback — native HTML5
+                // drag-and-drop starts on the browser's own timing and
+                // doesn't integrate cleanly with a JS-controlled delay,
+                // which is what made dragging feel like it wasn't
+                // grabbing at all.
+                forceFallback: true,
+                fallbackTolerance: 5,
                 onEnd: function () {
                     var ids = Array.from(grid.children)
                         .filter(function (el) { return el.dataset.id; })
