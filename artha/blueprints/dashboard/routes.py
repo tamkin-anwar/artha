@@ -205,17 +205,18 @@ def calendar_page():
         recurring_due_by_date[entry["date"]].append(entry)
         all_due.append(entry)
 
-    # This is a "heads up" nudge anchored to the real today, not to
-    # whatever day/month is currently being browsed — so it's only shown
-    # while viewing the month that today actually falls in. Otherwise it
-    # sat, unchanged, under every month you navigated to, looking like it
-    # belonged to whatever was on screen when it didn't.
+    # Always computed from the real today (not the viewed month) — the due
+    # date itself can land in the next calendar month (e.g. today is Jul 31,
+    # due Aug 1), so gating this to "only while viewing today's month" would
+    # hide it on the one day it's actually about. The template renders this
+    # unconditionally; script.js decides *when* to surface it (today's cell
+    # or the due date's own cell), so being in the DOM here doesn't mean
+    # it's visible on every day.
     upcoming_recurring = None
-    if year == today.year and month == today.month:
-        within_7 = [e for e in all_due if 0 <= (datetime.strptime(e["date"], "%Y-%m-%d").date() - today).days <= 7]
-        if within_7:
-            within_7.sort(key=lambda e: e["date"])
-            upcoming_recurring = within_7[0]
+    within_7 = [e for e in all_due if 0 <= (datetime.strptime(e["date"], "%Y-%m-%d").date() - today).days <= 7]
+    if within_7:
+        within_7.sort(key=lambda e: e["date"])
+        upcoming_recurring = within_7[0]
 
     # Notes due within the visible window — due_date is a plain Date
     # column, so it compares directly against fetch_start/fetch_end
