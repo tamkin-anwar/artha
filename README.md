@@ -2,17 +2,20 @@
 
 A personal finance and productivity dashboard built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps.
 
-It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API (set your own ANTHROPIC_API_KEY to enable it).
+It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API.
 
 [Live app →](https://artha-dashboard.onrender.com)
 
 ## Features
 - Income and expense tracking with live Chart.js visualizations
 - Inline transaction editing, no page reloads
+- Recurring transactions with automatic monthly regeneration
 - Undo delete with toast notifications
 - Notes with pinning, colors, tags, due dates, and checklists
 - Calendar with due-date notes and recurring bill reminders
 - A Numi-style smart calculator with variables and a running total
+- Scenarios: model a "what if" financial decision (a new apartment, a career change) and get a payback period and a rule-based recommendation, no AI call needed
+- An AI Assistant with your financial data as context, powered by Anthropic's API
 - Dark and light theme with persistence
 - Offline support via Service Worker (PWA-ready)
 
@@ -32,5 +35,7 @@ No SaaS lock-in, full control over data, and a real production-minded Flask app 
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+python init_db.py
 python wsgi.py
 ```
+`init_db.py` creates the local SQLite database and prompts for confirmation before running. The AI Assistant needs an `ANTHROPIC_API_KEY` environment variable to work; everything else runs without extra setup.
