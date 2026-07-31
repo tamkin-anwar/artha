@@ -156,7 +156,7 @@
         <div id="day-detail-content"></div>
 
         {% if upcoming_recurring %}
-            <div style="background:var(--gold-dim); border:1px solid var(--gold); border-radius:10px; padding:12px 14px; font-size:13px; color:var(--gold); margin-top:auto;">
+            <div id="upcoming-recurring-banner" style="background:var(--gold-dim); border:1px solid var(--gold); border-radius:10px; padding:12px 14px; font-size:13px; color:var(--gold); margin-top:auto;">
                 &#8635; {{ upcoming_recurring.description }} due {{ upcoming_recurring.date_label }}
                 &middot; ${{ '%.2f'|format(upcoming_recurring.amount) }}
             </div>
@@ -197,6 +197,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         }
     }
 
+    // "Today" per the viewer's own clock, corrected below once we know
+    // it — the upcoming-recurring banner only makes sense on today's
+    // detail view, so this is what renderDayDetail() checks against.
+    var correctedToday = window.CALENDAR_TODAY;
+
     // Matches the --note-{color}-text swatch hexes from templates/notes.html.
     var NOTE_COLOR_HEX = {
         sage: "#3f5c2b", coral: "#a34527", plum: "#6b3d72",
@@ -223,6 +228,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         var header = formatHeaderDate(dateStr);
         var txs = window.CALENDAR_DATA[dateStr] || [];
         var notesDue = window.CALENDAR_NOTES[dateStr] || [];
+
+        // Only relevant on today's own detail view — otherwise it sits,
+        // unrelated, under whatever day happens to be selected.
+        var recurringBanner = document.getElementById("upcoming-recurring-banner");
+        if (recurringBanner) recurringBanner.style.display = (dateStr === correctedToday) ? "" : "none";
 
         var html = "";
         html += '<div style="margin-bottom:18px;">';
@@ -325,6 +335,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         if (correctTodayCell) {
             correctTodayCell.classList.add("cal-day-is-today", "cal-day-selected");
             defaultSelectedDate = localToday;
+            correctedToday = localToday;
         }
     }
 
