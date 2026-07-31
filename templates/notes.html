@@ -466,8 +466,10 @@
     #note-content-editable a { color: var(--gold); text-decoration: underline; }
 
     /* Checklists — both inside the editor and on the card face */
-    .note-checklist-item { margin: 6px 0; }
-    .note-checklist-item label, .note-checklist-row {
+    .note-checklist-item {
+        margin: 6px 0; display: flex; align-items: center; gap: 8px;
+    }
+    .note-checklist-row {
         display: flex; align-items: center; gap: 8px; cursor: pointer;
     }
     .note-checklist-text { position: relative; }
@@ -1430,24 +1432,41 @@
     // Checklist construction / toggling
     // -----------------------------------------------------------------
     function buildChecklistItemNode() {
+        // Checkbox and text are plain siblings, not wrapped in a shared
+        // <label> — a <label> makes a click ANYWHERE inside it toggle the
+        // checkbox, including a click on the text meant to just place the
+        // caret for editing. That made it hard to click into a row to type
+        // without also flipping it "complete". Only the checkbox itself is
+        // the toggle target now; the text is a normal editable span.
         var item = document.createElement("div");
         item.className = "note-checklist-item";
-        var label = document.createElement("label");
         var checkbox = document.createElement("input");
         checkbox.type = "checkbox";
+        checkbox.setAttribute("aria-label", "Toggle checklist item");
         var text = document.createElement("span");
         text.className = "note-checklist-text";
         text.appendChild(document.createTextNode("​"));
-        label.appendChild(checkbox);
-        label.appendChild(text);
-        item.appendChild(label);
+        item.appendChild(checkbox);
+        item.appendChild(text);
         return item;
     }
 
+    // Collapses the caret just after the placeholder zero-width space,
+    // rather than selecting the span's full contents. Selecting-then-typing
+    // (the previous approach) made the browser's own insertText handling
+    // unwrap the <span> itself once its content was replaced, silently
+    // dropping the .note-checklist-text wrapper the rest of the checklist
+    // code (Enter-to-continue, checked-state styling) depends on finding.
     function placeCaretInText(textEl) {
+        var textNode = textEl.firstChild;
         var range = document.createRange();
+        if (textNode && textNode.nodeType === 3) {
+            range.setStart(textNode, textNode.length);
+        } else {
+            range.selectNodeContents(textEl);
+        }
+        range.collapse(true);
         var sel = window.getSelection();
-        range.selectNodeContents(textEl);
         sel.removeAllRanges();
         sel.addRange(range);
     }
@@ -1549,6 +1568,33 @@
 
     function insertChecklistItem() {
         contentEditable.focus();
+
+        // Mirrors insertList()'s conversion behavior below — clicking
+        // Checklist after typing a line should turn that line's own text
+        // into the checklist item, not strand it above an unrelated
+        // empty one.
+        var block = getCurrentTopLevelBlock();
+        var isConvertibleBlock = block && block.nodeName !== "UL" && block.nodeName !== "OL" &&
+            !(block.classList && block.classList.contains("note-checklist-item"));
+        if (isConvertibleBlock && !isPlaceholderEmpty(block.textContent)) {
+            var convertedItem = buildChecklistItemNode();
+            var convertedText = convertedItem.querySelector(".note-checklist-text");
+            convertedText.innerHTML = "";
+
+            if (block.nodeType === 3) {
+                var parent = block.parentElement || contentEditable;
+                var nextSibling = block.nextSibling;
+                convertedText.appendChild(block);
+                parent.insertBefore(convertedItem, nextSibling);
+            } else {
+                while (block.firstChild) convertedText.appendChild(block.firstChild);
+                block.parentElement.replaceChild(convertedItem, block);
+            }
+
+            placeCaretAtEnd(convertedText);
+            return;
+        }
+
         var item = buildChecklistItemNode();
         insertAtCaretOrPlaceholder(item);
         placeCaretInText(item.querySelector(".note-checklist-text"));
