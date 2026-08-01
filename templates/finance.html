@@ -39,7 +39,7 @@
             >
                 {{ m.label }}{% if m.is_current %} <span style="color:var(--gold);">&#9679;</span>{% endif %}
                 {% if m.net != 0 %}
-                    <span style="display:block; font-size:10px; margin-top:2px; color:{{ 'var(--emerald)' if m.net >= 0 else 'var(--red)' }};">
+                    <span class="fp-money" style="display:block; font-size:10px; margin-top:2px; color:{{ 'var(--emerald)' if m.net >= 0 else 'var(--red)' }};" data-money-value="{{ m.net }}" data-money-signed="1">
                         {{ '+' if m.net >= 0 else '-' }}${{ '%.0f'|format(m.net|abs) }}
                     </span>
                 {% endif %}
@@ -59,10 +59,10 @@
             <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
             <span class="eyebrow">Income</span>
         </div>
-        <div id="fp-stat-income" class="stat-number money-positive" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(income) }}</div>
+        <div id="fp-stat-income" class="stat-number money-positive fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ income }}">${{ "%.2f"|format(income) }}</div>
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.income.favorable else 'var(--red)' }};">
-                {{ '↑' if comparison.income.up else '↓' }} ${{ '%.2f'|format(comparison.income.delta) }} {{ 'more' if comparison.income.up else 'less' }} than last month
+                {{ '↑' if comparison.income.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.income.delta }}">${{ '%.2f'|format(comparison.income.delta) }}</span> {{ 'more' if comparison.income.up else 'less' }} than last month
             </p>
         {% endif %}
     </div>
@@ -71,10 +71,10 @@
             <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
             <span class="eyebrow">Expenses</span>
         </div>
-        <div id="fp-stat-expense" class="stat-number money-negative" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(expense) }}</div>
+        <div id="fp-stat-expense" class="stat-number money-negative fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ expense }}">${{ "%.2f"|format(expense) }}</div>
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.expense.favorable else 'var(--red)' }};">
-                {{ '↑' if comparison.expense.up else '↓' }} ${{ '%.2f'|format(comparison.expense.delta) }} {{ 'more' if comparison.expense.up else 'less' }} than last month
+                {{ '↑' if comparison.expense.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.expense.delta }}">${{ '%.2f'|format(comparison.expense.delta) }}</span> {{ 'more' if comparison.expense.up else 'less' }} than last month
             </p>
         {% endif %}
     </div>
@@ -83,10 +83,10 @@
             <span style="width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block;"></span>
             <span class="eyebrow">Net</span>
         </div>
-        <div id="fp-stat-net" class="stat-number money-gold" style="font-size:24px;">${{ "%.2f"|format(balance) }}</div>
+        <div id="fp-stat-net" class="stat-number money-gold fp-money" style="font-size:24px;" data-money-value="{{ balance }}">${{ "%.2f"|format(balance) }}</div>
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.net.favorable else 'var(--red)' }};">
-                {{ '↑' if comparison.net.up else '↓' }} ${{ '%.2f'|format(comparison.net.delta) }} {{ 'more' if comparison.net.up else 'less' }} than last month
+                {{ '↑' if comparison.net.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.net.delta }}">${{ '%.2f'|format(comparison.net.delta) }}</span> {{ 'more' if comparison.net.up else 'less' }} than last month
             </p>
         {% endif %}
     </div>
@@ -254,6 +254,25 @@ function hexToRgbTriplet(hex) {
 function signedMoney(value) {
     return (value >= 0 ? "+" : "-") + formatMoney(Math.abs(value));
 }
+
+// The stat cards, their "more/less than last month" deltas, and each
+// month-tab's net figure are plain server-rendered "$" text — the server
+// has no idea which currency the user picked, that's a client-only
+// (localStorage) preference. transactions.js already does the equivalent
+// for individual transaction row amounts (.tx-amount); this is the same
+// pattern for everything else money-shaped on this page, scoped to its
+// own .fp-money class so the two don't double-process each other's
+// elements.
+function formatFinanceMoneyElements() {
+    document.querySelectorAll(".fp-money[data-money-value]").forEach(function (el) {
+        var raw = parseFloat(el.getAttribute("data-money-value"));
+        if (!Number.isFinite(raw)) return;
+        el.textContent = el.hasAttribute("data-money-signed") ? signedMoney(raw) : formatMoney(raw);
+    });
+}
+
+formatFinanceMoneyElements();
+document.addEventListener("currency-refresh-ui", formatFinanceMoneyElements);
 
 function renderTrendChart() {
     var canvas = document.getElementById("monthlyTrendChart");
