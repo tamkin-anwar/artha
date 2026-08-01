@@ -243,6 +243,13 @@ function getVar(name, fallback) {
     return v || fallback;
 }
 
+function hexToRgbTriplet(hex) {
+    hex = hex.replace("#", "").trim();
+    if (hex.length === 3) hex = hex.split("").map(function (c) { return c + c; }).join("");
+    var r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    return r + "," + g + "," + b;
+}
+
 function renderTrendChart() {
     var canvas = document.getElementById("monthlyTrendChart");
     if (!canvas || typeof Chart === "undefined") return;
@@ -253,57 +260,101 @@ function renderTrendChart() {
 
     var emerald = getVar("--emerald", "#22c55e");
     var red = getVar("--red", "#ef4444");
-    var gold = getVar("--gold", "#d4a843");
-    var gridColor = getVar("--border-subtle", "rgba(255,255,255,0.08)");
-    var textColor = getVar("--text-secondary", "#8b95a8");
-    var barColors = values.map(function (v) { return v >= 0 ? emerald : red; });
+    var mutedColor = getVar("--text-muted", "#4a5468");
+    var textPrimary = getVar("--text-primary", "#f0ede8");
+    var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
+    var borderCard = getVar("--border-card", "rgba(255,255,255,0.08)");
 
     if (window.__monthlyTrendChart) {
         window.__monthlyTrendChart.destroy();
     }
 
+    var ctx2d = canvas.getContext("2d");
+    var chartHeight = canvas.getBoundingClientRect().height || 220;
+
+    // A soft vertical gradient per bar (brighter near the top, fading
+    // toward the baseline) reads as a lighter, more "iOS Health app" bar
+    // than a single flat fill — the same shape, less visual weight.
+    function barGradient(color) {
+        var rgb = hexToRgbTriplet(color);
+        var gradient = ctx2d.createLinearGradient(0, 0, 0, chartHeight);
+        gradient.addColorStop(0, "rgba(" + rgb + ",0.95)");
+        gradient.addColorStop(1, "rgba(" + rgb + ",0.45)");
+        return gradient;
+    }
+
     window.__monthlyTrendChart = new Chart(canvas, {
+        type: "bar",
         data: {
             labels: labels,
             datasets: [
                 {
-                    type: "bar",
                     label: "Net",
                     data: values,
-                    backgroundColor: barColors,
-                    borderRadius: 4,
-                    order: 2,
-                },
-                {
-                    type: "line",
-                    label: "Trend",
-                    data: values,
-                    borderColor: gold,
-                    backgroundColor: "transparent",
-                    tension: 0.35,
-                    pointBackgroundColor: gold,
-                    pointRadius: 3,
-                    order: 1,
+                    backgroundColor: values.map(function (v) { return barGradient(v >= 0 ? emerald : red); }),
+                    hoverBackgroundColor: values.map(function (v) { return v >= 0 ? emerald : red; }),
+                    // A negative bar grows downward from the zero line, so
+                    // its "outer tip" is its bottom edge, not its top —
+                    // rounding always has to point away from zero, not
+                    // just always round the geometric top of the rectangle.
+                    borderRadius: function (ctx) {
+                        var v = ctx.parsed ? ctx.parsed.y : (ctx.raw || 0);
+                        return v >= 0
+                            ? { topLeft: 8, topRight: 8, bottomLeft: 0, bottomRight: 0 }
+                            : { topLeft: 0, topRight: 0, bottomLeft: 8, bottomRight: 8 };
+                    },
+                    borderSkipped: false,
+                    barPercentage: 0.5,
+                    categoryPercentage: 0.7,
+                    // Caps the absolute pixel width too — otherwise a
+                    // brand-new account with only 1-2 months of history
+                    // stretches each bar to fill its wide category slot,
+                    // right back to the same blocky look this is fixing.
+                    maxBarThickness: 56,
                 },
             ],
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 500, easing: "easeOutQuart" },
+            layout: { padding: { top: 14 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    backgroundColor: glassBg,
+                    borderColor: borderCard,
+                    borderWidth: 1,
+                    cornerRadius: 10,
+                    padding: 10,
+                    displayColors: false,
+                    titleColor: mutedColor,
+                    titleFont: { size: 11, weight: "600" },
+                    bodyColor: textPrimary,
+                    bodyFont: { size: 14, weight: "700", family: "'JetBrains Mono', monospace" },
                     callbacks: {
+                        title: function (items) { return items[0].label; },
                         label: function (ctx) {
                             var v = ctx.parsed.y;
-                            return (v >= 0 ? "+$" : "-$") + Math.abs(v).toFixed(2);
+                            return (v >= 0 ? "+$" : "-$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         },
                     },
                 },
             },
             scales: {
-                x: { grid: { display: false }, ticks: { color: textColor } },
-                y: { grid: { color: gridColor }, ticks: { color: textColor } },
+                x: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { color: mutedColor, font: { size: 11 } },
+                },
+                y: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { display: false },
+                },
+            },
+            onHover: function (evt, elements) {
+                evt.native.target.style.cursor = elements.length ? "pointer" : "default";
             },
             onClick: function (evt, elements) {
                 if (!elements.length) return;
