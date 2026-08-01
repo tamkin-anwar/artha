@@ -264,6 +264,32 @@ def _verdict(scenario: Scenario) -> dict:
     return {"label": label, "risk_level": risk_level, "insight": insight, "comparison": comparison}
 
 
+def _scenario_compare_payload(scenario: Scenario, verdict: dict) -> dict:
+    """JSON-safe (no Decimal/date) snapshot of a scenario + its verdict for
+    the client-side Compare modal — the modal reads this straight out of a
+    <script type="application/json"> tag rather than hitting a new route."""
+    comparison = verdict["comparison"]
+    return {
+        "id": scenario.id,
+        "title": scenario.title,
+        "category": scenario.category,
+        "one_time_cost": float(scenario.one_time_cost),
+        "monthly_cost": float(scenario.monthly_cost),
+        "monthly_savings": float(scenario.monthly_savings),
+        "net_monthly_impact": float(scenario.net_monthly_impact),
+        "financial_risk": scenario.financial_risk,
+        "verdict_label": verdict["label"],
+        "risk_level": verdict["risk_level"],
+        "insight": verdict["insight"],
+        "month_label": comparison["month_start"].strftime("%B %Y"),
+        "projected": comparison["projected"],
+        "income": float(comparison["income"]),
+        "expense": float(comparison["expense"]),
+        "net_before": float(comparison["net"]),
+        "net_after": float(comparison["net_with_scenario"]),
+    }
+
+
 def _get_owned_scenario(scenario_id: int) -> Scenario:
     scenario = db.session.get(Scenario, scenario_id)
     if scenario is None or scenario.user_id != current_user.id:
@@ -328,6 +354,7 @@ def index():
     balance = _current_balance(current_user.id)
     monthly_income = _monthly_income(current_user.id)
     verdicts = {s.id: _verdict(s) for s in scenarios}
+    compare_data = [_scenario_compare_payload(s, verdicts[s.id]) for s in scenarios]
 
     return render_template(
         "scenarios.html",
@@ -335,6 +362,7 @@ def index():
         balance=balance,
         monthly_income=monthly_income,
         verdicts=verdicts,
+        compare_data=compare_data,
         status_filter=status_filter,
         valid_statuses=VALID_STATUSES,
     )
