@@ -387,6 +387,18 @@ def generate_recurring():
             skipped += 1
             continue
 
+        # Preserve the template's own day-of-month (clamped to the current
+        # month's length, e.g. day 31 in a 30-day month) rather than
+        # stamping every generated copy with today's date — otherwise
+        # every recurring bill without a copy yet this month piles onto
+        # whatever day the user happens to next load /finance, instead of
+        # landing on the day it's actually due. Same clamping already used
+        # by the calendar's upcoming-recurring reminder (see
+        # _next_due_date() in artha/blueprints/dashboard/routes.py).
+        days_this_month = calendar.monthrange(today.year, today.month)[1]
+        target_day = min(template_tx.timestamp.day, days_this_month)
+        target_date = date(today.year, today.month, target_day)
+
         max_pos += 1
         new_tx = Transaction(
             description=template_tx.description,
@@ -395,7 +407,7 @@ def generate_recurring():
             user_id=uid,
             position=int(max_pos),
             is_recurring=True,
-            timestamp=_resolve_transaction_timestamp(None),
+            timestamp=_resolve_transaction_timestamp(target_date.strftime("%Y-%m-%d")),
         )
         db.session.add(new_tx)
         generated += 1

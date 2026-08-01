@@ -46,30 +46,12 @@
 {% endmacro %}
 
 <style>
-    /* ---------------------------------------------------------------
-       Note color tokens — scoped to this page. Deliberately not added
-       to static/css/style.css: --emerald/--red/--sky/--amber already
-       carry income/expense/danger meaning elsewhere in the app, and
-       reusing them here for arbitrary note color would be confusing.
-       The one deliberate exception is the overdue due-date pill, which
-       genuinely shares the app's existing danger/attention semantic.
-       --------------------------------------------------------------- */
-    :root {
-        --note-sage-bg:     #eef3e6; --note-sage-border:  #cfdfbe; --note-sage-text:  #3f5c2b;
-        --note-coral-bg:    #fbeae4; --note-coral-border: #f0c3b3; --note-coral-text: #a34527;
-        --note-plum-bg:     #f3e8f4; --note-plum-border:  #ddc0e0; --note-plum-text:  #6b3d72;
-        --note-slate-bg:    #ecedf3; --note-slate-border: #c9cfdd; --note-slate-text: #3d4a5c;
-        --note-sky-bg:      #e7eefb; --note-sky-border:   #bcd2f0; --note-sky-text:   #2c5599;
-        --note-amber-bg:    #fdf1dc; --note-amber-border: #f0d69f; --note-amber-text: #8a5f11;
-    }
-    .dark {
-        --note-sage-bg:     #1f2a1a; --note-sage-border:  #3a4a2c; --note-sage-text:  #a3cf8a;
-        --note-coral-bg:    #2c1e19; --note-coral-border: #4a3128; --note-coral-text: #e6a17e;
-        --note-plum-bg:     #26202c; --note-plum-border:  #443a4c; --note-plum-text:  #d4a3d8;
-        --note-slate-bg:    #1c212e; --note-slate-border: #313a4d; --note-slate-text: #b0b9cf;
-        --note-sky-bg:      #182233; --note-sky-border:   #2c405c; --note-sky-text:   #93b8ec;
-        --note-amber-bg:    #2b2213; --note-amber-border: #4a3c1f; --note-amber-text: #edc370;
-    }
+    /* Note color tokens (--note-sage-bg etc.) now live globally in
+       static/css/style.css, shared with Calendar's time-blocked events —
+       see that file's comment for why they're namespaced separately from
+       --emerald/--red/--sky/--amber. The one deliberate exception here is
+       the overdue due-date pill, which genuinely shares the app's
+       existing danger/attention semantic and uses --red directly. */
 
     @keyframes noteCardIn {
         from { opacity: 0; transform: translateY(10px) scale(0.97); }

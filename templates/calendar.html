@@ -83,7 +83,7 @@
         border-radius: 10px;
         background: var(--bg-page);
     }
-    .cal-schedule-grid { position: relative; height: 1440px; cursor: crosshair; }
+    .cal-schedule-grid { position: relative; height: 1440px; padding-bottom: 16px; cursor: crosshair; box-sizing: content-box; }
     .cal-schedule-hour-line { position: absolute; left: 46px; right: 0; height: 1px; background: var(--border-subtle); }
     .cal-schedule-hour-label {
         position: absolute; left: 8px; width: 34px; text-align: right;
@@ -262,11 +262,17 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
     // know this to create a block on the right day.
     var currentSelectedDate = null;
 
-    // Matches the --note-{color}-text swatch hexes from templates/notes.html.
-    var NOTE_COLOR_HEX = {
-        sage: "#3f5c2b", coral: "#a34527", plum: "#6b3d72",
-        slate: "#3d4a5c", sky: "#2c5599", amber: "#8a5f11",
-    };
+    // Reads the shared --note-{color}-{bg,border,text} tokens from
+    // static/css/style.css live, rather than hardcoding hex values in JS —
+    // same pattern as getCSSVariable() in static/js/chart.js. This is what
+    // keeps note/event colors correct in both themes: a hardcoded hex
+    // literal here would only ever match one theme's palette.
+    function cssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function noteColor(name, variant) {
+        return cssVar("--note-" + name + "-" + variant) || cssVar("--note-sky-" + variant);
+    }
 
     function formatHeaderDate(dateStr) {
         var parts = dateStr.split("-").map(Number);
@@ -359,7 +365,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 html += '<div class="cal-section-label">Notes due</div>';
                 html += '<div>';
                 notesDue.forEach(function (n) {
-                    var dotColor = NOTE_COLOR_HEX[n.color] || "var(--text-muted)";
+                    var dotColor = n.color ? noteColor(n.color, "text") : "var(--text-muted)";
                     html += '<a class="cal-note-row" href="/notes?open=' + n.id + '">';
                     html += '<span class="cal-note-color-dot" style="background:' + dotColor + ';"></span>';
                     html += '<span class="cal-note-title">' + escapeHtml(n.title) + '</span>';
@@ -396,11 +402,6 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
     function getCsrfToken() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.content : "";
-    }
-
-    function hexToRgba(hex, alpha) {
-        var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
     }
 
     function dateAtMidnight(dateStr) {
@@ -485,7 +486,6 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         var endMin = event.end.getHours() * 60 + event.end.getMinutes();
         if (endMin <= startMin) endMin = startMin + 15;
 
-        var hex = NOTE_COLOR_HEX[event.color] || NOTE_COLOR_HEX.sky;
         var gutter = 46, rightPad = 6;
 
         var el = document.createElement("div");
@@ -495,8 +495,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         el.style.height = Math.max(endMin - startMin, 15) + "px";
         el.style.left = "calc(" + gutter + "px + (100% - " + gutter + "px - " + rightPad + "px) * " + (column / numColumns) + ")";
         el.style.width = "calc((100% - " + gutter + "px - " + rightPad + "px) * " + (1 / numColumns) + " - 4px)";
-        el.style.background = hexToRgba(hex, 0.22);
-        el.style.borderLeftColor = hex;
+        // Full card colors (bg/border), same tokens Notes' own cards use,
+        // not a low-alpha tint over the hardcoded hex — that read muddy in
+        // dark theme since a single hex can't be correct in both themes.
+        el.style.background = noteColor(event.color, "bg");
+        el.style.border = "1px solid " + noteColor(event.color, "border");
+        el.style.borderLeft = "3px solid " + noteColor(event.color, "text");
 
         var titleEl = document.createElement("div");
         titleEl.className = "cal-schedule-block-title";
@@ -687,7 +691,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             var swatch = document.createElement("button");
             swatch.type = "button";
             swatch.className = "cal-event-popover-color" + (name === selectedColor ? " selected" : "");
-            swatch.style.background = NOTE_COLOR_HEX[name];
+            swatch.style.background = noteColor(name, "text");
             swatch.setAttribute("aria-label", name);
             swatch.addEventListener("click", function () {
                 selectedColor = name;
@@ -963,6 +967,16 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
 
     // Default selected day = today.
     renderDayDetail(defaultSelectedDate);
+
+    // The schedule's block colors are read live via getComputedStyle at
+    // render time (see noteColor()), so they're only ever as fresh as the
+    // last render — without this, toggling the theme leaves already-drawn
+    // blocks showing the old theme's colors until the next unrelated
+    // re-render. static/js/theme.js dispatches this plain DOM event on
+    // every toggle, no import needed to listen for it here.
+    document.addEventListener("theme-changed", function () {
+        if (currentSelectedDate) renderSchedule(currentSelectedDate);
+    });
 })();
 </script>
 
