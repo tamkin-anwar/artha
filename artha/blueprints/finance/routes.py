@@ -228,6 +228,7 @@ def delete_transaction(transaction_id):
         "amount": str(tx.amount),
         "type": tx.type,
         "position": int(tx.position or 0),
+        "is_recurring": bool(tx.is_recurring),
         "timestamp": (
             tx.timestamp.replace(tzinfo=timezone.utc).isoformat()
             if tx.timestamp
@@ -237,6 +238,22 @@ def delete_transaction(transaction_id):
     }
 
     try:
+        # Deleting a recurring transaction only removes this month's row —
+        # generate_recurring() picks its template from the most recent
+        # is_recurring=True row for this (description, type), so an older
+        # row still flagged recurring would silently regenerate this one
+        # right back on the next /finance load. Deleting is the only way
+        # this UI offers to cancel a recurring series (there's no separate
+        # "stop recurring" action), so it has to mean "stop recurring",
+        # not just "remove this one instance" — clear the flag on every
+        # other row sharing this key too.
+        if tx.is_recurring:
+            Transaction.query.filter(
+                Transaction.user_id == tx.user_id,
+                Transaction.description == tx.description,
+                Transaction.type == tx.type,
+                Transaction.id != tx.id,
+            ).update({"is_recurring": False})
         db.session.delete(tx)
         db.session.commit()
         if is_ajax_request():
@@ -296,6 +313,7 @@ def undo_delete_transaction():
             user_id=current_user.id,
             position=restored_pos,
             timestamp=ts or db.func.current_timestamp(),
+            is_recurring=bool(data.get("is_recurring")),
         )
         db.session.add(restored)
         db.session.commit()
