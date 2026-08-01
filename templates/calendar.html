@@ -165,7 +165,7 @@
     </div>
     <div style="display:flex; gap:10px;" class="cal-toolbar-btn-row">
         <a href="{{ url_for('dashboard.calendar_page') }}" class="btn-secondary cal-toolbar-btn" style="padding:9px 16px; font-size:13px; text-decoration:none; display:inline-flex; align-items:center;">Today</a>
-        <a href="{{ url_for('finance.finance_page') }}" class="btn-primary cal-toolbar-btn" style="padding:9px 16px; font-size:13px; text-decoration:none; display:inline-flex; align-items:center;">+ Add Event</a>
+        <button type="button" id="add-event-btn" class="btn-primary cal-toolbar-btn" style="padding:9px 16px; font-size:13px; display:inline-flex; align-items:center;">+ Add Event</button>
     </div>
 </div>
 
@@ -257,6 +257,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
     // detail view, so this is what renderDayDetail() checks against.
     var correctedToday = window.CALENDAR_TODAY;
 
+    // Tracks whatever day is currently shown in the right panel — the
+    // toolbar's "+ Add Event" button (outside the panel itself) needs to
+    // know this to create a block on the right day.
+    var currentSelectedDate = null;
+
     // Matches the --note-{color}-text swatch hexes from templates/notes.html.
     var NOTE_COLOR_HEX = {
         sage: "#3f5c2b", coral: "#a34527", plum: "#6b3d72",
@@ -280,6 +285,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         var container = document.getElementById("day-detail-content");
         if (!container) return;
 
+        currentSelectedDate = dateStr;
         var header = formatHeaderDate(dateStr);
         var txs = window.CALENDAR_DATA[dateStr] || [];
         var notesDue = window.CALENDAR_NOTES[dateStr] || [];
@@ -879,6 +885,39 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         viewport.scrollTop = isToday ? Math.max(0, nowMin - 60) : 8 * 60;
     }
 
+    // Toolbar "+ Add Event" — same end state as a drag-to-create on the
+    // grid (a draft preview block + the naming popover), just started from
+    // a default time slot instead of a drag gesture: the next 15-minute
+    // mark if adding to today, 9 AM otherwise.
+    function openQuickAddEvent(dateStr) {
+        var grid = document.getElementById("schedule-grid");
+        var viewport = document.getElementById("schedule-viewport");
+        if (!grid || !viewport) return;
+        closeActivePopover();
+
+        var isToday = dateStr === correctedToday;
+        var startMin = isToday
+            ? snapMinutes(new Date().getHours() * 60 + new Date().getMinutes() + 15)
+            : 9 * 60;
+        var endMin = Math.min(1440, startMin + 60);
+        if (endMin - startMin < 15) startMin = endMin - 15;
+
+        var preview = document.createElement("div");
+        preview.className = "cal-schedule-drag-preview";
+        preview.style.top = startMin + "px";
+        preview.style.height = (endMin - startMin) + "px";
+        grid.appendChild(preview);
+        viewport.scrollTop = Math.max(0, startMin - 60);
+
+        var dayStart = dateAtMidnight(dateStr);
+        var draftStart = new Date(dayStart.getTime()); draftStart.setMinutes(startMin);
+        var draftEnd = new Date(dayStart.getTime()); draftEnd.setMinutes(endMin);
+
+        openEventPopover(preview, { title: "", color: "sky", start: draftStart, end: draftEnd }, dateStr, function () {
+            preview.remove();
+        });
+    }
+
     function selectDay(dateStr, cellEl) {
         document.querySelectorAll(".cal-day-cell.cal-day-selected").forEach(function (el) {
             el.classList.remove("cal-day-selected");
@@ -892,6 +931,13 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             selectDay(cell.dataset.date, cell);
         });
     });
+
+    var addEventBtn = document.getElementById("add-event-btn");
+    if (addEventBtn) {
+        addEventBtn.addEventListener("click", function () {
+            if (currentSelectedDate) openQuickAddEvent(currentSelectedDate);
+        });
+    }
 
     // The server computes "today" from its own clock — on Render that's
     // UTC — which can be a day ahead of the browser's actual local date
