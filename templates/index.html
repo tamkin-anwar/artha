@@ -132,7 +132,7 @@
                     {% for note in recent_notes[:3] %}
                         {% set display_title = note.title if note.title else (note.content.split('\n')[0]|truncate(40, True) if note.content else '') %}
                         <a href="{{ url_for('notes.notes_page') }}" class="dashboard-note-row" style="display:block; padding:10px 14px; border-radius:8px; text-decoration:none;">
-                            <div style="font-weight:600; font-size:13px; color:var(--text-primary);">{{ display_title if display_title else 'Untitled' }}</div>
+                            <div style="font-weight:600; font-size:13px; color:var(--text-primary); overflow-wrap:break-word;">{{ display_title if display_title else 'Untitled' }}</div>
                             <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">{{ note.content|truncate(60) if note.content else '' }}</div>
                         </a>
                     {% endfor %}

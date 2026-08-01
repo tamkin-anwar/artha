@@ -211,7 +211,7 @@
     .note-card[data-color] .note-tag-chip { color: inherit; }
 
     .note-pin-btn {
-        background: none; border: none; padding: 2px; margin: -2px;
+        background: none; border: none; padding: 8px; margin: -8px;
         color: var(--text-muted); opacity: 0.5;
         cursor: pointer; line-height: 0; flex-shrink: 0;
         transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
@@ -222,7 +222,7 @@
     .note-pin-btn.active { opacity: 1; color: var(--gold); }
 
     .note-delete-btn {
-        background: none; border: none; padding: 2px; margin: -2px;
+        background: none; border: none; padding: 8px; margin: -8px;
         color: var(--text-muted); opacity: 0.5;
         cursor: pointer; line-height: 0; flex-shrink: 0;
         transition: opacity 0.15s ease, color 0.15s ease;
@@ -364,11 +364,11 @@
         display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
         margin-bottom: 14px;
     }
-    .note-control-group { display: flex; align-items: center; gap: 6px; }
+    .note-control-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 8px; }
     .note-control-label { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; margin-right: 2px; }
 
     .note-color-swatch {
-        width: 20px; height: 20px; border-radius: 50%;
+        width: 24px; height: 24px; border-radius: 50%;
         border: 2px solid transparent;
         cursor: pointer; padding: 0;
         transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s ease;
@@ -413,7 +413,7 @@
     }
     .notes-tb-divider { width: 1px; height: 18px; background: var(--border-subtle); margin: 0 6px; flex-shrink: 0; }
     .notes-tb-btn {
-        position: relative; width: 30px; height: 30px; border-radius: 6px;
+        position: relative; width: 34px; height: 34px; border-radius: 6px;
         background: transparent; border: none; color: var(--text-secondary);
         font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.12s ease;
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;

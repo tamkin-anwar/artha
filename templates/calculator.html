@@ -104,6 +104,10 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    @media (max-width: 480px) {
+        #expr-results { width: 100px; }
+        .expr-result-line { padding: 0 8px; font-size: 12.5px; }
+    }
 
     /* Running total — sums bare-expression result lines only (not
        variable assignments), pinned below the expression editor. */

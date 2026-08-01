@@ -619,6 +619,14 @@ h1, h2, h3, .stat-number {
     }
 }
 
+/* Grid items default to min-width:auto, so a nowrap-truncated child (e.g.
+   a note preview) can force its column wider than the grid track intends,
+   pushing the whole row past the viewport. min-width:0 lets the track's
+   own sizing win so text-overflow:ellipsis can actually kick in. */
+.dashboard-row > * {
+    min-width: 0;
+}
+
 @media (max-width: 767px) {
     .app-sidebar {
         display: none !important;
