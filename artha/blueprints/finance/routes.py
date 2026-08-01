@@ -99,6 +99,7 @@ def add_transaction():
         user_id=current_user.id,
         position=int(max_pos) + 1,
         timestamp=_resolve_transaction_timestamp(request.form.get("date")),
+        is_recurring=bool(request.form.get("is_recurring")),
     )
 
     try:

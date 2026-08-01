@@ -180,14 +180,22 @@
         </div>
 
         <div class="grid grid-cols-2 gap-2.5 sm:contents">
-            <select
-                name="type"
-                required
-                class="field-input w-full min-w-0 sm:col-span-2 h-11 text-sm"
-            >
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
-            </select>
+            <div class="flex items-center gap-2 w-full min-w-0 sm:col-span-2">
+                <select
+                    name="type"
+                    required
+                    class="field-input w-full min-w-0 h-11 text-sm"
+                    style="flex:1;"
+                >
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                </select>
+
+                <label class="tx-recurring-toggle-label" title="Recurring">
+                    <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
+                    <span class="tx-recurring-toggle-visual">↻</span>
+                </label>
+            </div>
 
             <button
                 type="submit"

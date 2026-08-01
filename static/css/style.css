@@ -270,6 +270,51 @@ h1, h2, h3, .stat-number {
   border-color: var(--gold);
 }
 
+/* Same pill, as a native checkbox+label for the new-transaction form
+   (a plain POST, unlike the per-row toggle's AJAX button above) — the
+   checkbox itself is invisibly stretched over the visual pill so the
+   whole circle is clickable, not just its center. */
+.tx-recurring-toggle-label {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.tx-recurring-checkbox {
+  position: absolute;
+  inset: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.tx-recurring-toggle-visual {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.tx-recurring-checkbox:checked + .tx-recurring-toggle-visual {
+  background: var(--gold-dim);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.tx-recurring-checkbox:focus-visible + .tx-recurring-toggle-visual {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* Tables — no alternating rows, subtle row dividers */
 .plain-table tr {
   border-bottom: 1px solid var(--border-subtle);
