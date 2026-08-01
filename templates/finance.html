@@ -54,7 +54,7 @@
 
 <!-- Stat cards -->
 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
-    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--emerald);">
+    <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
             <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
@@ -68,7 +68,7 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--red);">
+    <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
             <span class="finance-stat-icon" style="background:var(--red-dim); color:var(--red);">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
@@ -82,7 +82,7 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--gold);">
+    <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
             <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
@@ -96,7 +96,7 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--sky);">
+    <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
             <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -154,7 +154,7 @@
 <!-- 6-month trend -->
 <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
     <div class="eyebrow" style="margin-bottom:14px;">6-Month Trend</div>
-    <div style="position:relative; height:220px;">
+    <div id="monthlyTrendChartWrap" style="position:relative; height:220px;">
         <canvas id="monthlyTrendChart" data-trend='{{ trend_data|tojson }}'></canvas>
     </div>
 </div>
@@ -313,6 +313,24 @@ function renderTrendChart() {
     var values = {{ trend_data|map(attribute='net')|list|tojson }};
     var monthValues = {{ trend_data|map(attribute='value')|list|tojson }};
     var selectedMonthValue = {{ (selected_month_value if not all_time else None)|tojson }};
+
+    // A category-scale bar chart always divides its FULL width evenly
+    // among however many categories exist — with only 1-2 months of
+    // history that stretches two bars to opposite edges of the card with
+    // a huge empty gap between them. Cap the chart's own width to roughly
+    // "N bars worth of room" and center it, so bars stay close together
+    // until there's enough months to naturally fill the card. max-width
+    // only ever shrinks, never forces overflow, so this stays responsive
+    // on narrow screens without a resize listener.
+    var wrap = document.getElementById("monthlyTrendChartWrap");
+    if (wrap) {
+        wrap.style.maxWidth = "none";
+        var available = wrap.getBoundingClientRect().width;
+        var desiredWidth = Math.max(260, Math.min(available, labels.length * 110));
+        wrap.style.maxWidth = desiredWidth + "px";
+        wrap.style.marginLeft = "auto";
+        wrap.style.marginRight = "auto";
+    }
 
     var emerald = getVar("--emerald", "#22c55e");
     var red = getVar("--red", "#ef4444");
