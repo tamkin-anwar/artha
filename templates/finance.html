@@ -54,9 +54,11 @@
 
 <!-- Stat cards -->
 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
-    <div class="glass-card" style="padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
+    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--emerald);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
+            </span>
             <span class="eyebrow">Income</span>
         </div>
         <div id="fp-stat-income" class="stat-number money-positive fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ income }}">${{ "%.2f"|format(income) }}</div>
@@ -66,9 +68,11 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card" style="padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
+    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--red);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--red-dim); color:var(--red);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
+            </span>
             <span class="eyebrow">Expenses</span>
         </div>
         <div id="fp-stat-expense" class="stat-number money-negative fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ expense }}">${{ "%.2f"|format(expense) }}</div>
@@ -78,9 +82,11 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card" style="padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <span style="width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block;"></span>
+    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--gold);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+            </span>
             <span class="eyebrow">Net</span>
         </div>
         <div id="fp-stat-net" class="stat-number money-gold fp-money" style="font-size:24px;" data-money-value="{{ balance }}">${{ "%.2f"|format(balance) }}</div>
@@ -90,9 +96,11 @@
             </p>
         {% endif %}
     </div>
-    <div class="glass-card" style="padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <span style="width:8px; height:8px; border-radius:50%; background:var(--sky); display:inline-block;"></span>
+    <div class="glass-card finance-card-in" style="padding:20px; border-left:3px solid var(--sky);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </span>
             <span class="eyebrow">Transactions</span>
         </div>
         <div id="fp-stat-tx-count" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
@@ -100,28 +108,51 @@
 </div>
 
 <!-- Month summary card -->
-<div class="glass-card" style="padding:20px; margin-bottom:24px;">
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
     <div class="eyebrow" style="margin-bottom:16px;">{{ selected_month_label|upper }}</div>
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:20px;">
-        <div>
-            <p class="eyebrow" style="margin-bottom:6px;">Savings Rate</p>
-            <p id="fp-savings-rate" style="font-family:'Fraunces',serif; font-size:22px; font-weight:600; margin:0; color:{% if savings_rate > 20 %}var(--gold){% elif savings_rate < 0 %}var(--red){% else %}var(--text-primary){% endif %};">
-                {{ '%.1f'|format(savings_rate) }}%
-            </p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:20px; align-items:center;">
+        <div style="display:flex; align-items:center; gap:14px;">
+            {% set ring_color = 'var(--gold)' if savings_rate > 20 else ('var(--red)' if savings_rate < 0 else 'var(--emerald)') %}
+            <div class="finance-ring-wrap">
+                <svg viewBox="0 0 88 88" width="88" height="88">
+                    <circle class="finance-ring-track" cx="44" cy="44" r="38"></circle>
+                    <circle
+                        class="finance-ring-fill"
+                        cx="44" cy="44" r="38"
+                        stroke="{{ ring_color }}"
+                        stroke-dasharray="238.76"
+                        stroke-dashoffset="{{ savings_ring_offset }}"
+                    ></circle>
+                </svg>
+                <div class="finance-ring-value" id="fp-savings-rate" style="color:{{ ring_color }};">{{ '%.0f'|format(savings_rate) }}%</div>
+            </div>
+            <div>
+                <p class="eyebrow" style="margin:0;">Savings Rate</p>
+            </div>
         </div>
-        <div>
-            <p class="eyebrow" style="margin-bottom:6px;">Biggest Expense Category</p>
-            <p id="fp-biggest-category" style="font-size:16px; font-weight:600; color:var(--text-primary); margin:0;">{{ biggest_category or '—' }}</p>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="finance-mini-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            </span>
+            <div class="min-w-0">
+                <p class="eyebrow" style="margin-bottom:4px;">Biggest Expense Category</p>
+                <p id="fp-biggest-category" style="font-size:15px; font-weight:600; color:var(--text-primary); margin:0;" class="truncate">{{ biggest_category or '—' }}</p>
+            </div>
         </div>
-        <div>
-            <p class="eyebrow" style="margin-bottom:6px;">Highest Spending Day</p>
-            <p id="fp-biggest-day" style="font-size:16px; font-weight:600; color:var(--text-primary); margin:0;">{{ biggest_day_label or '—' }}</p>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="finance-mini-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </span>
+            <div class="min-w-0">
+                <p class="eyebrow" style="margin-bottom:4px;">Highest Spending Day</p>
+                <p id="fp-biggest-day" style="font-size:15px; font-weight:600; color:var(--text-primary); margin:0;" class="truncate">{{ biggest_day_label or '—' }}</p>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- 6-month trend -->
-<div class="glass-card" style="padding:20px; margin-bottom:24px;">
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
     <div class="eyebrow" style="margin-bottom:14px;">6-Month Trend</div>
     <div style="position:relative; height:220px;">
         <canvas id="monthlyTrendChart" data-trend='{{ trend_data|tojson }}'></canvas>

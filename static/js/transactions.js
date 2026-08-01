@@ -31,6 +31,8 @@ function debounceSaveTransaction(e) {
 function applyAmountTypeDataset(amountEl, type) {
     if (!amountEl) return;
     amountEl.dataset.type = type;
+    const icon = amountEl.closest("li[data-id]")?.querySelector(".tx-flow-icon");
+    if (icon) icon.dataset.type = type;
 }
 
 function parseEditableMoneyToNumber(text) {

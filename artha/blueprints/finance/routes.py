@@ -1,4 +1,5 @@
 import calendar
+import math
 import time
 import logging
 from collections import defaultdict
@@ -585,6 +586,12 @@ def finance_page():
         }
 
     savings_rate = float((balance / income) * 100) if income > 0 else 0.0
+    # Ring geometry for the Savings Rate gauge — radius matches the SVG in
+    # finance.html (viewBox 88x88, r=38). Clamp to [0, 100] for the visual
+    # fill; the raw (possibly negative or >100) figure is still what's shown
+    # as text next to it.
+    _ring_circumference = 2 * math.pi * 38
+    savings_ring_offset = _ring_circumference * (1 - max(0.0, min(100.0, savings_rate)) / 100)
 
     # Biggest expense "category" (first word of the description, per spec)
     # and the single day of the month with the most spending.
@@ -639,6 +646,7 @@ def finance_page():
         all_time=all_time,
         comparison=comparison,
         savings_rate=savings_rate,
+        savings_ring_offset=savings_ring_offset,
         biggest_category=biggest_category,
         biggest_day_label=biggest_day_label,
         trend_data=trend_data,

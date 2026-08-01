@@ -19,19 +19,25 @@
 
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <span class="w-full sm:flex-1 min-w-0">
-            <span contenteditable="true"
-                    data-id="{{ tx.id }}"
-                    class="tx-desc block w-full break-words"
-                    style="background:transparent; outline:none; font-size:14px; color:var(--text-primary);">
-                {{ tx.description }}
+        <span class="w-full sm:flex-1 min-w-0" style="display:flex; align-items:flex-start; gap:10px;">
+            <span class="tx-flow-icon" data-type="{{ tx.type }}" aria-hidden="true" style="margin-top:1px;">
+                <svg class="tx-flow-icon-income" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
+                <svg class="tx-flow-icon-expense" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
             </span>
-            <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
-                <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
-                {% if tx.is_recurring %}
-                    <span class="tx-recurring-label" style="color:var(--gold);">&middot; &#8635; recurring</span>
-                {% endif %}
-            </div>
+            <span class="min-w-0" style="flex:1;">
+                <span contenteditable="true"
+                        data-id="{{ tx.id }}"
+                        class="tx-desc block w-full break-words"
+                        style="background:transparent; outline:none; font-size:14px; color:var(--text-primary);">
+                    {{ tx.description }}
+                </span>
+                <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
+                    <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
+                    {% if tx.is_recurring %}
+                        <span class="tx-recurring-label" style="color:var(--gold);">&middot; &#8635; recurring</span>
+                    {% endif %}
+                </div>
+            </span>
         </span>
 
         <span contenteditable="true"

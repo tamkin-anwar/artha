@@ -528,6 +528,99 @@ h1, h2, h3, .stat-number {
     background-color: var(--bg-hover);
 }
 
+/* Finance — stat card icon badges */
+.finance-stat-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.finance-stat-icon svg { width: 16px; height: 16px; }
+
+/* Finance — card entrance motion */
+@keyframes finance-card-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.finance-card-in {
+    animation: finance-card-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.finance-card-in:nth-of-type(1) { animation-delay: 0s; }
+.finance-card-in:nth-of-type(2) { animation-delay: 0.04s; }
+.finance-card-in:nth-of-type(3) { animation-delay: 0.08s; }
+.finance-card-in:nth-of-type(4) { animation-delay: 0.12s; }
+
+/* Finance — savings rate ring */
+.finance-ring-wrap {
+    position: relative;
+    width: 88px;
+    height: 88px;
+    flex-shrink: 0;
+}
+.finance-ring-wrap svg { transform: rotate(-90deg); }
+.finance-ring-track { fill: none; stroke: var(--bg-hover); stroke-width: 8; }
+.finance-ring-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.finance-ring-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 17px;
+}
+
+/* Finance — small icon badge for the category/day summary rows */
+.finance-mini-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--gold-dim);
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.finance-mini-icon svg { width: 14px; height: 14px; }
+
+/* Finance — transaction row flow icon (income/expense). Both arrow SVGs
+   always render; data-type (kept in sync with the row's type <select> by
+   transactions.js) picks which one shows and the badge's color, so
+   switching a row's type updates the icon without a page reload. */
+.tx-flow-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.tx-flow-icon svg { width: 13px; height: 13px; }
+.tx-flow-icon-income, .tx-flow-icon-expense { display: none; }
+.tx-flow-icon[data-type="income"] { background: var(--emerald-dim); color: var(--emerald); }
+.tx-flow-icon[data-type="income"] .tx-flow-icon-income { display: block; }
+.tx-flow-icon[data-type="expense"] { background: var(--red-dim); color: var(--red); }
+.tx-flow-icon[data-type="expense"] .tx-flow-icon-expense { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+    .finance-card-in,
+    .finance-ring-fill {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
 /* =========================
     Calculator
    ========================= */
