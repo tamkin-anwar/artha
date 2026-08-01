@@ -72,55 +72,5 @@ class Scenario(db.Model):
             return None
         return (self.one_time_cost / self.net_monthly_impact).quantize(Decimal("0.1"))
 
-    # ------------------------------------------------------------------
-    # Recommendation & insight depend on the user's current balance, which
-    # isn't stored on the row — callers (routes / context processors) pass
-    # it in after querying Transaction totals.
-    # ------------------------------------------------------------------
-
-    def recommendation(self, current_balance: Decimal) -> str:
-        """Return 'green' | 'yellow' | 'red'."""
-        if self.financial_risk >= 7:
-            return "red"
-        if self.net_monthly_impact >= 0 and self.one_time_cost < (current_balance * Decimal("0.2")):
-            return "green"
-        return "yellow"
-
-    def insight(self, current_balance: Decimal) -> str:
-        """Rule-based plain-English summary of the numbers. No AI call."""
-        rec = self.recommendation(current_balance)
-        parts: list[str] = []
-
-        if rec == "red":
-            parts.append(
-                f"Financial risk is rated {self.financial_risk}/10 — high enough that "
-                "the numbers below shouldn't be the only thing driving this decision."
-            )
-        elif rec == "green":
-            parts.append(
-                "Numbers look favorable: it's cash-flow positive and the upfront cost "
-                "is a small share of your current balance."
-            )
-        else:
-            if self.net_monthly_impact < 0:
-                parts.append(
-                    f"This costs ${abs(self.net_monthly_impact):,.2f}/month more than it saves."
-                )
-            if current_balance > 0 and self.one_time_cost >= (current_balance * Decimal("0.2")):
-                pct = (self.one_time_cost / current_balance) * 100
-                parts.append(
-                    f"The one-time cost is about {pct:.0f}% of your current balance — "
-                    "worth budgeting for carefully before committing."
-                )
-            if not parts:
-                parts.append("Mixed signals — review the numbers below before deciding.")
-
-        if self.payback_months is not None and self.payback_months > 0:
-            parts.append(f"At this rate, it pays for itself in about {self.payback_months} months.")
-        elif self.one_time_cost > 0 and self.net_monthly_impact <= 0:
-            parts.append("With no net monthly savings, the one-time cost is never recovered.")
-
-        return " ".join(parts)
-
     def __repr__(self) -> str:
         return f"<Scenario {self.id} {self.title!r} status={self.status}>"

@@ -15,29 +15,7 @@
     {% endif %}
 {% endwith %}
 
-<div class="flex flex-wrap items-start justify-between gap-4 mb-8">
-    <div>
-        <div class="eyebrow" style="margin-bottom:6px;">SCENARIOS</div>
-        <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0;">Scenario Simulator</h1>
-        <p style="color:var(--text-secondary); font-size:14px; margin-top:4px;">Model any what-if before it touches your real money</p>
-    </div>
-    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-        <button
-            type="button"
-            class="btn-secondary"
-            style="padding:10px 16px; font-size:14px;"
-        >
-            Compare
-        </button>
-        <a
-            href="{{ url_for('scenarios.add') }}"
-            class="btn-primary"
-            style="padding:10px 16px; font-size:14px; text-decoration:none;"
-        >
-            + New Scenario
-        </a>
-    </div>
-</div>
+{% include "_scenario_page_header.html" %}
 
 <div class="flex flex-col lg:flex-row gap-6">
     {% set active_id = scenario.id %}

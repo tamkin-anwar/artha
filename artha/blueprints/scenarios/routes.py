@@ -57,22 +57,6 @@ def _parse_date(raw, field_name: str):
         raise ValidationError(f"{field_name} must be a valid date (YYYY-MM-DD).")
 
 
-def _current_balance(user_id: int) -> Decimal:
-    income = (
-        db.session.query(func.sum(Transaction.amount))
-        .filter_by(user_id=user_id, type="income")
-        .scalar()
-        or Decimal("0")
-    )
-    expense = (
-        db.session.query(func.sum(Transaction.amount))
-        .filter_by(user_id=user_id, type="expense")
-        .scalar()
-        or Decimal("0")
-    )
-    return income - expense
-
-
 def _monthly_income(user_id: int, months: int = 3) -> Decimal:
     """Average monthly income over the trailing N months of transaction history."""
     since = datetime.utcnow() - timedelta(days=30 * months)
@@ -351,16 +335,12 @@ def index():
         query = query.filter_by(status=status_filter)
     scenarios = query.order_by(Scenario.created_at.desc()).all()
 
-    balance = _current_balance(current_user.id)
-    monthly_income = _monthly_income(current_user.id)
     verdicts = {s.id: _verdict(s) for s in scenarios}
     compare_data = [_scenario_compare_payload(s, verdicts[s.id]) for s in scenarios]
 
     return render_template(
         "scenarios.html",
         scenarios=scenarios,
-        balance=balance,
-        monthly_income=monthly_income,
         verdicts=verdicts,
         compare_data=compare_data,
         status_filter=status_filter,
@@ -403,8 +383,6 @@ def add():
 @login_required
 def detail(scenario_id):
     scenario = _get_owned_scenario(scenario_id)
-    balance = _current_balance(current_user.id)
-    monthly_income = _monthly_income(current_user.id)
 
     scenarios = (
         Scenario.query.filter_by(user_id=current_user.id)
@@ -412,18 +390,16 @@ def detail(scenario_id):
         .all()
     )
     verdicts = {s.id: _verdict(s) for s in scenarios}
+    compare_data = [_scenario_compare_payload(s, verdicts[s.id]) for s in scenarios]
 
     return render_template(
         "scenario_detail.html",
         scenario=scenario,
         scenarios=scenarios,
         verdicts=verdicts,
-        balance=balance,
-        monthly_income=monthly_income,
+        compare_data=compare_data,
         status_filter="",
         valid_statuses=VALID_STATUSES,
-        recommendation=scenario.recommendation(balance),
-        insight=scenario.insight(balance),
     )
 
 
