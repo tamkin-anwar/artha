@@ -237,6 +237,7 @@
 
 <script type="module">
 import { onThemeChange } from "{{ url_for('static', filename='js/theme.js') }}";
+import { formatMoney } from "{{ url_for('static', filename='js/currency.js') }}";
 
 function getVar(name, fallback) {
     var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -250,6 +251,10 @@ function hexToRgbTriplet(hex) {
     return r + "," + g + "," + b;
 }
 
+function signedMoney(value) {
+    return (value >= 0 ? "+" : "-") + formatMoney(Math.abs(value));
+}
+
 function renderTrendChart() {
     var canvas = document.getElementById("monthlyTrendChart");
     if (!canvas || typeof Chart === "undefined") return;
@@ -257,9 +262,11 @@ function renderTrendChart() {
     var labels = {{ trend_data|map(attribute='label')|list|tojson }};
     var values = {{ trend_data|map(attribute='net')|list|tojson }};
     var monthValues = {{ trend_data|map(attribute='value')|list|tojson }};
+    var selectedMonthValue = {{ (selected_month_value if not all_time else None)|tojson }};
 
     var emerald = getVar("--emerald", "#22c55e");
     var red = getVar("--red", "#ef4444");
+    var gold = getVar("--gold", "#d4a843");
     var mutedColor = getVar("--text-muted", "#4a5468");
     var textPrimary = getVar("--text-primary", "#f0ede8");
     var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
@@ -283,6 +290,8 @@ function renderTrendChart() {
         return gradient;
     }
 
+    var hasDatalabels = typeof ChartDataLabels !== "undefined";
+
     window.__monthlyTrendChart = new Chart(canvas, {
         type: "bar",
         data: {
@@ -304,6 +313,16 @@ function renderTrendChart() {
                             : { topLeft: 0, topRight: 0, bottomLeft: 8, bottomRight: 8 };
                     },
                     borderSkipped: false,
+                    // The selected month (same one highlighted gold in the
+                    // month-tab row above) gets a matching gold ring here
+                    // too, so the two stay visually tied together instead
+                    // of the chart being a disconnected second UI.
+                    borderColor: labels.map(function (_, i) {
+                        return monthValues[i] === selectedMonthValue ? gold : "transparent";
+                    }),
+                    borderWidth: labels.map(function (_, i) {
+                        return monthValues[i] === selectedMonthValue ? 2 : 0;
+                    }),
                     barPercentage: 0.5,
                     categoryPercentage: 0.7,
                     // Caps the absolute pixel width too — otherwise a
@@ -314,11 +333,12 @@ function renderTrendChart() {
                 },
             ],
         },
+        plugins: hasDatalabels ? [ChartDataLabels] : [],
         options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 500, easing: "easeOutQuart" },
-            layout: { padding: { top: 14 } },
+            layout: { padding: { top: 28, bottom: 22 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -334,12 +354,25 @@ function renderTrendChart() {
                     bodyFont: { size: 14, weight: "700", family: "'JetBrains Mono', monospace" },
                     callbacks: {
                         title: function (items) { return items[0].label; },
-                        label: function (ctx) {
-                            var v = ctx.parsed.y;
-                            return (v >= 0 ? "+$" : "-$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        },
+                        label: function (ctx) { return signedMoney(ctx.parsed.y); },
                     },
                 },
+                // Values sit above every bar, positive or negative, so the
+                // amount reads at a glance without needing to hover — the
+                // tooltip above still exists for the exact cents, but the
+                // headline number shouldn't require it. anchor/align "end"
+                // both fixed at the same value keeps this consistent
+                // (tried flipping per sign to hug each bar's own tip, but
+                // that put the negative month's label right where the
+                // x-axis month name sits — this reads cleaner anyway).
+                datalabels: hasDatalabels ? {
+                    anchor: "end",
+                    align: "end",
+                    offset: 6,
+                    color: function (ctx) { return ctx.dataset.data[ctx.dataIndex] >= 0 ? emerald : red; },
+                    font: { size: 12, weight: "700", family: "'JetBrains Mono', monospace" },
+                    formatter: function (value) { return signedMoney(value); },
+                } : false,
             },
             scales: {
                 x: {
@@ -368,6 +401,7 @@ function renderTrendChart() {
 
 renderTrendChart();
 onThemeChange(renderTrendChart);
+document.addEventListener("currency-refresh-ui", renderTrendChart);
 
 var scrollRow = document.getElementById("month-tab-row");
 var leftBtn = document.getElementById("month-scroll-left");
