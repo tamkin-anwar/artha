@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
@@ -89,14 +89,122 @@ def _monthly_income(user_id: int, months: int = 3) -> Decimal:
     return Decimal(total) / months
 
 
-def _verdict(scenario: Scenario, monthly_income: Decimal) -> dict:
-    """Rule-based verdict + risk level for the premium scenario UI. No AI call."""
-    high_cost = scenario.one_time_cost > 0 and scenario.one_time_cost > (monthly_income * 3)
-    net_monthly = scenario.net_monthly_impact
+def _monthly_expense(user_id: int, months: int = 3) -> Decimal:
+    """Average monthly expense over the trailing N months — the expense-side
+    twin of _monthly_income(), used for the same projected-month fallback."""
+    since = datetime.utcnow() - timedelta(days=30 * months)
+    total = (
+        db.session.query(func.sum(Transaction.amount))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.timestamp >= since,
+        )
+        .scalar()
+        or Decimal("0")
+    )
+    return Decimal(total) / months
 
-    if scenario.financial_risk >= 7 or high_cost:
+
+def _month_totals(user_id: int, target: date) -> dict:
+    """
+    Real income/expense/net for the calendar month containing `target`,
+    straight from Transaction rows — same bucketing approach as
+    finance_page()'s bucket_for() (artha/blueprints/finance/routes.py),
+    just scoped to one month instead of a full year's worth of buckets.
+    has_data is False when nothing has been recorded for that month yet
+    (e.g. a scenario dated for a future month) — callers fall back to a
+    projected estimate rather than showing a misleading $0/$0 real month.
+    """
+    start = date(target.year, target.month, 1)
+    next_month = date(target.year + 1, 1, 1) if target.month == 12 else date(target.year, target.month + 1, 1)
+
+    income = (
+        db.session.query(func.sum(Transaction.amount))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.type == "income",
+            Transaction.timestamp >= start,
+            Transaction.timestamp < next_month,
+        )
+        .scalar()
+        or Decimal("0")
+    )
+    expense = (
+        db.session.query(func.sum(Transaction.amount))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.timestamp >= start,
+            Transaction.timestamp < next_month,
+        )
+        .scalar()
+        or Decimal("0")
+    )
+    return {
+        "month_start": start,
+        "income": income,
+        "expense": expense,
+        "net": income - expense,
+        "has_data": income > 0 or expense > 0,
+    }
+
+
+def _scenario_month_comparison(scenario: Scenario) -> dict:
+    """
+    The real (or, absent real data, projected) month this scenario should
+    be compared against, plus what that month's net looks like with the
+    scenario's cost/savings applied — the direct "how does this affect my
+    finances" answer the numbers-only stat cards below don't give on their
+    own. Target month = scenario.start_date's month if set, else today's
+    month, so an undated scenario defaults to "this month" like the user
+    actually asks it ("what if I did this THIS month").
+    """
+    target = scenario.start_date or date.today()
+    totals = _month_totals(scenario.user_id, target)
+
+    if not totals["has_data"]:
+        avg_income = _monthly_income(scenario.user_id)
+        avg_expense = _monthly_expense(scenario.user_id)
+        totals = {
+            "month_start": date(target.year, target.month, 1),
+            "income": avg_income,
+            "expense": avg_expense,
+            "net": avg_income - avg_expense,
+            "has_data": False,
+        }
+
+    # target's own month is exactly what's being compared against, so the
+    # one-time cost (if any) always lands here — no separate check needed.
+    scenario_net_effect = scenario.monthly_savings - scenario.monthly_cost - scenario.one_time_cost
+
+    return {
+        **totals,
+        "projected": not totals["has_data"],
+        "net_with_scenario": totals["net"] + scenario_net_effect,
+    }
+
+
+def _verdict(scenario: Scenario) -> dict:
+    """
+    Rule-based verdict + risk level for the premium scenario UI. No AI call.
+
+    Anchored to the scenario's real (or, absent real data, projected)
+    target month via _scenario_month_comparison() instead of the old
+    abstract "cost > 3x average income" heuristic — the numbers lead,
+    financial_risk (the user's own 1-10 slider) is a tie-breaker/amplifier
+    on top of them, not the dominant signal it used to be.
+    """
+    comparison = _scenario_month_comparison(scenario)
+    net_before = comparison["net"]
+    net_after = comparison["net_with_scenario"]
+    flips_negative = net_before > 0 and net_after < 0
+
+    if flips_negative or scenario.financial_risk >= 8:
         label = "bad_idea"
-    elif scenario.financial_risk <= 3 and net_monthly >= 0:
+    elif net_after < 0:
+        label = "bad_idea" if scenario.financial_risk >= 6 else "wait"
+    elif scenario.financial_risk <= 5:
         label = "do_it"
     else:
         label = "wait"
@@ -108,34 +216,43 @@ def _verdict(scenario: Scenario, monthly_income: Decimal) -> dict:
     else:
         risk_level = "high"
 
+    def _money_str(v: Decimal) -> str:
+        return f"-${abs(v):,.2f}" if v < 0 else f"${v:,.2f}"
+
+    month_label = comparison["month_start"].strftime("%B %Y")
+    kind = "projected" if comparison["projected"] else "real"
+    before_str = _money_str(net_before)
+    after_str = _money_str(net_after)
+
     if label == "bad_idea":
-        if scenario.financial_risk >= 7 and high_cost:
+        if flips_negative:
             insight = (
-                f"Financial risk is rated {scenario.financial_risk}/10 and the upfront cost is "
-                "more than 3x your average monthly income — this is a hard pass for now."
+                f"{month_label}'s {kind} net is {before_str} — this scenario would drop it to "
+                f"{after_str}, turning a positive month negative."
             )
-        elif scenario.financial_risk >= 7:
+        elif net_after < 0:
+            insight = (
+                f"{month_label}'s {kind} net would be {after_str} with this scenario applied — "
+                f"already a stretch before factoring in the {scenario.financial_risk}/10 risk you gave it."
+            )
+        else:
             insight = (
                 f"Financial risk is rated {scenario.financial_risk}/10 — high enough that "
-                "this shouldn't move forward as-is."
-            )
-        else:
-            insight = (
-                "The upfront cost is more than 3x your average monthly income — that's a "
-                "stretch your cash flow probably can't absorb right now."
+                f"{month_label}'s otherwise-workable numbers ({before_str} → {after_str}) "
+                "shouldn't be the only thing driving this."
             )
     elif label == "do_it":
-        insight = "Low financial risk and cash-flow positive — the numbers clearly support doing this."
+        insight = (
+            f"{month_label}'s {kind} net is {before_str}; with this scenario it's "
+            f"{after_str} — still comfortably positive."
+        )
     else:
-        if net_monthly < 0:
-            insight = (
-                f"This costs ${abs(net_monthly):,.2f}/month more than it saves — workable, "
-                "but worth waiting for a better moment."
-            )
-        else:
-            insight = "Moderate risk — the numbers are fine but not a clear green light yet."
+        insight = (
+            f"{month_label}'s {kind} net is {before_str}; with this scenario it's "
+            f"{after_str} — workable, but worth weighing before committing."
+        )
 
-    return {"label": label, "risk_level": risk_level, "insight": insight}
+    return {"label": label, "risk_level": risk_level, "insight": insight, "comparison": comparison}
 
 
 def _get_owned_scenario(scenario_id: int) -> Scenario:
@@ -201,7 +318,7 @@ def index():
 
     balance = _current_balance(current_user.id)
     monthly_income = _monthly_income(current_user.id)
-    verdicts = {s.id: _verdict(s, monthly_income) for s in scenarios}
+    verdicts = {s.id: _verdict(s) for s in scenarios}
 
     return render_template(
         "scenarios.html",
@@ -257,7 +374,7 @@ def detail(scenario_id):
         .order_by(Scenario.created_at.desc())
         .all()
     )
-    verdicts = {s.id: _verdict(s, monthly_income) for s in scenarios}
+    verdicts = {s.id: _verdict(s) for s in scenarios}
 
     return render_template(
         "scenario_detail.html",
@@ -374,9 +491,15 @@ def inject_scenario_widget_data():
         .all()
     )
     total_monthly_impact = sum((s.net_monthly_impact for s in active), Decimal("0"))
+    top_three = active[:3]
 
     return {
-        "scenario_widget_scenarios": active[:3],
+        "scenario_widget_scenarios": top_three,
         "scenario_widget_total_count": len(active),
         "scenario_widget_total_monthly_impact": total_monthly_impact,
+        # Same _verdict() the detail/list pages use — previously this
+        # widget computed its own simplified verdict inline in the
+        # template, so it could disagree with the detail page for the
+        # exact same scenario.
+        "scenario_widget_verdicts": {s.id: _verdict(s) for s in top_three},
     }

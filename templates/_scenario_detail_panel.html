@@ -1,5 +1,6 @@
 {% set immediate_cash_impact = -scenario.one_time_cost %}
 {% set monthly_cash_flow = scenario.net_monthly_impact - (scenario.one_time_cost / 12) %}
+{% set comparison = verdict.comparison %}
 
 <div class="space-y-6">
     <div>
@@ -24,6 +25,48 @@
                 Ongoing
             {% endif %}
         </p>
+    </div>
+
+    <div class="glass-card" style="padding:20px;">
+        <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:14px;">
+            <p class="eyebrow" style="margin:0;">{{ comparison.month_start.strftime("%B %Y") }}</p>
+            {% if comparison.projected %}
+                <span style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Projected from your last 3 months</span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-2 gap-3" style="margin-bottom:16px;">
+            <div>
+                <p style="font-size:11px; color:var(--text-muted); margin:0 0 4px;">Income</p>
+                <p class="scenario-money" style="font-size:15px; font-weight:600; color:var(--text-primary);" data-money-value="{{ comparison.income }}">${{ "%.2f"|format(comparison.income) }}</p>
+            </div>
+            <div>
+                <p style="font-size:11px; color:var(--text-muted); margin:0 0 4px;">Expenses</p>
+                <p class="scenario-money" style="font-size:15px; font-weight:600; color:var(--text-primary);" data-money-value="{{ comparison.expense }}">${{ "%.2f"|format(comparison.expense) }}</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3" style="padding-top:14px; border-top:1px solid var(--border-subtle);">
+            <div class="flex-1 min-w-0">
+                <p style="font-size:11px; color:var(--text-muted); margin:0 0 4px;">Net, without this</p>
+                <p
+                    class="scenario-money"
+                    style="font-size:22px; font-weight:600; color:{% if comparison.net >= 0 %}var(--emerald){% else %}var(--red){% endif %};"
+                    data-money-value="{{ comparison.net }}"
+                    data-money-signed="true"
+                >{{ "%+.2f"|format(comparison.net) }}</p>
+            </div>
+            <div style="font-size:20px; color:var(--text-muted); flex-shrink:0;" aria-hidden="true">&rarr;</div>
+            <div class="flex-1 min-w-0">
+                <p style="font-size:11px; color:var(--text-muted); margin:0 0 4px;">Net, with this scenario</p>
+                <p
+                    class="scenario-money"
+                    style="font-size:22px; font-weight:700; color:{% if comparison.net_with_scenario >= 0 %}var(--emerald){% else %}var(--red){% endif %};"
+                    data-money-value="{{ comparison.net_with_scenario }}"
+                    data-money-signed="true"
+                >{{ "%+.2f"|format(comparison.net_with_scenario) }}</p>
+            </div>
+        </div>
     </div>
 
     <div class="glass-card" style="padding:20px;">

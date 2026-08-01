@@ -1,6 +1,7 @@
 {% set scenarios = scenario_widget_scenarios or [] %}
 {% set total_count = scenario_widget_total_count or 0 %}
 {% set total_impact = scenario_widget_total_monthly_impact or 0 %}
+{% set widget_verdicts = scenario_widget_verdicts or {} %}
 
 <div class="glass-card" style="padding:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
@@ -13,12 +14,13 @@
     {% if scenarios %}
         <div style="display:flex; flex-direction:column; gap:10px;">
             {% for s in scenarios %}
-                {% if s.financial_risk >= 7 %}
-                    {% set verdict_class, verdict_label = 'badge-bad', 'Bad idea' %}
-                {% elif s.financial_risk <= 3 and s.net_monthly_impact >= 0 %}
+                {% set v = widget_verdicts.get(s.id) %}
+                {% if v and v.label == 'do_it' %}
                     {% set verdict_class, verdict_label = 'badge-do-it', 'Do it' %}
+                {% elif v and v.label == 'bad_idea' %}
+                    {% set verdict_class, verdict_label = 'badge-bad', 'Bad idea' %}
                 {% else %}
-                    {% set verdict_class, verdict_label = 'badge-wait', 'Review' %}
+                    {% set verdict_class, verdict_label = 'badge-wait', 'Wait' %}
                 {% endif %}
                 <a
                     href="{{ url_for('scenarios.detail', scenario_id=s.id) }}"
