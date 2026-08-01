@@ -9,12 +9,16 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from ...extensions import db
-from ...models import Note, Transaction
+from ...models import Note, Transaction, Event
 from ...services.exchange_rate_service import get_rates
 from ...utils import current_month_bounds
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
+
+# Same closed 6-color set as Notes' NOTE_COLORS (artha/blueprints/notes/routes.py)
+# — reused rather than importing across blueprints for one small constant.
+EVENT_COLORS = {"sage", "coral", "plum", "slate", "sky", "amber"}
 
 
 @dashboard_bp.get("/healthz")
@@ -236,6 +240,23 @@ def calendar_page():
     for n in notes_due:
         notes_by_date[n.due_date.strftime("%Y-%m-%d")].append(n)
 
+    # Time-blocked events within the visible window — grouped by the date
+    # of their start time, same as Transaction's by_date above (an event
+    # spanning midnight isn't split across two days, matches how a
+    # Transaction dot works too).
+    events = (
+        Event.query.filter(
+            Event.user_id == uid,
+            Event.start >= fetch_start_dt,
+            Event.start < fetch_end_dt,
+        )
+        .order_by(Event.start.asc())
+        .all()
+    )
+    events_by_date = defaultdict(list)
+    for e in events:
+        events_by_date[e.start.strftime("%Y-%m-%d")].append(e)
+
     grid_days = []
     cursor = grid_start
     while cursor <= grid_end:
@@ -253,6 +274,7 @@ def calendar_page():
             "expense_dot": any(t.type == "expense" for t in day_txs),
             "recurring_dot": key in recurring_due_by_date,
             "note_dot": key in notes_by_date,
+            "event_dot": key in events_by_date,
             "net": float(net),
         })
         cursor += timedelta(days=1)
@@ -292,6 +314,20 @@ def calendar_page():
         for key, day_notes in notes_by_date.items()
     }
 
+    calendar_events = {
+        key: [
+            {
+                "id": e.id,
+                "title": e.title,
+                "start": e.start.isoformat(),
+                "end": e.end.isoformat(),
+                "color": e.color,
+            }
+            for e in day_events
+        ]
+        for key, day_events in events_by_date.items()
+    }
+
     month_label = f"{cal.month_name[month]} {year}"
     prev_month_value = f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
     next_month_value = f"{year + 1}-01" if month == 12 else f"{year}-{month + 1:02d}"
@@ -308,9 +344,140 @@ def calendar_page():
         today_value=today.strftime("%Y-%m-%d"),
         calendar_data=calendar_data,
         calendar_notes=calendar_notes,
+        calendar_events=calendar_events,
         recurring_due_by_date=dict(recurring_due_by_date),
         upcoming_recurring=upcoming_recurring,
     )
+
+
+# ---------------------------------------------------------------------------
+# Calendar events — time-blocked entries (JSON CRUD backing the day panel's
+# drag-to-schedule grid). Same conventions as artha/blueprints/notes/routes.py:
+# PATCH for field updates, POST /.../delete for deletes (no DELETE verb used
+# anywhere else in this app).
+# ---------------------------------------------------------------------------
+
+def _serialize_event(event: Event) -> dict:
+    return {
+        "id": event.id,
+        "title": event.title,
+        "start": event.start.isoformat(),
+        "end": event.end.isoformat(),
+        "color": event.color,
+    }
+
+
+def _parse_local_datetime(raw):
+    """Parse a naive local "YYYY-MM-DDTHH:MM:SS"-style string from the
+    client. This app stores every other timestamp (Transaction.timestamp,
+    Note.due_date) as naive local time with no timezone conversion — Event
+    follows the same convention, so any tzinfo the client did send (e.g. a
+    trailing "Z") is stripped rather than honored, keeping "10am" meaning
+    the same 10am everywhere else in the app."""
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+@dashboard_bp.route("/calendar/events", methods=["POST"])
+@login_required
+def create_event():
+    data = request.get_json(silent=True) or {}
+
+    title = (data.get("title") or "").strip()
+    start = _parse_local_datetime(data.get("start"))
+    end = _parse_local_datetime(data.get("end"))
+    color = data.get("color")
+
+    if not title:
+        return jsonify({"message": "Title is required"}), 400
+    if start is None or end is None:
+        return jsonify({"message": "Invalid start/end time"}), 400
+    if end <= start:
+        return jsonify({"message": "End must be after start"}), 400
+    if color not in EVENT_COLORS:
+        color = "sky"
+
+    event = Event(user_id=current_user.id, title=title, start=start, end=end, color=color)
+    try:
+        db.session.add(event)
+        db.session.commit()
+        return jsonify(_serialize_event(event)), 201
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error creating event: %s", e, exc_info=True)
+        return jsonify({"message": "Database error"}), 500
+
+
+@dashboard_bp.route("/calendar/events/<int:event_id>", methods=["PATCH"])
+@login_required
+def update_event(event_id):
+    event = db.session.get(Event, event_id)
+    if event is None:
+        return jsonify({"message": "Not found"}), 404
+    if event.user_id != current_user.id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    data = request.get_json(silent=True) or {}
+
+    new_start = event.start
+    new_end = event.end
+    if "start" in data:
+        parsed = _parse_local_datetime(data.get("start"))
+        if parsed is None:
+            return jsonify({"message": "Invalid start time"}), 400
+        new_start = parsed
+    if "end" in data:
+        parsed = _parse_local_datetime(data.get("end"))
+        if parsed is None:
+            return jsonify({"message": "Invalid end time"}), 400
+        new_end = parsed
+    if new_end <= new_start:
+        return jsonify({"message": "End must be after start"}), 400
+    event.start = new_start
+    event.end = new_end
+
+    if "title" in data:
+        title = (data.get("title") or "").strip()
+        if not title:
+            return jsonify({"message": "Title is required"}), 400
+        event.title = title
+
+    if "color" in data:
+        color = data.get("color")
+        if color in EVENT_COLORS:
+            event.color = color
+
+    try:
+        db.session.commit()
+        return jsonify(_serialize_event(event))
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error updating event: %s", e, exc_info=True)
+        return jsonify({"message": "Database error"}), 500
+
+
+@dashboard_bp.route("/calendar/events/<int:event_id>/delete", methods=["POST"])
+@login_required
+def delete_event(event_id):
+    event = db.session.get(Event, event_id)
+    if event is None:
+        return jsonify({"message": "Not found"}), 404
+    if event.user_id != current_user.id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    try:
+        db.session.delete(event)
+        db.session.commit()
+        return jsonify({"message": "Event deleted"})
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error deleting event: %s", e, exc_info=True)
+        return jsonify({"message": "Database error"}), 500
 
 
 # ---------------------------------------------------------------------------

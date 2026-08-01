@@ -72,6 +72,56 @@
     .cal-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin: 18px 0 4px; }
     .cal-section-label:first-child { margin-top: 0; }
 
+    /* Schedule — time-blocking hour grid inside the day panel */
+    .cal-schedule { margin-bottom: 20px; }
+    .cal-schedule-hint { font-size: 12px; color: var(--text-secondary); margin: 2px 0 10px; }
+    .cal-schedule-viewport {
+        position: relative;
+        height: 320px;
+        overflow-y: auto;
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        background: var(--bg-page);
+    }
+    .cal-schedule-grid { position: relative; height: 1440px; cursor: crosshair; }
+    .cal-schedule-hour-line { position: absolute; left: 46px; right: 0; height: 1px; background: var(--border-subtle); }
+    .cal-schedule-hour-label {
+        position: absolute; left: 8px; width: 34px; text-align: right;
+        font-size: 10px; color: var(--text-muted); transform: translateY(-6px);
+        font-family: 'JetBrains Mono', monospace; pointer-events: none;
+    }
+    .cal-schedule-now-line { position: absolute; left: 46px; right: 6px; height: 2px; background: var(--gold); z-index: 3; pointer-events: none; }
+    .cal-schedule-now-dot { position: absolute; left: -5px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+    .cal-schedule-block {
+        position: absolute; border-radius: 7px; border-left: 3px solid;
+        padding: 4px 8px; overflow: hidden; cursor: grab; z-index: 2;
+        font-size: 11px; line-height: 1.35; user-select: none; box-sizing: border-box;
+    }
+    .cal-schedule-block:active { cursor: grabbing; }
+    .cal-schedule-block-title { color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cal-schedule-block-time { color: var(--text-secondary); font-size: 10px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cal-schedule-block-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
+    .cal-schedule-drag-preview {
+        position: absolute; left: 46px; right: 6px; border-radius: 7px;
+        border: 1.5px dashed var(--gold); background: var(--gold-dim); z-index: 4; pointer-events: none;
+    }
+    .cal-event-popover {
+        position: fixed; z-index: 100; background: var(--bg-surface);
+        border: 1px solid var(--border-subtle); border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.32); padding: 12px; width: 216px;
+    }
+    .cal-event-popover input[type="text"] {
+        width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px;
+        border: 1px solid var(--border-subtle); border-radius: 8px;
+        background: var(--bg-page); color: var(--text-primary); margin-bottom: 10px; font-family: inherit;
+    }
+    .cal-event-popover-colors { display: flex; gap: 7px; margin-bottom: 12px; }
+    .cal-event-popover-color { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; padding: 0; }
+    .cal-event-popover-color.selected { border-color: var(--text-primary); }
+    .cal-event-popover-actions { display: flex; justify-content: space-between; align-items: center; }
+    .cal-event-popover-delete { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; padding: 4px; }
+    .cal-event-popover-save { padding: 7px 14px; font-size: 12px; }
+
     .cal-day-name-short { display: none; }
 
     @keyframes cal-slide-up {
@@ -142,6 +192,7 @@
                         {% if d.income_dot %}<span class="cal-dot" style="background:var(--emerald);"></span>{% endif %}
                         {% if d.expense_dot %}<span class="cal-dot" style="background:var(--red);"></span>{% endif %}
                         {% if d.recurring_dot %}<span class="cal-dot" style="background:var(--gold);"></span>{% endif %}
+                        {% if d.event_dot %}<span class="cal-dot" data-event-dot style="background:var(--sky);"></span>{% endif %}
                     </div>
                     {% if d.net != 0 %}
                         <span class="cal-day-net" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--red)' }};">{{ '+' if d.net > 0 else '-' }}${{ '%.0f'|format(d.net|abs) }}</span>
@@ -170,6 +221,7 @@
 <script>
 window.CALENDAR_DATA = {{ calendar_data|tojson }};
 window.CALENDAR_NOTES = {{ calendar_notes|tojson }};
+window.CALENDAR_EVENTS = {{ calendar_events|tojson }};
 window.CALENDAR_TODAY = {{ today_value|tojson }};
 window.CALENDAR_MONTH_VALUE = {{ current_month_value|tojson }};
 window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
@@ -259,6 +311,14 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         html += '<div style="font-size:13px; color:var(--text-secondary); margin-top:2px;">' + header.fullDate + '</div>';
         html += '</div>';
 
+        html += '<div class="cal-schedule">';
+        html += '<div class="cal-section-label" style="margin:0;">Schedule</div>';
+        html += '<p class="cal-schedule-hint">Drag to block time</p>';
+        html += '<div class="cal-schedule-viewport" id="schedule-viewport">';
+        html += '<div class="cal-schedule-grid" id="schedule-grid"></div>';
+        html += '</div>';
+        html += '</div>';
+
         if (!txs.length && !notesDue.length) {
             html += '<div style="text-align:center; padding:40px 12px; color:var(--text-muted);">';
             html += '<div style="font-size:28px; margin-bottom:10px;" aria-hidden="true">&#128197;</div>';
@@ -305,6 +365,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         }
 
         container.innerHTML = html;
+        renderSchedule(dateStr);
 
         // Restart the slide-up animation on every render (mobile only —
         // the keyframe is scoped inside the max-width:767px media query,
@@ -320,6 +381,502 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         var div = document.createElement("div");
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // -----------------------------------------------------------------
+    // Schedule — drag-to-block-time hour grid inside the day panel.
+    // -----------------------------------------------------------------
+
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : "";
+    }
+
+    function hexToRgba(hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+    }
+
+    function dateAtMidnight(dateStr) {
+        var parts = dateStr.split("-").map(Number);
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    // The server stores/returns naive local timestamps with no "Z" suffix
+    // (e.g. "2026-08-05T10:00:00") — per the ES spec a date-time string
+    // with no timezone designator parses as local time, which is exactly
+    // what's wanted here, no UTC conversion anywhere in this app's dates.
+    function toLocalIso(date) {
+        function pad(n) { return String(n).padStart(2, "0"); }
+        return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) +
+            "T" + pad(date.getHours()) + ":" + pad(date.getMinutes()) + ":00";
+    }
+
+    function formatHourLabel(h) {
+        if (h === 0) return "12 AM";
+        if (h === 12) return "12 PM";
+        return h < 12 ? (h + " AM") : ((h - 12) + " PM");
+    }
+
+    function formatTime12h(date) {
+        var h = date.getHours(), m = date.getMinutes();
+        var period = h < 12 ? "AM" : "PM";
+        var h12 = h % 12 === 0 ? 12 : h % 12;
+        return h12 + (m ? ":" + String(m).padStart(2, "0") : "") + " " + period;
+    }
+
+    // Unclamped — for snapping a relative delta (e.g. drag distance), which
+    // can be negative or exceed a day's length while still being a valid
+    // offset to apply to an existing timestamp.
+    function snapDelta(m) {
+        return Math.round(m / 15) * 15;
+    }
+
+    function snapMinutes(m) {
+        return Math.max(0, Math.min(1440, Math.round(m / 15) * 15));
+    }
+
+    // Groups events into overlap "islands" (connected components by time
+    // overlap) so isolated events elsewhere in the day get full width
+    // instead of being squeezed by an unrelated cluster's column count —
+    // simple greedy column assignment within each island, good enough for
+    // personal-calendar overlap volumes, not a full scheduling layout engine.
+    function layoutDayEvents(events) {
+        var islands = [], current = [], islandEnd = null;
+        events.forEach(function (ev) {
+            if (current.length === 0 || ev.start < islandEnd) {
+                current.push(ev);
+                islandEnd = islandEnd === null || ev.end > islandEnd ? ev.end : islandEnd;
+            } else {
+                islands.push(current);
+                current = [ev];
+                islandEnd = ev.end;
+            }
+        });
+        if (current.length) islands.push(current);
+
+        var layout = [];
+        islands.forEach(function (island) {
+            var columns = [], colOf = [];
+            island.forEach(function (ev) {
+                var placed = -1;
+                for (var i = 0; i < columns.length; i++) {
+                    if (columns[i] <= ev.start) { placed = i; break; }
+                }
+                if (placed === -1) { placed = columns.length; columns.push(ev.end); }
+                else { columns[placed] = ev.end; }
+                colOf.push(placed);
+            });
+            island.forEach(function (ev, i) {
+                layout.push({ event: ev, column: colOf[i], numColumns: columns.length });
+            });
+        });
+        return layout;
+    }
+
+    function buildBlockEl(event, column, numColumns, dateStr) {
+        var startMin = event.start.getHours() * 60 + event.start.getMinutes();
+        var endMin = event.end.getHours() * 60 + event.end.getMinutes();
+        if (endMin <= startMin) endMin = startMin + 15;
+
+        var hex = NOTE_COLOR_HEX[event.color] || NOTE_COLOR_HEX.sky;
+        var gutter = 46, rightPad = 6;
+
+        var el = document.createElement("div");
+        el.className = "cal-schedule-block";
+        el.dataset.eventId = event.id;
+        el.style.top = startMin + "px";
+        el.style.height = Math.max(endMin - startMin, 15) + "px";
+        el.style.left = "calc(" + gutter + "px + (100% - " + gutter + "px - " + rightPad + "px) * " + (column / numColumns) + ")";
+        el.style.width = "calc((100% - " + gutter + "px - " + rightPad + "px) * " + (1 / numColumns) + " - 4px)";
+        el.style.background = hexToRgba(hex, 0.22);
+        el.style.borderLeftColor = hex;
+
+        var titleEl = document.createElement("div");
+        titleEl.className = "cal-schedule-block-title";
+        titleEl.textContent = event.title;
+        el.appendChild(titleEl);
+
+        if (endMin - startMin >= 30) {
+            var timeEl = document.createElement("div");
+            timeEl.className = "cal-schedule-block-time";
+            timeEl.textContent = formatTime12h(event.start) + " – " + formatTime12h(event.end);
+            el.appendChild(timeEl);
+        }
+
+        var handle = document.createElement("div");
+        handle.className = "cal-schedule-block-handle";
+        el.appendChild(handle);
+
+        wireBlockInteractions(el, handle, event, dateStr);
+        return el;
+    }
+
+    function wireBlockInteractions(el, handle, event, dateStr) {
+        var DRAG_THRESHOLD = 4;
+
+        el.addEventListener("mousedown", function (e) {
+            if (e.target === handle) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            var startY = e.clientY;
+            var moved = false;
+
+            function onMove(e2) {
+                var dy = e2.clientY - startY;
+                if (Math.abs(dy) > DRAG_THRESHOLD) {
+                    moved = true;
+                    el.style.transform = "translateY(" + dy + "px)";
+                }
+            }
+            function onUp(e2) {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                el.style.transform = "";
+
+                if (!moved) {
+                    openEventPopover(el, event, dateStr);
+                    return;
+                }
+
+                var deltaMinutes = snapDelta(e2.clientY - startY);
+                if (deltaMinutes === 0) return;
+
+                var duration = event.end - event.start;
+                var newStart = new Date(event.start.getTime());
+                newStart.setMinutes(newStart.getMinutes() + deltaMinutes);
+                var newEnd = new Date(newStart.getTime() + duration);
+
+                var startMin = newStart.getHours() * 60 + newStart.getMinutes();
+                var endMin = startMin + duration / 60000;
+                if (newStart.getDate() !== event.start.getDate() || startMin < 0 || endMin > 1440) {
+                    renderSchedule(dateStr); // dragged out of bounds — snap back to server truth
+                    return;
+                }
+
+                patchEvent(event.id, { start: toLocalIso(newStart), end: toLocalIso(newEnd) }, dateStr);
+            }
+
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
+
+        handle.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var startY = e.clientY;
+            var origHeight = parseFloat(el.style.height);
+            var origTop = parseFloat(el.style.top);
+
+            function onMove(e2) {
+                var dy = e2.clientY - startY;
+                el.style.height = Math.max(15, origHeight + dy) + "px";
+            }
+            function onUp(e2) {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+
+                var dy = e2.clientY - startY;
+                var endMin = snapMinutes(origTop + origHeight + dy);
+                if (endMin - origTop < 15) endMin = origTop + 15;
+                if (endMin > 1440) endMin = 1440;
+                el.style.height = (endMin - origTop) + "px";
+
+                var dayStart = dateAtMidnight(dateStr);
+                var newEnd = new Date(dayStart.getTime());
+                newEnd.setMinutes(endMin);
+
+                patchEvent(event.id, { end: toLocalIso(newEnd) }, dateStr);
+            }
+
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
+    }
+
+    function wireGridCreateDrag(grid, dateStr) {
+        grid.addEventListener("mousedown", function (e) {
+            if (e.target !== grid) return; // a block/handle was clicked, not empty grid space
+            e.preventDefault();
+            closeActivePopover();
+
+            var rect = grid.getBoundingClientRect();
+            var startMin = snapMinutes(e.clientY - rect.top);
+            var currentMin = startMin;
+            var moved = false;
+
+            var preview = document.createElement("div");
+            preview.className = "cal-schedule-drag-preview";
+            grid.appendChild(preview);
+
+            function updatePreview() {
+                var top = Math.min(startMin, currentMin);
+                var bottom = Math.max(startMin, currentMin);
+                if (bottom - top < 15) bottom = top + 15;
+                preview.style.top = top + "px";
+                preview.style.height = (bottom - top) + "px";
+            }
+            updatePreview();
+
+            function onMove(e2) {
+                var y = e2.clientY - rect.top;
+                currentMin = snapMinutes(Math.max(0, Math.min(1440, y)));
+                if (Math.abs(currentMin - startMin) >= 15) moved = true;
+                updatePreview();
+            }
+            function onUp() {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+
+                var top = Math.min(startMin, currentMin);
+                var bottom = moved ? Math.max(startMin, currentMin) : top + 60; // plain click = default 1-hour block
+                if (bottom - top < 15) bottom = top + 15;
+                if (bottom > 1440) bottom = 1440;
+                preview.style.top = top + "px";
+                preview.style.height = (bottom - top) + "px";
+
+                var dayStart = dateAtMidnight(dateStr);
+                var draftStart = new Date(dayStart.getTime()); draftStart.setMinutes(top);
+                var draftEnd = new Date(dayStart.getTime()); draftEnd.setMinutes(bottom);
+
+                openEventPopover(preview, { title: "", color: "sky", start: draftStart, end: draftEnd }, dateStr, function () {
+                    preview.remove();
+                });
+            }
+
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+        });
+    }
+
+    var activePopoverCleanup = null;
+    function closeActivePopover() {
+        if (activePopoverCleanup) {
+            activePopoverCleanup();
+            activePopoverCleanup = null;
+        }
+    }
+
+    function openEventPopover(anchorEl, eventOrDraft, dateStr, onCancelDraft) {
+        closeActivePopover();
+
+        var isNew = !eventOrDraft.id;
+        var rect = anchorEl.getBoundingClientRect();
+
+        var pop = document.createElement("div");
+        pop.className = "cal-event-popover";
+
+        var input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = "Event title";
+        input.value = eventOrDraft.title || "";
+        pop.appendChild(input);
+
+        var colorsRow = document.createElement("div");
+        colorsRow.className = "cal-event-popover-colors";
+        var selectedColor = eventOrDraft.color || "sky";
+        ["sky", "sage", "coral", "plum", "slate", "amber"].forEach(function (name) {
+            var swatch = document.createElement("button");
+            swatch.type = "button";
+            swatch.className = "cal-event-popover-color" + (name === selectedColor ? " selected" : "");
+            swatch.style.background = NOTE_COLOR_HEX[name];
+            swatch.setAttribute("aria-label", name);
+            swatch.addEventListener("click", function () {
+                selectedColor = name;
+                colorsRow.querySelectorAll(".cal-event-popover-color").forEach(function (s) { s.classList.remove("selected"); });
+                swatch.classList.add("selected");
+            });
+            colorsRow.appendChild(swatch);
+        });
+        pop.appendChild(colorsRow);
+
+        var actions = document.createElement("div");
+        actions.className = "cal-event-popover-actions";
+
+        if (!isNew) {
+            var deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "cal-event-popover-delete";
+            deleteBtn.textContent = "Delete";
+            deleteBtn.addEventListener("click", function () {
+                deleteEvent(eventOrDraft.id, dateStr);
+                teardown();
+            });
+            actions.appendChild(deleteBtn);
+        } else {
+            actions.appendChild(document.createElement("span"));
+        }
+
+        var saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn-primary cal-event-popover-save";
+        saveBtn.textContent = isNew ? "Add" : "Save";
+        actions.appendChild(saveBtn);
+        pop.appendChild(actions);
+
+        document.body.appendChild(pop);
+
+        var popWidth = pop.offsetWidth, popHeight = pop.offsetHeight;
+        var left = rect.right + 10;
+        if (left + popWidth > window.innerWidth - 10) left = rect.left - popWidth - 10;
+        if (left < 10) left = 10;
+        var top = rect.top;
+        if (top + popHeight > window.innerHeight - 10) top = window.innerHeight - popHeight - 10;
+        if (top < 10) top = 10;
+        pop.style.left = left + "px";
+        pop.style.top = top + "px";
+
+        input.focus();
+
+        function commit() {
+            var title = input.value.trim();
+            if (!title) { input.focus(); return; }
+            if (isNew) {
+                createEvent({ title: title, start: toLocalIso(eventOrDraft.start), end: toLocalIso(eventOrDraft.end), color: selectedColor }, dateStr);
+            } else {
+                patchEvent(eventOrDraft.id, { title: title, color: selectedColor }, dateStr);
+            }
+            teardown();
+        }
+        function cancel() {
+            if (isNew && onCancelDraft) onCancelDraft();
+            teardown();
+        }
+        function onKeydown(e) {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        }
+        function onDocMousedown(e) {
+            if (!pop.contains(e.target) && e.target !== anchorEl) cancel();
+        }
+
+        saveBtn.addEventListener("click", commit);
+        pop.addEventListener("keydown", onKeydown);
+        setTimeout(function () { document.addEventListener("mousedown", onDocMousedown); }, 0);
+
+        function teardown() {
+            document.removeEventListener("mousedown", onDocMousedown);
+            pop.remove();
+            activePopoverCleanup = null;
+        }
+        activePopoverCleanup = teardown;
+    }
+
+    // Toggles the sky "has time blocks" dot on a month-grid cell without a
+    // full page reload — mirrors the server-rendered dot exactly (same
+    // .cal-dot class/color) so a freshly created event's dot looks
+    // identical to one that came from the initial page load.
+    function updateEventDot(dateStr, hasEvents) {
+        var cell = document.querySelector('.cal-day-cell[data-date="' + dateStr + '"]');
+        if (!cell) return;
+        var dotsRow = cell.querySelector(".cal-dots");
+        if (!dotsRow) return;
+        var existing = dotsRow.querySelector("[data-event-dot]");
+        if (hasEvents && !existing) {
+            var dot = document.createElement("span");
+            dot.className = "cal-dot";
+            dot.setAttribute("data-event-dot", "");
+            dot.style.background = "var(--sky)";
+            dotsRow.appendChild(dot);
+        } else if (!hasEvents && existing) {
+            existing.remove();
+        }
+    }
+
+    function createEvent(payload, dateStr) {
+        fetch("/calendar/events", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify(payload)
+        })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+            .then(function (data) {
+                if (!window.CALENDAR_EVENTS[dateStr]) window.CALENDAR_EVENTS[dateStr] = [];
+                window.CALENDAR_EVENTS[dateStr].push(data);
+                renderSchedule(dateStr);
+                updateEventDot(dateStr, true);
+            })
+            .catch(function () { renderSchedule(dateStr); });
+    }
+
+    function patchEvent(id, payload, dateStr) {
+        fetch("/calendar/events/" + id, {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify(payload)
+        })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+            .then(function (data) {
+                var list = window.CALENDAR_EVENTS[dateStr] || [];
+                var idx = list.findIndex(function (e) { return e.id === id; });
+                if (idx !== -1) list[idx] = data;
+                renderSchedule(dateStr);
+            })
+            .catch(function () { renderSchedule(dateStr); });
+    }
+
+    function deleteEvent(id, dateStr) {
+        fetch("/calendar/events/" + id + "/delete", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "X-CSRFToken": getCsrfToken() }
+        }).then(function () {
+            var list = window.CALENDAR_EVENTS[dateStr] || [];
+            var idx = list.findIndex(function (e) { return e.id === id; });
+            if (idx !== -1) list.splice(idx, 1);
+            renderSchedule(dateStr);
+            updateEventDot(dateStr, list.length > 0);
+        });
+    }
+
+    function renderSchedule(dateStr) {
+        var grid = document.getElementById("schedule-grid");
+        var viewport = document.getElementById("schedule-viewport");
+        if (!grid || !viewport) return;
+
+        closeActivePopover();
+        grid.innerHTML = "";
+
+        for (var h = 0; h < 24; h++) {
+            var line = document.createElement("div");
+            line.className = "cal-schedule-hour-line";
+            line.style.top = (h * 60) + "px";
+            grid.appendChild(line);
+
+            var label = document.createElement("div");
+            label.className = "cal-schedule-hour-label";
+            label.style.top = (h * 60) + "px";
+            label.textContent = formatHourLabel(h);
+            grid.appendChild(label);
+        }
+
+        var isToday = dateStr === correctedToday;
+        var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+        if (isToday) {
+            var nowLine = document.createElement("div");
+            nowLine.className = "cal-schedule-now-line";
+            nowLine.style.top = nowMin + "px";
+            var dot = document.createElement("div");
+            dot.className = "cal-schedule-now-dot";
+            nowLine.appendChild(dot);
+            grid.appendChild(nowLine);
+        }
+
+        var rawEvents = (window.CALENDAR_EVENTS[dateStr] || []).map(function (e) {
+            return { id: e.id, title: e.title, color: e.color, start: new Date(e.start), end: new Date(e.end) };
+        }).sort(function (a, b) { return a.start - b.start; });
+
+        layoutDayEvents(rawEvents).forEach(function (item) {
+            grid.appendChild(buildBlockEl(item.event, item.column, item.numColumns, dateStr));
+        });
+
+        wireGridCreateDrag(grid, dateStr);
+
+        viewport.scrollTop = isToday ? Math.max(0, nowMin - 60) : 8 * 60;
     }
 
     function selectDay(dateStr, cellEl) {
