@@ -40,6 +40,7 @@ from ..models import ExchangeRate
 log = logging.getLogger(__name__)
 
 EXCHANGE_RATE_URL = "https://open.er-api.com/v6/latest/USD"
+SOURCE = "open-er-api"
 FRESHNESS_WINDOW = timedelta(hours=20)
 REQUEST_TIMEOUT = 5
 
@@ -67,7 +68,12 @@ def get_rates() -> dict | None:
     no cached data exists and a fresh fetch also failed."""
     row = ExchangeRate.query.first()
 
-    if row and (datetime.now(timezone.utc) - _aware_utc(row.fetched_at)) < FRESHNESS_WINDOW:
+    is_fresh = (
+        row
+        and row.source == SOURCE
+        and (datetime.now(timezone.utc) - _aware_utc(row.fetched_at)) < FRESHNESS_WINDOW
+    )
+    if is_fresh:
         return _row_to_dict(row)
 
     try:
@@ -80,9 +86,10 @@ def get_rates() -> dict | None:
         if row:
             row.base = data["base_code"]
             row.rates_json = json.dumps(data["rates"])
+            row.source = SOURCE
             row.fetched_at = datetime.now(timezone.utc)
         else:
-            row = ExchangeRate(base=data["base_code"], rates_json=json.dumps(data["rates"]))
+            row = ExchangeRate(base=data["base_code"], rates_json=json.dumps(data["rates"]), source=SOURCE)
             db.session.add(row)
 
         db.session.commit()
