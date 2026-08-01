@@ -37,7 +37,6 @@ const ASSETS_TO_CACHE = [
     "/static/js/settings.js",
     "/static/js/ai.js",
     "/static/js/chart.js",
-    "/static/js/widgets.js",
     "/static/js/toast.js",
     ];
 

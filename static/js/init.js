@@ -9,7 +9,6 @@ import "./ai.js";
 import "./auth.js";
 import "./scenarios.js";
 
-import { initWidgetSorting } from "./widgets.js";
 import { updateChartData } from "./chart.js";
 
 async function registerServiceWorker() {
@@ -120,7 +119,6 @@ async function initDashboardDataWithRetry({ maxRetries = 3, retryDelayMs = 1500 
 }
 
 async function initDashboard() {
-    initWidgetSorting();
     initSettingsMenu();
     await registerServiceWorker();
 

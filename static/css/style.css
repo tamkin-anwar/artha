@@ -122,15 +122,12 @@ h1, h2, h3, .stat-number {
 }
 
 /* Money figures */
-.money,
-.scenario-money,
-.stat-money {
+.scenario-money {
   font-family: 'JetBrains Mono', monospace;
 }
 
 .money-positive { color: var(--emerald); }
 .money-negative { color: var(--red); }
-.money-neutral  { color: var(--text-secondary); }
 .money-gold     { color: var(--gold); font-family: 'JetBrains Mono', monospace; }
 
 /* Verdict badges */
@@ -315,14 +312,6 @@ h1, h2, h3, .stat-number {
   outline-offset: 2px;
 }
 
-/* Tables — no alternating rows, subtle row dividers */
-.plain-table tr {
-  border-bottom: 1px solid var(--border-subtle);
-}
-.plain-table tr:last-child {
-  border-bottom: none;
-}
-
 /* Navigation active state (sidebar) */
 .nav-link {
   color: var(--text-secondary);
@@ -451,14 +440,6 @@ h1, h2, h3, .stat-number {
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
 }
 
-.tx-handle {
-    transition: color 0.15s ease, transform 0.15s ease;
-}
-
-.tx-row:hover .tx-handle {
-    transform: scale(1.05);
-}
-
 .tx-desc,
 .tx-amount {
     border-radius: 6px;
@@ -468,28 +449,6 @@ h1, h2, h3, .stat-number {
 .tx-desc:focus,
 .tx-amount:focus {
     background-color: var(--bg-hover);
-}
-
-/* =========================
-    Notes masonry
-   ========================= */
-
-.notes-masonry {
-    column-count: 1;
-    column-gap: 16px;
-}
-
-@media (min-width: 640px) {
-    .notes-masonry { column-count: 2; }
-}
-
-@media (min-width: 1024px) {
-    .notes-masonry { column-count: 3; }
-}
-
-.notes-masonry .note-row {
-    break-inside: avoid;
-    margin-bottom: 16px;
 }
 
 /* =========================
@@ -521,95 +480,6 @@ h1, h2, h3, .stat-number {
   border-color: rgba(239,68,68,0.3);
 }
 .calc-btn-clear:hover { background: rgba(239,68,68,0.2); }
-
-/* =========================
-    Calendar
-   ========================= */
-
-.calendar-today {
-  background: var(--gold) !important;
-  color: #000 !important;
-  border-radius: 9999px;
-}
-
-/* =========================
-    Dashboard Masonry Grid
-   ========================= */
-
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-    grid-auto-rows: 10px;
-    grid-auto-flow: dense;
-    gap: 24px;
-    align-items: start;
-}
-
-.widget {
-    align-self: start;
-    position: relative;
-}
-
-#dashboard-widgets {
-    align-content: start;
-}
-
-/* =========================
-    Invisible Drag Strip
-    Drag only from top area
-   ========================= */
-
-.widget-drag-zone {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-
-    background: transparent;
-    cursor: grab;
-    user-select: none;
-    z-index: 10;
-}
-
-.widget-drag-zone:active {
-    cursor: grabbing;
-}
-
-.widget button,
-.widget input,
-.widget select,
-.widget textarea,
-.widget a,
-.widget [contenteditable="true"],
-.widget [role="button"] {
-    position: relative;
-    z-index: 20;
-}
-
-.is-widget-dragging {
-    user-select: none;
-}
-
-.is-widget-dragging .widget-drag-zone {
-    cursor: grabbing;
-}
-
-/* Sortable states */
-
-.widget-ghost {
-    opacity: 0.35;
-    transform: scale(0.98);
-    border-radius: 16px;
-}
-
-.widget-chosen {
-    transform: scale(1.01);
-}
-
-.widget-drag {
-    cursor: grabbing;
-}
 
 /* =========================
     Auth

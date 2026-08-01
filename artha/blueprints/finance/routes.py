@@ -170,41 +170,6 @@ def update_transaction(transaction_id):
         return jsonify({"message": "Database error"}), 500
 
 
-@finance_bp.route("/reorder_transactions", methods=["POST"])
-@login_required
-def reorder_transactions():
-    data = request.get_json(silent=True) or {}
-    order = data.get("order")
-
-    if not isinstance(order, list) or not order:
-        return jsonify({"message": "Invalid order payload."}), 400
-
-    try:
-        ids = [int(x) for x in order]
-    except Exception:
-        return jsonify({"message": "Order must be a list of integers."}), 400
-
-    txs = Transaction.query.filter(
-        Transaction.user_id == current_user.id,
-        Transaction.id.in_(ids),
-    ).all()
-
-    if {t.id for t in txs} != set(ids):
-        return jsonify({"message": "Order contains unknown or unauthorized transaction ids."}), 403
-
-    id_to_tx = {t.id: t for t in txs}
-    for idx, tx_id in enumerate(ids, start=1):
-        id_to_tx[tx_id].position = idx
-
-    try:
-        db.session.commit()
-        return jsonify({"message": "Transaction order saved."})
-    except Exception as e:
-        db.session.rollback()
-        log.error("Error saving transaction order: %s", e, exc_info=True)
-        return jsonify({"message": "Database error"}), 500
-
-
 @finance_bp.route("/delete_transaction/<int:transaction_id>", methods=["POST"])
 @login_required
 def delete_transaction(transaction_id):
