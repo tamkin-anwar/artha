@@ -313,15 +313,29 @@
     // math.js's own unit grammar instead).
     function convertCurrencyPhrases(line) {
         if (!__exchangeRates) return line;
-        return line.replace(/\b(\d+(?:\.\d+)?)\s*([A-Za-z]{3})\s+(?:to|in)\s+([A-Za-z]{3})\b/g,
+        function resolve(amountStr, fromCode, toCode) {
+            fromCode = fromCode.toUpperCase();
+            toCode = toCode.toUpperCase();
+            var fromRate = fromCode === __exchangeRates.base ? 1 : __exchangeRates.rates[fromCode];
+            var toRate = toCode === __exchangeRates.base ? 1 : __exchangeRates.rates[toCode];
+            if (fromRate === undefined || toRate === undefined) return null;
+            return String((parseFloat(amountStr) / fromRate) * toRate);
+        }
+        // "100 usd to eur" — amount before the currency code.
+        line = line.replace(/\b(\d+(?:\.\d+)?)\s*([A-Za-z]{3})\s+(?:to|in)\s+([A-Za-z]{3})\b/g,
             function (match, amountStr, fromCode, toCode) {
-                fromCode = fromCode.toUpperCase();
-                toCode = toCode.toUpperCase();
-                var fromRate = fromCode === __exchangeRates.base ? 1 : __exchangeRates.rates[fromCode];
-                var toRate = toCode === __exchangeRates.base ? 1 : __exchangeRates.rates[toCode];
-                if (fromRate === undefined || toRate === undefined) return match;
-                return String((parseFloat(amountStr) / fromRate) * toRate);
+                var result = resolve(amountStr, fromCode, toCode);
+                return result === null ? match : result;
             });
+        // "usd 100 to eur" — currency code before the amount. Runs after the
+        // pass above (which has already turned any matches into plain
+        // numbers with no letters left), so the two passes can't collide.
+        line = line.replace(/\b([A-Za-z]{3})\s*(\d+(?:\.\d+)?)\s+(?:to|in)\s+([A-Za-z]{3})\b/g,
+            function (match, fromCode, amountStr, toCode) {
+                var result = resolve(amountStr, fromCode, toCode);
+                return result === null ? match : result;
+            });
+        return line;
     }
 
     // Plain, clean number — no forced currency symbol, no padded trailing
