@@ -10,6 +10,7 @@ from sqlalchemy import func
 
 from ...extensions import db
 from ...models import Note, Transaction
+from ...services.exchange_rate_service import get_rates
 from ...utils import current_month_bounds
 from . import dashboard_bp
 
@@ -320,5 +321,15 @@ def calendar_page():
 @login_required
 def calculator_page():
     # Entirely client-side (math.js does the evaluation in the browser) —
-    # no server-side data needed.
+    # no server-side data needed for the page itself. Currency conversion
+    # is the one exception (below) — live rates can't live in the browser.
     return render_template("calculator.html")
+
+
+@dashboard_bp.get("/calculator/exchange_rates")
+@login_required
+def calculator_exchange_rates():
+    rates = get_rates()
+    if rates is None:
+        return jsonify({"error": "unavailable"}), 503
+    return jsonify(rates)

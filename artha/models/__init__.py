@@ -3,5 +3,6 @@
 from .user import User
 from .note import Note
 from .finance import Transaction
+from .exchange_rate import ExchangeRate
 
-__all__ = ["User", "Note", "Transaction"]
+__all__ = ["User", "Note", "Transaction", "ExchangeRate"]

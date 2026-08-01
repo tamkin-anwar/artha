@@ -251,6 +251,20 @@
         refreshCalcDisplay();
     });
 
+    // Live exchange rates, fetched once and cached for the page's lifetime —
+    // rates only change once a day server-side (see exchange_rate_service.py),
+    // so there's no reason to re-fetch per keystroke. Stays null if the
+    // fetch fails; convertCurrencyPhrases() below just leaves currency
+    // phrases unconverted in that case rather than erroring.
+    var __exchangeRates = null;
+    fetch("{{ url_for('dashboard.calculator_exchange_rates') }}", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            __exchangeRates = data;
+            evaluateAll();
+        })
+        .catch(function () { /* stays null */ });
+
     // -----------------------------------------------------------------
     // Natural-language preprocessing — order matters.
     // -----------------------------------------------------------------
@@ -273,13 +287,41 @@
         line = line.replace(/(\d+(?:\.\d+)?)\s*%\s+off\s+/gi, "(1-$1/100)*");
         line = line.replace(/(\d+(?:\.\d+)?)\s*%\s+on\s+/gi, "(1+$1/100)*");
 
-        // Step 3 — variable assignment is handled natively by
+        // Step 3 — currency conversion ("100 usd to eur"), resolved to a
+        // plain number here so it composes with the percentage math above
+        // ("20% of 100 usd to eur") and with anything typed after it.
+        // Physical units ("5 lbs to kg") are NOT handled here — math.js
+        // already parses those natively, see stripMemoWords()/evaluateLine()
+        // below for the (different) fixes those needed.
+        line = convertCurrencyPhrases(line);
+
+        // Step 4 — variable assignment is handled natively by
         // math.evaluate(line, scope) below, no separate transform needed.
 
-        // Step 4 — strip $ signs
+        // Step 5 — strip $ signs
         line = line.replace(/\$/g, "");
 
         return line;
+    }
+
+    // Recognizes "<amount> <code> to|in <code>" (e.g. "100 usd to eur") and
+    // replaces it with the converted plain number, using the rates fetched
+    // above. Requires BOTH sides to be a currency code __exchangeRates
+    // actually knows about — this is what keeps it from colliding with
+    // physical-unit conversions like "5 lbs to kg" ("lbs"/"kg" aren't
+    // currency codes, so the match is left untouched and falls through to
+    // math.js's own unit grammar instead).
+    function convertCurrencyPhrases(line) {
+        if (!__exchangeRates) return line;
+        return line.replace(/\b(\d+(?:\.\d+)?)\s*([A-Za-z]{3})\s+(?:to|in)\s+([A-Za-z]{3})\b/g,
+            function (match, amountStr, fromCode, toCode) {
+                fromCode = fromCode.toUpperCase();
+                toCode = toCode.toUpperCase();
+                var fromRate = fromCode === __exchangeRates.base ? 1 : __exchangeRates.rates[fromCode];
+                var toRate = toCode === __exchangeRates.base ? 1 : __exchangeRates.rates[toCode];
+                if (fromRate === undefined || toRate === undefined) return match;
+                return String((parseFloat(amountStr) / fromRate) * toRate);
+            });
     }
 
     // Plain, clean number — no forced currency symbol, no padded trailing
@@ -295,6 +337,10 @@
     // one of its steps, so by the time a line has gone through it there's
     // no way to tell currency intent apart from a plain number anymore.
     function formatResult(n, rawLine) {
+        // A physical-unit conversion ("5 lbs to kg") — math.js returns a
+        // Unit object for these, not a plain number, and it already knows
+        // how to format itself sensibly (with its own unit label).
+        if (math.isUnit(n)) return n.format({ precision: 4 });
         if (rawLine.indexOf("$") !== -1 && __formatMoney) return __formatMoney(n);
         return formatPlainNumber(n);
     }
@@ -312,6 +358,10 @@
     //   (b) already a real variable in this note's scope ("savings" used
     //       later as a reference)
     //   (c) a real math.js function/constant name (pi, sin, sqrt, ...)
+    //   (d) a real physical unit name (lbs, kg, cm, ...) — these are NOT
+    //       properties of the math object (confirmed directly: 'kg' in
+    //       math is false), so without this check "5 lbs to kg" would get
+    //       both unit words stripped and broken before math.js ever saw it
     // Not a full NLP parser — simple label-before-number cases work,
     // nothing more is promised.
     function stripMemoWords(line, scope) {
@@ -320,6 +370,7 @@
             if (/^\s*=(?!=)/.test(rest)) return token;
             if (Object.prototype.hasOwnProperty.call(scope, token)) return token;
             if (token in math) return token;
+            if (math.Unit.isValuelessUnit(token)) return token;
             return "";
         });
     }
@@ -341,10 +392,17 @@
     // evaluating a truncated "savings = salary - " as "savings = salary"
     // would commit a wrong intermediate value into scope, which later
     // lines might then silently reference.
+    // A valid result is either a finite plain number OR a math.js Unit
+    // (from a physical-unit conversion like "5 lbs to kg" — math.js
+    // returns a Unit object for these, not a number).
+    function isValidResult(result) {
+        return (typeof result === "number" && Number.isFinite(result)) || math.isUnit(result);
+    }
+
     function evaluateLine(originalLine, strippedLine, scope) {
         try {
             var result = math.evaluate(strippedLine, scope);
-            return (typeof result === "number" && Number.isFinite(result)) ? result : null;
+            return isValidResult(result) ? result : null;
         } catch (err) {
             if (isAssignmentLine(originalLine)) return null;
 
@@ -355,7 +413,7 @@
                 trimmed = next;
                 try {
                     var partial = math.evaluate(trimmed, scope);
-                    if (typeof partial === "number" && Number.isFinite(partial)) return partial;
+                    if (isValidResult(partial)) return partial;
                 } catch (err2) { /* keep trimming */ }
             }
             return null;
@@ -385,7 +443,13 @@
 
             var stripped = stripMemoWords(preprocess(line), scope);
             var result = evaluateLine(line, stripped, scope);
-            if (result !== null) {
+            // Skip physical-unit results (e.g. "5 lbs to kg") — summing a
+            // Unit object with += silently coerces it to its string
+            // representation instead of throwing, which would corrupt the
+            // total (confirmed directly: sum += aUnitResult produced
+            // "02.267...kg", a string, not a number). Also the semantically
+            // right call: you can't meaningfully add "5 kg" to a dollar total.
+            if (result !== null && !math.isUnit(result)) {
                 sum += result;
                 anyContributed = true;
                 if (line.indexOf("$") === -1) allCurrency = false;

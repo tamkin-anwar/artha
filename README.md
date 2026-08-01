@@ -13,7 +13,7 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 - Undo delete with toast notifications
 - Notes with pinning, colors, tags, due dates, and checklists
 - Calendar with due-date notes and recurring bill reminders
-- A Numi-style smart calculator with variables and a running total
+- A Numi-style smart calculator with variables, a running total, unit conversion (lbs to kg, cm to m, ...), and currency conversion via live exchange rates
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) and get a payback period and a rule-based recommendation, no AI call needed
 - An AI Assistant with your financial data as context, powered by Anthropic's API
 - Dark and light theme with persistence
@@ -32,8 +32,8 @@ No SaaS lock-in, full control over data, and a real production-minded Flask app 
 
 ## Running locally
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python init_db.py
 python wsgi.py
