@@ -151,25 +151,28 @@ h1, h2, h3, .stat-number {
   border-radius: 8px;
   font-weight: 600;
   border: none;
-  transition: filter 0.15s ease;
+  transition: filter 0.15s ease, transform 0.1s ease;
 }
 .btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: scale(0.97); }
 
 .btn-secondary {
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 .btn-secondary:hover { background: var(--bg-hover); }
+.btn-secondary:active { transform: scale(0.97); }
 
 .btn-danger {
   color: var(--red);
   border-radius: 8px;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 .btn-danger:hover { background: var(--red-dim); }
+.btn-danger:active { transform: scale(0.97); }
 
 /* Inputs */
 .field-input {
@@ -188,6 +191,80 @@ h1, h2, h3, .stat-number {
 /* Scenario list cards (sidebar) */
 .scenario-list-card:hover {
   border-color: rgba(212,168,67,0.4) !important;
+}
+.scenario-list-card:active {
+  transform: scale(0.98);
+}
+
+/* Scenario detail — card entrance motion */
+@keyframes scenario-card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.scenario-card-1 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.scenario-card-2 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both; }
+
+/* Scenario detail — before/after net comparison bars */
+.scenario-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+  margin-top: 8px;
+}
+@keyframes scenario-bar-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.scenario-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left;
+  animation: scenario-bar-fill 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+/* Scenario detail — income/expense mini icon dots */
+.scenario-flow-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.scenario-flow-icon svg { width: 12px; height: 12px; }
+
+/* Scenario detail — AI verdict hero icon badge */
+.scenario-verdict-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.scenario-verdict-icon svg { width: 22px; height: 22px; }
+
+/* Scenario detail — "projected" chip */
+.scenario-chip-projected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--gold-dim);
+  color: var(--gold);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.scenario-chip-projected::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
 }
 
 /* Scenario form — cost type tabs */
@@ -533,6 +610,14 @@ h1, h2, h3, .stat-number {
 /* =========================
     App shell responsiveness
    ========================= */
+
+@media (prefers-reduced-motion: reduce) {
+    .scenario-card-1,
+    .scenario-card-2,
+    .scenario-bar-fill {
+        animation: none !important;
+    }
+}
 
 @media (max-width: 767px) {
     .app-sidebar {

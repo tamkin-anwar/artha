@@ -177,11 +177,20 @@ def _scenario_month_comparison(scenario: Scenario) -> dict:
     # target's own month is exactly what's being compared against, so the
     # one-time cost (if any) always lands here — no separate check needed.
     scenario_net_effect = scenario.monthly_savings - scenario.monthly_cost - scenario.one_time_cost
+    net_with_scenario = totals["net"] + scenario_net_effect
+
+    # Bar widths for the before/after visual, scaled against whichever side
+    # is larger so the two bars stay comparable at a glance.
+    max_abs = max(abs(totals["net"]), abs(net_with_scenario), Decimal("1"))
+    bar_before_pct = float(abs(totals["net"]) / max_abs * 100)
+    bar_after_pct = float(abs(net_with_scenario) / max_abs * 100)
 
     return {
         **totals,
         "projected": not totals["has_data"],
-        "net_with_scenario": totals["net"] + scenario_net_effect,
+        "net_with_scenario": net_with_scenario,
+        "bar_before_pct": bar_before_pct,
+        "bar_after_pct": bar_after_pct,
     }
 
 
