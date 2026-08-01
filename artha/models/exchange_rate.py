@@ -15,7 +15,7 @@ class ExchangeRate(db.Model):
     __tablename__ = "exchange_rate"
 
     id = db.Column(db.Integer, primary_key=True)
-    base = db.Column(db.String(3), nullable=False, default="EUR")
+    base = db.Column(db.String(3), nullable=False, default="USD")
     rates_json = db.Column(db.Text, nullable=False)
     fetched_at = db.Column(
         db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
