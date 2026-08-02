@@ -10,7 +10,7 @@
                 showToast({{ message|tojson }}, {{ category|tojson }});
             {% endfor %}
             if (window.__mathLoadFailed) {
-                showToast("Could not load calculator engine — please refresh", "error");
+                showToast("Could not load calculator engine. Please refresh", "error");
             }
         });
     </script>

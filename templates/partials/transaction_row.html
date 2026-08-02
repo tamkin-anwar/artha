@@ -69,7 +69,7 @@
             class="tx-recurring-toggle {{ 'tx-recurring-on' if tx.is_recurring }}"
             data-id="{{ tx.id }}"
             aria-pressed="{{ 'true' if tx.is_recurring else 'false' }}"
-            title="{{ 'Recurring — click to turn off' if tx.is_recurring else 'Mark as recurring' }}"
+            title="{{ 'Recurring, click to turn off' if tx.is_recurring else 'Mark as recurring' }}"
         >{{ '↻' if tx.is_recurring else '' }}</button>
 
         <button type="submit" class="hidden">Save</button>

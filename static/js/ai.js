@@ -229,7 +229,7 @@ function initAI() {
             setBusy(false);
 
             if (!res.ok || data.error) {
-                appendError(data.error || "Something went wrong — please try again.");
+                appendError(data.error || "Something went wrong. Please try again.");
                 history.pop();
                 return;
             }
@@ -239,7 +239,7 @@ function initAI() {
 
         } catch {
             setBusy(false);
-            appendError("Network error — check your connection.");
+            appendError("Network error. Check your connection.");
             history.pop();
         }
     }
@@ -275,7 +275,7 @@ function initAI() {
 
         } catch {
             setBusy(false);
-            appendError("Network error — check your connection.");
+            appendError("Network error. Check your connection.");
         }
     }
 

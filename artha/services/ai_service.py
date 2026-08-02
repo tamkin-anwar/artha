@@ -50,7 +50,7 @@ _MAX_HISTORY_TURNS = 20         # max conversation turns accepted from client
 _MAX_MESSAGE_LEN = 4000         # character limit per user message
 
 _SYSTEM_PROMPT_TEMPLATE = """\
-You are Artha AI, an intelligent personal assistant built into Artha — \
+You are Artha AI, an intelligent personal assistant built into Artha, \
 a personal finance and productivity OS.
 
 You are talking to {first_name}. Today is {today}.
@@ -65,6 +65,7 @@ You are talking to {first_name}. Today is {today}.
 - If data is missing or a question is outside your knowledge, say so honestly.
 - You can help with budgeting, spending analysis, financial planning, \
 goal setting, and general productivity.
+- Never use em dashes (—). Use a period, comma, or colon instead.
 """
 
 
@@ -238,13 +239,13 @@ class AIService:
 
         except APITimeoutError:
             log.warning("Anthropic timeout for user %d.", user.id)
-            return {"error": "Request timed out — please try again."}
+            return {"error": "Request timed out. Please try again."}
         except APIConnectionError as exc:
             log.error("Anthropic connection error: %s", exc)
             return {"error": "Could not reach AI service. Check connectivity."}
         except APIStatusError as exc:
             log.error("Anthropic status error %s: %s", exc.status_code, exc.message)
-            return {"error": f"AI service error ({exc.status_code}) — please try again."}
+            return {"error": f"AI service error ({exc.status_code}). Please try again."}
         except Exception as exc:
             log.exception("Unexpected AIService.chat error: %s", exc)
             return {"error": "An unexpected error occurred."}
@@ -313,7 +314,7 @@ class AIService:
                     yield text
 
         except APITimeoutError:
-            yield "ERROR:Request timed out — please try again."
+            yield "ERROR:Request timed out. Please try again."
         except APIConnectionError as exc:
             log.error("Stream connection error: %s", exc)
             yield "ERROR:Could not reach AI service."

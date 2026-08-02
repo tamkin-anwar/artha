@@ -69,7 +69,7 @@ function initCompareModal() {
             .map(
                 (s) => `
                 <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border-subtle); border-radius:10px; cursor:pointer; margin-bottom:8px;">
-                    <input type="checkbox" class="compare-pick" value="${s.id}" style="width:16px; height:16px; accent-color:var(--gold); flex-shrink:0;">
+                    <input type="checkbox" class="compare-pick field-checkbox" value="${s.id}">
                     <span style="flex:1; min-width:0;">
                         <span style="display:block; font-size:14px; font-weight:600; color:var(--text-primary);">${escapeHtml(s.title)}</span>
                         <span class="eyebrow" style="font-size:10px;">${escapeHtml(s.category)}</span>

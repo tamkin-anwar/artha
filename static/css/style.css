@@ -267,6 +267,46 @@ h1, h2, h3, .stat-number {
   background: var(--gold);
 }
 
+/* Shared checkbox style, used anywhere a plain <input type="checkbox">
+   appears outside its own bespoke widget (e.g. Notes' checklist rows
+   already have their own). Native checkboxes render an unstyleable white
+   fill in their unchecked state (accent-color only affects the checked
+   fill), which reads jarring against a dark UI — appearance:none plus a
+   hand-drawn checkmark fixes both states. */
+.field-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-card);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.field-checkbox:hover { border-color: var(--gold); }
+.field-checkbox:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.field-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #000;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.field-checkbox:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* Scenario form — cost type tabs */
 .cost-tab-btn {
   background: var(--bg-card);

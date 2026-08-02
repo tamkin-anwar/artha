@@ -220,29 +220,29 @@ def _verdict(scenario: Scenario) -> dict:
     if label == "bad_idea":
         if flips_negative:
             insight = (
-                f"{month_label}'s {kind} net is {before_str} — this scenario would drop it to "
+                f"{month_label}'s {kind} net is {before_str}. This scenario would drop it to "
                 f"{after_str}, turning a positive month negative."
             )
         elif net_after < 0:
             insight = (
-                f"{month_label}'s {kind} net would be {after_str} with this scenario applied — "
+                f"{month_label}'s {kind} net would be {after_str} with this scenario applied, "
                 f"already a stretch before factoring in the {scenario.financial_risk}/10 risk you gave it."
             )
         else:
             insight = (
-                f"Financial risk is rated {scenario.financial_risk}/10 — high enough that "
-                f"{month_label}'s otherwise-workable numbers ({before_str} → {after_str}) "
+                f"Financial risk is rated {scenario.financial_risk}/10, high enough that "
+                f"{month_label}'s otherwise-workable numbers ({before_str} to {after_str}) "
                 "shouldn't be the only thing driving this."
             )
     elif label == "do_it":
         insight = (
             f"{month_label}'s {kind} net is {before_str}; with this scenario it's "
-            f"{after_str} — still comfortably positive."
+            f"{after_str}, still comfortably positive."
         )
     else:
         insight = (
             f"{month_label}'s {kind} net is {before_str}; with this scenario it's "
-            f"{after_str} — workable, but worth weighing before committing."
+            f"{after_str}. Workable, but worth weighing before committing."
         )
 
     return {"label": label, "risk_level": risk_level, "insight": insight, "comparison": comparison}

@@ -3,9 +3,9 @@
 {% block content %}
 
 {% set whatif_presets = {
-    'vacation':  {'title': 'Vacation', 'category': 'Trip / Vacation', 'one_time_cost': '2500.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 3, 'emotional_value': 8, 'description': 'A getaway trip — flights, hotel, food, the works.'},
+    'vacation':  {'title': 'Vacation', 'category': 'Trip / Vacation', 'one_time_cost': '2500.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 3, 'emotional_value': 8, 'description': 'A getaway trip: flights, hotel, food, the works.'},
     'dinner':    {'title': 'Expensive dinner', 'category': 'Food & Dining', 'one_time_cost': '200.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 1, 'emotional_value': 6, 'description': 'A nice night out to celebrate or just because.'},
-    'car':       {'title': 'Buy a car', 'category': 'Transport', 'one_time_cost': '30000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 6, 'emotional_value': 7, 'description': 'New wheels — the purchase price.'},
+    'car':       {'title': 'Buy a car', 'category': 'Transport', 'one_time_cost': '30000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 6, 'emotional_value': 7, 'description': 'New wheels, the purchase price.'},
     'invest':    {'title': 'Invest $500/mo more', 'category': 'Investment', 'one_time_cost': '0.00', 'monthly_cost': '0.00', 'monthly_savings': '500.00', 'financial_risk': 4, 'emotional_value': 6, 'description': 'Redirect more of your paycheck into long-term investments.'},
     'wedding':   {'title': 'Save for wedding', 'category': 'Savings Goal', 'one_time_cost': '0.00', 'monthly_cost': '0.00', 'monthly_savings': '800.00', 'financial_risk': 3, 'emotional_value': 9, 'description': 'Setting aside money each month for the big day.'},
     'debt':      {'title': 'Pay off debt early', 'category': 'Debt Payoff', 'one_time_cost': '5000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 2, 'emotional_value': 7, 'description': 'An extra lump-sum payment to close out a loan sooner and cut future interest.'},
@@ -150,7 +150,7 @@
                             style="padding-left:2.25rem; font-family:'JetBrains Mono',monospace;"
                         >
                     </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">A single payment — flights, purchases, deposits</p>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">A single payment: flights, purchases, deposits</p>
                 </div>
 
                 <div class="cost-tab-panel" data-panel="monthly_cost" style="{{ '' if initial_cost_tab == 'monthly_cost' else 'display:none;' }}">
@@ -164,7 +164,7 @@
                             style="padding-left:2.25rem; font-family:'JetBrains Mono',monospace;"
                         >
                     </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recurring cost each month — rent, subscriptions, loan payments</p>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recurring cost each month: rent, subscriptions, loan payments</p>
                 </div>
 
                 <div class="cost-tab-panel" data-panel="monthly_savings" style="{{ '' if initial_cost_tab == 'monthly_savings' else 'display:none;' }}">
