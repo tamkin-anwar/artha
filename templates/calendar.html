@@ -105,29 +105,72 @@
         position: absolute; left: 46px; right: 6px; border-radius: 7px;
         border: 1.5px dashed var(--gold); background: var(--gold-dim); z-index: 4; pointer-events: none;
     }
-    .cal-event-popover {
-        position: fixed; z-index: 100; background: var(--bg-surface);
-        border: 1px solid var(--border-subtle); border-radius: 12px;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.32); padding: 12px; width: 264px;
+    .cal-event-modal-backdrop {
+        position: fixed; inset: 0; z-index: 200;
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px;
+        background: rgba(10, 10, 14, 0.5);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        animation: cal-modal-fade-in 0.15s ease-out;
     }
-    .cal-event-popover input[type="text"],
-    .cal-event-popover input[type="date"],
-    .cal-event-popover input[type="time"] {
-        width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px;
-        border: 1px solid var(--border-subtle); border-radius: 8px;
-        background: var(--bg-page); color: var(--text-primary); margin-bottom: 10px; font-family: inherit;
-        color-scheme: light dark;
+    @keyframes cal-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes cal-modal-pop-in {
+        from { opacity: 0; transform: scale(0.96) translateY(6px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
     }
-    .cal-event-popover-time-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-    .cal-event-popover-time-row input[type="time"] { margin-bottom: 0; flex: 1; min-width: 0; }
-    .cal-event-popover-time-arrow { color: var(--text-muted); font-size: 13px; flex-shrink: 0; }
-    .cal-event-popover-error { color: var(--red); font-size: 11.5px; margin: -4px 0 10px; }
-    .cal-event-popover-colors { display: flex; gap: 7px; margin-bottom: 12px; }
-    .cal-event-popover-color { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; padding: 0; }
-    .cal-event-popover-color.selected { border-color: var(--text-primary); }
-    .cal-event-popover-actions { display: flex; justify-content: space-between; align-items: center; }
-    .cal-event-popover-delete { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; padding: 4px; }
-    .cal-event-popover-save { padding: 7px 14px; font-size: 12px; }
+    .cal-event-modal {
+        width: 100%; max-width: 400px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 28px 26px 22px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 4px 16px rgba(0,0,0,0.16);
+        animation: cal-modal-pop-in 0.18s cubic-bezier(0.16,1,0.3,1);
+    }
+    .dark .cal-event-modal { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
+    .cal-event-modal-title {
+        display: block; width: 100%; box-sizing: border-box; border: none; outline: none;
+        background: none; color: var(--text-primary); font-family: 'Fraunces', serif;
+        font-size: 21px; font-weight: 500; padding: 0 0 14px; margin-bottom: 18px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .cal-event-modal-title::placeholder { color: var(--text-muted); }
+    .cal-event-modal-field-group {
+        background: var(--bg-page); border: 1px solid var(--border-subtle);
+        border-radius: 12px; overflow: hidden; margin-bottom: 18px;
+    }
+    .cal-event-modal-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; gap: 12px;
+    }
+    .cal-event-modal-row + .cal-event-modal-row { border-top: 1px solid var(--border-subtle); }
+    .cal-event-modal-row-label { font-size: 13.5px; color: var(--text-secondary); flex-shrink: 0; }
+    .cal-event-modal-row input[type="date"],
+    .cal-event-modal-row input[type="time"] {
+        border: none; background: none; color: var(--text-primary);
+        font-size: 14px; font-family: inherit; text-align: right; padding: 0;
+        color-scheme: light dark; min-width: 0;
+    }
+    .cal-event-modal-row input[type="time"] { min-width: 112px; }
+    .cal-event-modal-error { color: var(--red); font-size: 12px; margin: -10px 0 16px; }
+    .cal-event-modal-colors { display: flex; gap: 10px; margin-bottom: 24px; }
+    .cal-event-modal-color {
+        width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+        border: 2px solid transparent; padding: 0; position: relative;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: transform 0.12s ease;
+    }
+    .cal-event-modal-color:hover { transform: scale(1.08); }
+    .cal-event-modal-color.selected { border-color: var(--text-primary); }
+    .cal-event-modal-color.selected::after {
+        content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bg-surface);
+    }
+    .cal-event-modal-actions { display: flex; justify-content: space-between; align-items: center; }
+    .cal-event-modal-actions-right { display: flex; gap: 8px; align-items: center; }
+    .cal-event-modal-delete { background: none; border: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 6px 4px; }
+    .cal-event-modal-cancel { background: none; border: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; padding: 8px 14px; border-radius: 8px; }
+    .cal-event-modal-cancel:hover { background: var(--bg-hover); }
+    .cal-event-modal-save { padding: 8px 20px; font-size: 13.5px; }
 
     .cal-day-name-short { display: none; }
 
@@ -700,56 +743,79 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         closeActivePopover();
 
         var isNew = !eventOrDraft.id;
-        var rect = anchorEl.getBoundingClientRect();
+
+        var backdrop = document.createElement("div");
+        backdrop.className = "cal-event-modal-backdrop";
 
         var pop = document.createElement("div");
-        pop.className = "cal-event-popover";
+        pop.className = "cal-event-modal";
+        backdrop.appendChild(pop);
 
         var input = document.createElement("input");
         input.type = "text";
+        input.className = "cal-event-modal-title";
         input.placeholder = "Event title";
         input.value = eventOrDraft.title || "";
         pop.appendChild(input);
 
+        var fieldGroup = document.createElement("div");
+        fieldGroup.className = "cal-event-modal-field-group";
+
+        var dateRow = document.createElement("div");
+        dateRow.className = "cal-event-modal-row";
+        var dateLabel = document.createElement("span");
+        dateLabel.className = "cal-event-modal-row-label";
+        dateLabel.textContent = "Date";
         var dateInput = document.createElement("input");
         dateInput.type = "date";
         dateInput.value = toDateInputValue(eventOrDraft.start);
-        pop.appendChild(dateInput);
+        dateRow.appendChild(dateLabel);
+        dateRow.appendChild(dateInput);
+        fieldGroup.appendChild(dateRow);
 
-        var timeRow = document.createElement("div");
-        timeRow.className = "cal-event-popover-time-row";
+        var startRow = document.createElement("div");
+        startRow.className = "cal-event-modal-row";
+        var startLabel = document.createElement("span");
+        startLabel.className = "cal-event-modal-row-label";
+        startLabel.textContent = "Starts";
         var startInput = document.createElement("input");
         startInput.type = "time";
         startInput.value = toTimeInputValue(eventOrDraft.start);
-        var arrow = document.createElement("span");
-        arrow.className = "cal-event-popover-time-arrow";
-        arrow.textContent = "→";
-        arrow.setAttribute("aria-hidden", "true");
+        startRow.appendChild(startLabel);
+        startRow.appendChild(startInput);
+        fieldGroup.appendChild(startRow);
+
+        var endRow = document.createElement("div");
+        endRow.className = "cal-event-modal-row";
+        var endLabel = document.createElement("span");
+        endLabel.className = "cal-event-modal-row-label";
+        endLabel.textContent = "Ends";
         var endInput = document.createElement("input");
         endInput.type = "time";
         endInput.value = toTimeInputValue(eventOrDraft.end);
-        timeRow.appendChild(startInput);
-        timeRow.appendChild(arrow);
-        timeRow.appendChild(endInput);
-        pop.appendChild(timeRow);
+        endRow.appendChild(endLabel);
+        endRow.appendChild(endInput);
+        fieldGroup.appendChild(endRow);
+
+        pop.appendChild(fieldGroup);
 
         var errorEl = document.createElement("p");
-        errorEl.className = "cal-event-popover-error";
+        errorEl.className = "cal-event-modal-error";
         errorEl.style.display = "none";
         pop.appendChild(errorEl);
 
         var colorsRow = document.createElement("div");
-        colorsRow.className = "cal-event-popover-colors";
+        colorsRow.className = "cal-event-modal-colors";
         var selectedColor = eventOrDraft.color || "sky";
         ["sky", "sage", "coral", "plum", "slate", "amber"].forEach(function (name) {
             var swatch = document.createElement("button");
             swatch.type = "button";
-            swatch.className = "cal-event-popover-color" + (name === selectedColor ? " selected" : "");
+            swatch.className = "cal-event-modal-color" + (name === selectedColor ? " selected" : "");
             swatch.style.background = noteColor(name, "text");
             swatch.setAttribute("aria-label", name);
             swatch.addEventListener("click", function () {
                 selectedColor = name;
-                colorsRow.querySelectorAll(".cal-event-popover-color").forEach(function (s) { s.classList.remove("selected"); });
+                colorsRow.querySelectorAll(".cal-event-modal-color").forEach(function (s) { s.classList.remove("selected"); });
                 swatch.classList.add("selected");
             });
             colorsRow.appendChild(swatch);
@@ -757,12 +823,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         pop.appendChild(colorsRow);
 
         var actions = document.createElement("div");
-        actions.className = "cal-event-popover-actions";
+        actions.className = "cal-event-modal-actions";
 
         if (!isNew) {
             var deleteBtn = document.createElement("button");
             deleteBtn.type = "button";
-            deleteBtn.className = "cal-event-popover-delete";
+            deleteBtn.className = "cal-event-modal-delete";
             deleteBtn.textContent = "Delete";
             deleteBtn.addEventListener("click", function () {
                 deleteEvent(eventOrDraft.id, dateStr);
@@ -773,24 +839,26 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             actions.appendChild(document.createElement("span"));
         }
 
+        var actionsRight = document.createElement("div");
+        actionsRight.className = "cal-event-modal-actions-right";
+
+        var cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "cal-event-modal-cancel";
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.addEventListener("click", function () { cancel(); });
+        actionsRight.appendChild(cancelBtn);
+
         var saveBtn = document.createElement("button");
         saveBtn.type = "button";
-        saveBtn.className = "btn-primary cal-event-popover-save";
+        saveBtn.className = "btn-primary cal-event-modal-save";
         saveBtn.textContent = isNew ? "Add" : "Save";
-        actions.appendChild(saveBtn);
+        actionsRight.appendChild(saveBtn);
+
+        actions.appendChild(actionsRight);
         pop.appendChild(actions);
 
-        document.body.appendChild(pop);
-
-        var popWidth = pop.offsetWidth, popHeight = pop.offsetHeight;
-        var left = rect.right + 10;
-        if (left + popWidth > window.innerWidth - 10) left = rect.left - popWidth - 10;
-        if (left < 10) left = 10;
-        var top = rect.top;
-        if (top + popHeight > window.innerHeight - 10) top = window.innerHeight - popHeight - 10;
-        if (top < 10) top = 10;
-        pop.style.left = left + "px";
-        pop.style.top = top + "px";
+        document.body.appendChild(backdrop);
 
         input.focus();
 
@@ -835,20 +903,29 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             if (e.key === "Enter") { e.preventDefault(); commit(); }
             else if (e.key === "Escape") { e.preventDefault(); cancel(); }
         }
-        function onDocMousedown(e) {
-            if (!pop.contains(e.target) && e.target !== anchorEl) cancel();
+        function onBackdropMousedown(e) {
+            if (e.target === backdrop) cancel();
         }
 
         saveBtn.addEventListener("click", commit);
         pop.addEventListener("keydown", onKeydown);
-        setTimeout(function () { document.addEventListener("mousedown", onDocMousedown); }, 0);
+        backdrop.addEventListener("mousedown", onBackdropMousedown);
 
         function teardown() {
-            document.removeEventListener("mousedown", onDocMousedown);
-            pop.remove();
+            backdrop.remove();
             activePopoverCleanup = null;
         }
-        activePopoverCleanup = teardown;
+        // Registering cancel() here (not teardown()) matters: this runs
+        // whenever a NEW popover is about to open while this one is still
+        // an unresolved draft (closeActivePopover() at the top of this
+        // function, and again at the top of renderSchedule()). teardown()
+        // alone only removes the popover UI and leaves that draft's
+        // .cal-schedule-drag-preview element orphaned in the grid — click
+        // "+ Add Event" (or drag) twice without confirming the first one
+        // and the leftover preview stacks up, pointer-events:none, so it
+        // can never be clicked to remove either. cancel() removes the
+        // preview via onCancelDraft too.
+        activePopoverCleanup = cancel;
     }
 
     // Toggles the sky "has time blocks" dot on a month-grid cell without a
