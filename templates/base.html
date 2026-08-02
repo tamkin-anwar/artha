@@ -80,6 +80,7 @@
         {% set is_calendar_active = request.endpoint == 'dashboard.calendar_page' %}
         {% set is_scenarios_active = request.endpoint and 'scenario' in request.endpoint %}
         {% set is_ai_active = request.endpoint == 'ai.page' %}
+        {% set is_admin_active = request.endpoint and request.endpoint.startswith('admin.') %}
 
         <div style="display:flex; min-height:100vh;">
 
@@ -115,6 +116,14 @@
                     <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
                         <i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator
                     </a>
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
+                            <i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin
+                            {% if admin_open_feedback_count %}
+                                <span style="margin-left:auto; background:var(--gold); color:#000; font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; padding:0 4px;">{{ admin_open_feedback_count }}</span>
+                            {% endif %}
+                        </a>
+                    {% endif %}
                 </nav>
 
                 <!-- User chip -->
@@ -220,6 +229,9 @@
                     <a href="{{ url_for('notes.notes_page') }}" class="nav-link {{ 'nav-active' if is_notes_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="file-text" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Notes</a>
                     <a href="{{ url_for('dashboard.calendar_page') }}" class="nav-link {{ 'nav-active' if is_calendar_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calendar" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calendar</a>
                     <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator</a>
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</a>
+                    {% endif %}
 
                     <div style="margin:10px 0; height:1px; background:var(--border-subtle);"></div>
 
@@ -270,9 +282,117 @@
             </div>
         </div>
 
+        <!-- FEEDBACK WIDGET -->
+        <button type="button" id="feedback-fab" class="feedback-fab" aria-label="Send feedback" title="Feedback">
+            <i data-lucide="message-circle" aria-hidden="true" style="width:19px; height:19px; stroke-width:1.5;"></i>
+        </button>
+
+        <div id="feedback-modal-backdrop" class="feedback-modal-backdrop" hidden>
+            <div class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
+                <p id="feedback-modal-title" class="feedback-modal-title">Send feedback</p>
+                <p class="feedback-modal-subtitle">Found a bug, or something you'd change? Straight to me.</p>
+
+                <div class="feedback-modal-tabs" role="tablist">
+                    <button type="button" class="cost-tab-btn cost-tab-active" data-feedback-category="bug" role="tab">Bug</button>
+                    <button type="button" class="cost-tab-btn" data-feedback-category="idea" role="tab">Idea</button>
+                    <button type="button" class="cost-tab-btn" data-feedback-category="other" role="tab">Something else</button>
+                </div>
+
+                <textarea id="feedback-message" placeholder="What's going on?"></textarea>
+                <p id="feedback-error" class="feedback-modal-error"></p>
+
+                <div class="feedback-modal-actions">
+                    <button type="button" id="feedback-cancel" class="feedback-modal-cancel">Cancel</button>
+                    <button type="button" id="feedback-submit" class="btn-primary feedback-modal-submit">Send</button>
+                </div>
+            </div>
+        </div>
+
         <script>
             const d = new Date();
             document.getElementById('top-date').textContent = d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+        </script>
+
+        <script type="module">
+            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+
+            (function () {
+                const fab = document.getElementById("feedback-fab");
+                const backdrop = document.getElementById("feedback-modal-backdrop");
+                const textarea = document.getElementById("feedback-message");
+                const errorEl = document.getElementById("feedback-error");
+                const cancelBtn = document.getElementById("feedback-cancel");
+                const submitBtn = document.getElementById("feedback-submit");
+                const tabs = backdrop.querySelectorAll("[data-feedback-category]");
+                let category = "bug";
+
+                function getCsrfToken() {
+                    const meta = document.querySelector('meta[name="csrf-token"]');
+                    return meta ? meta.content : "";
+                }
+
+                function open() {
+                    category = "bug";
+                    tabs.forEach((t) => t.classList.toggle("cost-tab-active", t.dataset.feedbackCategory === "bug"));
+                    textarea.value = "";
+                    errorEl.style.display = "none";
+                    backdrop.hidden = false;
+                    textarea.focus();
+                }
+                function close() {
+                    backdrop.hidden = true;
+                }
+
+                fab.addEventListener("click", open);
+                cancelBtn.addEventListener("click", close);
+                backdrop.addEventListener("mousedown", function (e) {
+                    if (e.target === backdrop) close();
+                });
+                document.addEventListener("keydown", function (e) {
+                    if (e.key === "Escape" && !backdrop.hidden) close();
+                });
+
+                tabs.forEach((t) => {
+                    t.addEventListener("click", function () {
+                        category = t.dataset.feedbackCategory;
+                        tabs.forEach((o) => o.classList.toggle("cost-tab-active", o === t));
+                    });
+                });
+
+                submitBtn.addEventListener("click", function () {
+                    const message = textarea.value.trim();
+                    if (!message) {
+                        errorEl.textContent = "Write something before sending.";
+                        errorEl.style.display = "";
+                        textarea.focus();
+                        return;
+                    }
+                    errorEl.style.display = "none";
+                    submitBtn.disabled = true;
+
+                    fetch("{{ url_for('feedback.submit') }}", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                        body: JSON.stringify({ category: category, message: message, page_url: window.location.pathname }),
+                    })
+                        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+                        .then(function (result) {
+                            submitBtn.disabled = false;
+                            if (!result.ok) {
+                                errorEl.textContent = result.data.message || "Something went wrong.";
+                                errorEl.style.display = "";
+                                return;
+                            }
+                            close();
+                            showToast(result.data.message || "Thanks, got it.", "success");
+                        })
+                        .catch(function () {
+                            submitBtn.disabled = false;
+                            errorEl.textContent = "Network error. Please try again.";
+                            errorEl.style.display = "";
+                        });
+                });
+            })();
         </script>
     {% endif %}
 

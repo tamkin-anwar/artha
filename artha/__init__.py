@@ -1,6 +1,7 @@
 import logging
 import os
 
+import click
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
 from flask_wtf.csrf import generate_csrf, CSRFError
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -55,7 +56,7 @@ def create_app(config_name: str = "default") -> Flask:
     # ------------------------------------------------------------------
     # Models — must be imported so Flask-Migrate sees them
     # ------------------------------------------------------------------
-    from .models import User, Note, Transaction  # noqa: F401
+    from .models import User, Note, Transaction, Feedback  # noqa: F401
     from .models.scenario import Scenario  # noqa: F401
 
     @login_manager.user_loader
@@ -71,6 +72,8 @@ def create_app(config_name: str = "default") -> Flask:
     from .blueprints.finance import finance_bp
     from .blueprints.ai import ai_bp
     from .blueprints.scenarios import scenarios_bp
+    from .blueprints.feedback import feedback_bp
+    from .blueprints.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -78,6 +81,8 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(finance_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(scenarios_bp)
+    app.register_blueprint(feedback_bp)
+    app.register_blueprint(admin_bp)
 
     # ------------------------------------------------------------------
     # Context processors
@@ -128,5 +133,22 @@ def create_app(config_name: str = "default") -> Flask:
         log.error("500 at %s: %s", request.path, e, exc_info=True)
         db.session.rollback()
         return render_template("500.html"), 500
+
+    # ------------------------------------------------------------------
+    # CLI commands
+    # ------------------------------------------------------------------
+    @app.cli.command("make-admin")
+    @click.argument("username")
+    def make_admin(username):
+        """Grant a user admin access: flask make-admin <username>."""
+        from .models import User
+
+        user = User.query.filter_by(username=username).first()
+        if user is None:
+            click.echo(f"No user found with username {username!r}.")
+            return
+        user.is_admin = True
+        db.session.commit()
+        click.echo(f"{username} is now an admin.")
 
     return app

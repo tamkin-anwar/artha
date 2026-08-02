@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from flask import render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
@@ -67,6 +68,8 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            user.last_login_at = datetime.now(timezone.utc)
+            db.session.commit()
             login_user(user, remember=remember)
             return redirect(url_for("dashboard.index"))
 

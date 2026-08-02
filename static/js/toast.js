@@ -44,6 +44,11 @@ const MESSAGE_MAP = {
     "Scenario created!": { title: "Scenario created", message: "What-if added to your simulator" },
     "Scenario updated!": { title: "Saved", message: "Scenario updated" },
     "Password changed successfully.": { title: "Done", message: "Password updated successfully" },
+
+    // Feedback widget
+    "Thanks, got it.": { title: "Feedback sent", message: "Thanks, got it." },
+    "Feedback can't be empty": { title: "Missing details", message: "Write something before sending" },
+    "Something went wrong. Try again.": { title: "Error", message: "Could not send. Please try again" },
 };
 
 const TYPE_ICONS = {

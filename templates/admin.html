@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <script type="module">
+            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+            document.addEventListener('DOMContentLoaded', function () {
+                {% for category, message in messages %}
+                    showToast({{ message|tojson }}, {{ category|tojson }});
+                {% endfor %}
+            });
+        </script>
+    {% endif %}
+{% endwith %}
+
+<style>
+    .admin-status-tab {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+        color: var(--text-secondary); text-decoration: none; border: 1px solid var(--border-subtle);
+        background: var(--bg-card); transition: background 0.15s ease, color 0.15s ease;
+    }
+    .admin-status-tab:hover { background: var(--bg-hover); }
+    .admin-status-tab.admin-status-active { background: var(--gold); color: #000; border-color: var(--gold); }
+
+    .admin-feedback-card { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: var(--bg-card); }
+    .admin-feedback-card:last-child { margin-bottom: 0; }
+    .admin-category-pill { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+    .admin-category-bug { background: var(--red-dim); color: var(--red); }
+    .admin-category-idea { background: var(--gold-dim); color: var(--gold); }
+    .admin-category-other { background: var(--bg-hover); color: var(--text-secondary); }
+
+    .admin-status-pill { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+    .admin-status-new { background: var(--gold-dim); color: var(--gold); }
+    .admin-status-seen { background: rgba(96,165,250,0.14); color: var(--sky); }
+    .admin-status-resolved { background: var(--emerald-dim); color: var(--emerald); }
+
+    .admin-feedback-action { background: none; border: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 11.5px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+    .admin-feedback-action:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    .admin-user-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+    .admin-user-row:last-child { border-bottom: none; }
+</style>
+
+<div class="eyebrow" style="margin-bottom:8px;">ADMIN</div>
+<h1 style="font-family:'Fraunces',serif; font-size:28px; font-weight:400; color:var(--text-primary); margin:0 0 24px;">Overview</h1>
+
+<!-- Stat cards -->
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
+    <div class="glass-card" style="padding:20px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span class="eyebrow">Users</span>
+        </div>
+        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_users }}</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <span class="eyebrow">Open feedback</span>
+        </div>
+        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ open_count }}</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--bg-hover); color:var(--text-secondary);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </span>
+            <span class="eyebrow">Total feedback</span>
+        </div>
+        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_feedback }}</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </span>
+            <span class="eyebrow">Transactions logged</span>
+        </div>
+        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_transactions }}</div>
+    </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1.6fr 1fr; gap:16px; align-items:start;" class="dashboard-row">
+    <!-- Feedback inbox -->
+    <div class="glass-card" style="padding:20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+            <span class="eyebrow">Feedback</span>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="{{ url_for('admin.overview') }}" class="admin-status-tab {{ 'admin-status-active' if status_filter == 'all' }}">All</a>
+                <a href="{{ url_for('admin.overview', status='new') }}" class="admin-status-tab {{ 'admin-status-active' if status_filter == 'new' }}">New</a>
+                <a href="{{ url_for('admin.overview', status='seen') }}" class="admin-status-tab {{ 'admin-status-active' if status_filter == 'seen' }}">Seen</a>
+                <a href="{{ url_for('admin.overview', status='resolved') }}" class="admin-status-tab {{ 'admin-status-active' if status_filter == 'resolved' }}">Resolved</a>
+            </div>
+        </div>
+
+        {% if feedback_items %}
+            <div id="admin-feedback-list">
+                {% for item in feedback_items %}
+                    <div class="admin-feedback-card" data-feedback-id="{{ item.id }}">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="admin-category-pill admin-category-{{ item.category }}">{{ item.category }}</span>
+                                <span class="admin-status-pill admin-status-{{ item.status }}" data-status-pill>{{ item.status }}</span>
+                            </div>
+                            <span style="font-size:11px; color:var(--text-muted);">{{ item.author_name }} &middot; {{ item.created_label }}</span>
+                        </div>
+                        <p style="font-size:14px; color:var(--text-primary); margin:0 0 10px; white-space:pre-wrap;">{{ item.message }}</p>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                            <span style="font-size:11px; color:var(--text-muted);">{{ item.page_url or '' }}</span>
+                            <div style="display:flex; gap:6px;" data-feedback-actions>
+                                {% if item.status != 'seen' %}
+                                    <button type="button" class="admin-feedback-action" data-set-status="seen">Mark seen</button>
+                                {% endif %}
+                                {% if item.status != 'resolved' %}
+                                    <button type="button" class="admin-feedback-action" data-set-status="resolved">Resolve</button>
+                                {% else %}
+                                    <button type="button" class="admin-feedback-action" data-set-status="new">Reopen</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No feedback here.</p>
+        {% endif %}
+    </div>
+
+    <!-- Users -->
+    <div class="glass-card" style="padding:20px;">
+        <span class="eyebrow" style="display:block; margin-bottom:14px;">Users</span>
+        {% for u in user_rows %}
+            <div class="admin-user-row">
+                <div style="min-width:0;">
+                    <div style="font-size:14px; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        {{ u.name }}{% if u.is_admin %} <span style="font-size:10px; color:var(--gold); font-weight:600;">ADMIN</span>{% endif %}
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.email or u.username }}</div>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-size:11px; color:var(--text-secondary);">Joined {{ u.joined_label }}</div>
+                    <div style="font-size:11px; color:var(--text-muted);">Active {{ u.last_active_label }}</div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script type="module">
+    import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : "";
+    }
+
+    document.getElementById("admin-feedback-list")?.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-set-status]");
+        if (!btn) return;
+        const card = btn.closest(".admin-feedback-card");
+        const id = card.dataset.feedbackId;
+        const newStatus = btn.dataset.setStatus;
+
+        fetch(`/admin/feedback/${id}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify({ status: newStatus }),
+        })
+            .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    showToast(data.message || "Could not update status.", "error");
+                    return;
+                }
+                const pill = card.querySelector("[data-status-pill]");
+                pill.textContent = data.status;
+                pill.className = "admin-status-pill admin-status-" + data.status;
+
+                const actions = card.querySelector("[data-feedback-actions]");
+                actions.innerHTML = "";
+                if (data.status !== "seen") {
+                    actions.insertAdjacentHTML("beforeend", '<button type="button" class="admin-feedback-action" data-set-status="seen">Mark seen</button>');
+                }
+                if (data.status !== "resolved") {
+                    actions.insertAdjacentHTML("beforeend", '<button type="button" class="admin-feedback-action" data-set-status="resolved">Resolve</button>');
+                } else {
+                    actions.insertAdjacentHTML("beforeend", '<button type="button" class="admin-feedback-action" data-set-status="new">Reopen</button>');
+                }
+            })
+            .catch(() => showToast("Network error. Please try again.", "error"));
+    });
+</script>
+
+{% endblock %}
