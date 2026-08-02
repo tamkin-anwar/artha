@@ -1,5 +1,12 @@
 /* Light theme — default (no .dark class on <html>) */
 :root {
+  /* Keeps native form-control chrome (date/time picker icons, scrollbars)
+     in sync with the app's manually-toggled .dark class below, rather
+     than the OS's own light/dark preference — without this, a dark-theme
+     date input still gets the browser's light-mode calendar icon glyph,
+     which is nearly invisible against a dark field background. */
+  color-scheme: light;
+
   --bg-page:        #f7f5f0;
   --bg-surface:     #ffffff;
   --bg-card:        #ffffff;
@@ -56,6 +63,8 @@
 
 /* Dark theme — toggled by theme.js adding .dark to <html> */
 .dark {
+  color-scheme: dark;
+
   --bg-page:        #12151e;
   --bg-surface:     #181d2a;
   --bg-card:        #1e2435;
