@@ -201,13 +201,13 @@ def index():
         expense=expense,
         balance=balance,
         today=today,
+        today_date=today.strftime("%Y-%m-%d"),
         todays_events=todays_events,
         overdue_notes=overdue_notes,
         due_today_notes=due_today_notes,
         renewals_this_week=renewals_this_week,
         renewals_total=renewals_total,
         dashboard_summary=dashboard_summary,
-        event_colors=sorted(EVENT_COLORS),
     )
 
 

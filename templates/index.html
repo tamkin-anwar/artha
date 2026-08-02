@@ -85,6 +85,7 @@
                 <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px; pointer-events:none;" data-currency-symbol>$</span>
                 <input type="number" name="amount" placeholder="Amount" step="0.01" inputmode="decimal" required class="field-input" style="width:100%; height:40px; font-size:14px; padding-left:26px;">
             </div>
+            <input type="date" name="date" value="{{ today_date }}" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:130px;">
             <select name="type" class="field-input" style="height:40px; font-size:14px;">
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
@@ -99,11 +100,15 @@
         </form>
 
         <div id="quick-add-event" class="quick-add-form" style="display:none; flex-direction:column; gap:8px;">
-            <div style="display:flex; gap:8px; align-items:center;">
-                <input type="text" id="quick-event-title" placeholder="Event title" class="field-input" style="flex:1; height:40px; font-size:14px;">
+            <input type="text" id="quick-event-title" placeholder="Event title" class="field-input" style="height:40px; font-size:14px;">
+            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <input type="date" id="quick-event-date" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:130px;">
+                <input type="time" id="quick-event-start" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:100px;">
+                <span style="color:var(--text-muted); font-size:13px; flex-shrink:0;">&rarr;</span>
+                <input type="time" id="quick-event-end" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:100px;">
                 <button type="button" id="quick-event-submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px; white-space:nowrap;">Add</button>
             </div>
-            <p style="font-size:11px; color:var(--text-muted); margin:0;">Adds a 1-hour event starting now. Fine-tune the time on the Calendar page.</p>
+            <p id="quick-event-error" style="font-size:11px; color:var(--red); margin:0; display:none;">End must be after start.</p>
         </div>
     </div>
 
@@ -278,16 +283,40 @@
         });
 
         const eventTitleInput = document.getElementById("quick-event-title");
+        const eventDateInput = document.getElementById("quick-event-date");
+        const eventStartInput = document.getElementById("quick-event-start");
+        const eventEndInput = document.getElementById("quick-event-end");
+        const eventErrorEl = document.getElementById("quick-event-error");
         const eventSubmitBtn = document.getElementById("quick-event-submit");
 
         function toLocalIso(d) {
             const pad = (n) => String(n).padStart(2, "0");
             return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
         }
+        function toDateInputValue(d) {
+            const pad = (n) => String(n).padStart(2, "0");
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+        function toTimeInputValue(d) {
+            const pad = (n) => String(n).padStart(2, "0");
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
 
         function getCsrfToken() {
             const meta = document.querySelector('meta[name="csrf-token"]');
             return meta ? meta.content : "";
+        }
+
+        // Prefill with a sensible default (next 15-minute mark, 1 hour
+        // long) so the fields aren't empty, but every field stays fully
+        // editable rather than being a fixed "starts now" guess.
+        if (eventDateInput) {
+            const defaultStart = new Date();
+            defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
+            const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
+            eventDateInput.value = toDateInputValue(defaultStart);
+            eventStartInput.value = toTimeInputValue(defaultStart);
+            eventEndInput.value = toTimeInputValue(defaultEnd);
         }
 
         async function submitQuickEvent() {
@@ -296,10 +325,22 @@
                 showToast("Event title is required", "error");
                 return;
             }
+            if (!eventDateInput.value || !eventStartInput.value || !eventEndInput.value) {
+                showToast("Date, start, and end time are required", "error");
+                return;
+            }
 
-            const start = new Date();
-            start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
-            const end = new Date(start.getTime() + 60 * 60 * 1000);
+            const [y, m, d] = eventDateInput.value.split("-").map(Number);
+            const [startH, startM] = eventStartInput.value.split(":").map(Number);
+            const [endH, endM] = eventEndInput.value.split(":").map(Number);
+            const start = new Date(y, m - 1, d, startH, startM);
+            const end = new Date(y, m - 1, d, endH, endM);
+
+            if (end <= start) {
+                eventErrorEl.style.display = "";
+                return;
+            }
+            eventErrorEl.style.display = "none";
 
             eventSubmitBtn.disabled = true;
             try {

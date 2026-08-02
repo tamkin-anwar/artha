@@ -108,13 +108,20 @@
     .cal-event-popover {
         position: fixed; z-index: 100; background: var(--bg-surface);
         border: 1px solid var(--border-subtle); border-radius: 12px;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.32); padding: 12px; width: 216px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.32); padding: 12px; width: 264px;
     }
-    .cal-event-popover input[type="text"] {
+    .cal-event-popover input[type="text"],
+    .cal-event-popover input[type="date"],
+    .cal-event-popover input[type="time"] {
         width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px;
         border: 1px solid var(--border-subtle); border-radius: 8px;
         background: var(--bg-page); color: var(--text-primary); margin-bottom: 10px; font-family: inherit;
+        color-scheme: light dark;
     }
+    .cal-event-popover-time-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .cal-event-popover-time-row input[type="time"] { margin-bottom: 0; flex: 1; min-width: 0; }
+    .cal-event-popover-time-arrow { color: var(--text-muted); font-size: 13px; flex-shrink: 0; }
+    .cal-event-popover-error { color: var(--red); font-size: 11.5px; margin: -4px 0 10px; }
     .cal-event-popover-colors { display: flex; gap: 7px; margin-bottom: 12px; }
     .cal-event-popover-color { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; padding: 0; }
     .cal-event-popover-color.selected { border-color: var(--text-primary); }
@@ -378,6 +385,15 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
 
         container.innerHTML = html;
         renderSchedule(dateStr);
+        // Wired exactly once per fresh #schedule-grid element (this is the
+        // only place that creates one) — renderSchedule() itself runs on
+        // every create/edit/move/resize and only clears the grid's
+        // children via innerHTML, which does NOT remove listeners bound to
+        // the grid element itself. Wiring this inside renderSchedule()
+        // used to stack a fresh mousedown listener on every single render,
+        // so clicking to create one event after another created more and
+        // more overlapping blocks from a single click.
+        wireGridCreateDrag(document.getElementById("schedule-grid"), dateStr);
 
         // Restart the slide-up animation on every render (mobile only —
         // the keyframe is scoped inside the max-width:767px media query,
@@ -417,6 +433,17 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         function pad(n) { return String(n).padStart(2, "0"); }
         return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) +
             "T" + pad(date.getHours()) + ":" + pad(date.getMinutes()) + ":00";
+    }
+
+    // <input type="date"> / <input type="time"> want "YYYY-MM-DD" / "HH:MM",
+    // a different (narrower) format than toLocalIso()'s full timestamp.
+    function toDateInputValue(date) {
+        function pad(n) { return String(n).padStart(2, "0"); }
+        return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+    }
+    function toTimeInputValue(date) {
+        function pad(n) { return String(n).padStart(2, "0"); }
+        return pad(date.getHours()) + ":" + pad(date.getMinutes());
     }
 
     function formatHourLabel(h) {
@@ -684,6 +711,33 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         input.value = eventOrDraft.title || "";
         pop.appendChild(input);
 
+        var dateInput = document.createElement("input");
+        dateInput.type = "date";
+        dateInput.value = toDateInputValue(eventOrDraft.start);
+        pop.appendChild(dateInput);
+
+        var timeRow = document.createElement("div");
+        timeRow.className = "cal-event-popover-time-row";
+        var startInput = document.createElement("input");
+        startInput.type = "time";
+        startInput.value = toTimeInputValue(eventOrDraft.start);
+        var arrow = document.createElement("span");
+        arrow.className = "cal-event-popover-time-arrow";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+        var endInput = document.createElement("input");
+        endInput.type = "time";
+        endInput.value = toTimeInputValue(eventOrDraft.end);
+        timeRow.appendChild(startInput);
+        timeRow.appendChild(arrow);
+        timeRow.appendChild(endInput);
+        pop.appendChild(timeRow);
+
+        var errorEl = document.createElement("p");
+        errorEl.className = "cal-event-popover-error";
+        errorEl.style.display = "none";
+        pop.appendChild(errorEl);
+
         var colorsRow = document.createElement("div");
         colorsRow.className = "cal-event-popover-colors";
         var selectedColor = eventOrDraft.color || "sky";
@@ -743,10 +797,33 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         function commit() {
             var title = input.value.trim();
             if (!title) { input.focus(); return; }
+
+            var parts = dateInput.value.split("-").map(Number);
+            var newStart = new Date(parts[0], parts[1] - 1, parts[2]);
+            var newEnd = new Date(parts[0], parts[1] - 1, parts[2]);
+            var startParts = startInput.value.split(":").map(Number);
+            var endParts = endInput.value.split(":").map(Number);
+            newStart.setHours(startParts[0], startParts[1], 0, 0);
+            newEnd.setHours(endParts[0], endParts[1], 0, 0);
+
+            if (newEnd <= newStart) {
+                errorEl.textContent = "End must be after start";
+                errorEl.style.display = "";
+                return;
+            }
+            errorEl.style.display = "none";
+
+            // The event may have moved to a different calendar day than it
+            // started on (dateStr) — always re-derive from the chosen date
+            // input rather than the day panel's own date, so editing an
+            // event's date actually files it under the right day.
+            var newDateStr = toDateInputValue(newStart);
+
             if (isNew) {
-                createEvent({ title: title, start: toLocalIso(eventOrDraft.start), end: toLocalIso(eventOrDraft.end), color: selectedColor }, dateStr);
+                createEvent({ title: title, start: toLocalIso(newStart), end: toLocalIso(newEnd), color: selectedColor }, newDateStr);
+                if (onCancelDraft) onCancelDraft();
             } else {
-                patchEvent(eventOrDraft.id, { title: title, color: selectedColor }, dateStr);
+                patchEvent(eventOrDraft.id, { title: title, start: toLocalIso(newStart), end: toLocalIso(newEnd), color: selectedColor }, dateStr, newDateStr);
             }
             teardown();
         }
@@ -795,6 +872,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         }
     }
 
+    // dateStr is whichever day the popover's date field ended up set to,
+    // which the day panel might not currently be showing (e.g. it was
+    // opened on today but the date was changed to next week) — the new
+    // event's own day bucket/dot always update, but the visible grid only
+    // ever re-renders whatever day is actually on screen.
     function createEvent(payload, dateStr) {
         fetch("/calendar/events", {
             method: "POST",
@@ -806,13 +888,17 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             .then(function (data) {
                 if (!window.CALENDAR_EVENTS[dateStr]) window.CALENDAR_EVENTS[dateStr] = [];
                 window.CALENDAR_EVENTS[dateStr].push(data);
-                renderSchedule(dateStr);
                 updateEventDot(dateStr, true);
+                if (currentSelectedDate) renderSchedule(currentSelectedDate);
             })
-            .catch(function () { renderSchedule(dateStr); });
+            .catch(function () { if (currentSelectedDate) renderSchedule(currentSelectedDate); });
     }
 
-    function patchEvent(id, payload, dateStr) {
+    // newDateStr is only passed when the popover's date field moved the
+    // event to a different calendar day than it started on — the client
+    // cache is keyed per-day, so that has to migrate the event between
+    // the two day buckets, not just update it in place.
+    function patchEvent(id, payload, dateStr, newDateStr) {
         fetch("/calendar/events/" + id, {
             method: "PATCH",
             credentials: "same-origin",
@@ -821,12 +907,22 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         })
             .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
             .then(function (data) {
-                var list = window.CALENDAR_EVENTS[dateStr] || [];
-                var idx = list.findIndex(function (e) { return e.id === id; });
-                if (idx !== -1) list[idx] = data;
-                renderSchedule(dateStr);
+                var oldList = window.CALENDAR_EVENTS[dateStr] || [];
+                var idx = oldList.findIndex(function (e) { return e.id === id; });
+
+                if (newDateStr && newDateStr !== dateStr) {
+                    if (idx !== -1) oldList.splice(idx, 1);
+                    if (!window.CALENDAR_EVENTS[newDateStr]) window.CALENDAR_EVENTS[newDateStr] = [];
+                    window.CALENDAR_EVENTS[newDateStr].push(data);
+                    updateEventDot(dateStr, oldList.length > 0);
+                    updateEventDot(newDateStr, true);
+                } else if (idx !== -1) {
+                    oldList[idx] = data;
+                }
+
+                if (currentSelectedDate) renderSchedule(currentSelectedDate);
             })
-            .catch(function () { renderSchedule(dateStr); });
+            .catch(function () { if (currentSelectedDate) renderSchedule(currentSelectedDate); });
     }
 
     function deleteEvent(id, dateStr) {
@@ -883,8 +979,6 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         layoutDayEvents(rawEvents).forEach(function (item) {
             grid.appendChild(buildBlockEl(item.event, item.column, item.numColumns, dateStr));
         });
-
-        wireGridCreateDrag(grid, dateStr);
 
         viewport.scrollTop = isToday ? Math.max(0, nowMin - 60) : 8 * 60;
     }
