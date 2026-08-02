@@ -11,7 +11,7 @@ from sqlalchemy import func
 from ...extensions import db
 from ...models import Note, Transaction, Event
 from ...services.exchange_rate_service import get_rates
-from ...utils import current_month_bounds
+from ...utils import current_month_bounds, derive_title_and_preview
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
@@ -38,8 +38,11 @@ def index():
                 .scalar()
                 or 0
             )
+            derived_title, preview = derive_title_and_preview(note_content)
             new_note = Note(
+                title=derived_title,
                 content=note_content,
+                preview=preview,
                 user_id=current_user.id,
                 position=int(max_pos) + 1,
             )
@@ -53,8 +56,11 @@ def index():
                 flash("Error adding note", "error")
         return redirect(url_for("dashboard.index"))
 
+    uid = current_user.id
+    today = date.today()
+
     notes = (
-        Note.query.filter_by(user_id=current_user.id)
+        Note.query.filter_by(user_id=uid)
         .order_by(Note.position.asc(), Note.id.asc())
         .all()
     )
@@ -66,7 +72,7 @@ def index():
 
     transactions = (
         Transaction.query.filter(
-            Transaction.user_id == current_user.id,
+            Transaction.user_id == uid,
             Transaction.timestamp >= month_start,
             Transaction.timestamp < month_end,
         )
@@ -76,7 +82,7 @@ def index():
     income = (
         db.session.query(func.sum(Transaction.amount))
         .filter(
-            Transaction.user_id == current_user.id,
+            Transaction.user_id == uid,
             Transaction.type == "income",
             Transaction.timestamp >= month_start,
             Transaction.timestamp < month_end,
@@ -87,7 +93,7 @@ def index():
     expense = (
         db.session.query(func.sum(Transaction.amount))
         .filter(
-            Transaction.user_id == current_user.id,
+            Transaction.user_id == uid,
             Transaction.type == "expense",
             Transaction.timestamp >= month_start,
             Transaction.timestamp < month_end,
@@ -95,14 +101,113 @@ def index():
         .scalar()
         or 0
     )
+    income = float(income)
+    expense = float(expense)
+    balance = income - expense
+
+    # ------------------------------------------------------------------
+    # "Today" panel — time-blocked events + notes due today/overdue.
+    # Calendar and Notes both track time-sensitive things that never
+    # otherwise surface outside their own pages.
+    # ------------------------------------------------------------------
+    today_start_dt = datetime(today.year, today.month, today.day)
+    today_end_dt = today_start_dt + timedelta(days=1)
+
+    def _fmt_time(dt: datetime) -> str:
+        hour12 = dt.hour % 12 or 12
+        return f"{hour12}:{dt.minute:02d} {'AM' if dt.hour < 12 else 'PM'}"
+
+    todays_events = [
+        {
+            "id": e.id,
+            "title": e.title,
+            "color": e.color,
+            "start_label": _fmt_time(e.start),
+            "end_label": _fmt_time(e.end),
+        }
+        for e in Event.query.filter(
+            Event.user_id == uid,
+            Event.start >= today_start_dt,
+            Event.start < today_end_dt,
+        )
+        .order_by(Event.start.asc())
+        .all()
+    ]
+
+    notes_due_or_overdue = (
+        Note.query.filter(
+            Note.user_id == uid,
+            Note.due_date.isnot(None),
+            Note.due_date <= today,
+        )
+        .order_by(Note.due_date.asc(), Note.pinned.desc())
+        .all()
+    )
+    overdue_notes = [n for n in notes_due_or_overdue if n.due_date < today]
+    due_today_notes = [n for n in notes_due_or_overdue if n.due_date == today]
+
+    # ------------------------------------------------------------------
+    # Recurring renewals landing within the next 7 days — same
+    # dedup-by-(description,type)-then-_next_due_date() approach as the
+    # calendar page's "upcoming recurring" banner, just widened from one
+    # nearest hit to the whole week for a dashboard callout.
+    # ------------------------------------------------------------------
+    recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
+    templates_by_key: dict[tuple[str, str], Transaction] = {}
+    for t in recurring_rows:
+        key = (t.description, t.type)
+        current = templates_by_key.get(key)
+        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
+            templates_by_key[key] = t
+
+    renewals_this_week = []
+    for (desc, ttype), tx in templates_by_key.items():
+        due = _next_due_date(tx, today)
+        if due is not None and 0 <= (due - today).days <= 7:
+            renewals_this_week.append({
+                "description": desc,
+                "type": ttype,
+                "amount": float(tx.amount),
+                "due": due,
+                "due_label": "Today" if due == today else f"{cal.month_abbr[due.month]} {due.day}",
+            })
+    renewals_this_week.sort(key=lambda e: e["due"])
+    renewals_total = sum(e["amount"] for e in renewals_this_week if e["type"] == "expense")
+
+    # ------------------------------------------------------------------
+    # One-line contextual summary, capped at 3 clauses so it stays a
+    # single readable line even on a busy day.
+    # ------------------------------------------------------------------
+    summary_parts = []
+    if todays_events:
+        n = len(todays_events)
+        summary_parts.append(f"{n} event{'s' if n != 1 else ''} today")
+    if overdue_notes:
+        n = len(overdue_notes)
+        summary_parts.append(f"{n} note{'s' if n != 1 else ''} overdue")
+    elif due_today_notes:
+        n = len(due_today_notes)
+        summary_parts.append(f"{n} note{'s' if n != 1 else ''} due today")
+    if renewals_this_week:
+        summary_parts.append(f"${renewals_total:,.0f} in renewals this week")
+    summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
+    dashboard_summary = " · ".join(summary_parts[:3])
 
     return render_template(
         "index.html",
         notes=notes,
         transactions=transactions,
-        income=float(income),
-        expense=float(expense),
-        balance=float(income - expense),
+        income=income,
+        expense=expense,
+        balance=balance,
+        today=today,
+        todays_events=todays_events,
+        overdue_notes=overdue_notes,
+        due_today_notes=due_today_notes,
+        renewals_this_week=renewals_this_week,
+        renewals_total=renewals_total,
+        dashboard_summary=dashboard_summary,
+        event_colors=sorted(EVENT_COLORS),
     )
 
 

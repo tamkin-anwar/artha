@@ -593,6 +593,16 @@ h1, h2, h3, .stat-number {
 .finance-card-in:nth-of-type(3) { animation-delay: 0.08s; }
 .finance-card-in:nth-of-type(4) { animation-delay: 0.12s; }
 
+/* Dashboard — same card entrance motion, own class per this codebase's
+   page-prefixed convention (see e.g. ai-widget-fade-in vs scenario-card-in) */
+.dashboard-card-in {
+    animation: finance-card-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dashboard-card-in:nth-of-type(1) { animation-delay: 0s; }
+.dashboard-card-in:nth-of-type(2) { animation-delay: 0.04s; }
+.dashboard-card-in:nth-of-type(3) { animation-delay: 0.08s; }
+.dashboard-card-in:nth-of-type(4) { animation-delay: 0.12s; }
+
 /* Finance — savings rate ring */
 .finance-ring-wrap {
     position: relative;
@@ -655,7 +665,8 @@ h1, h2, h3, .stat-number {
 
 @media (prefers-reduced-motion: reduce) {
     .finance-card-in,
-    .finance-ring-fill {
+    .finance-ring-fill,
+    .dashboard-card-in {
         animation: none !important;
         transition: none !important;
     }

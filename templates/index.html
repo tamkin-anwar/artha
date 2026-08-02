@@ -67,42 +67,149 @@
         <h1 style="font-family:'Fraunces',serif; font-size:36px; font-weight:300; color:var(--text-primary); margin:0 0 6px;">
             Welcome back, {{ current_user.first_name or current_user.username }}.
         </h1>
-        <p style="color:var(--text-secondary); font-size:15px; margin:0;">Here's your financial snapshot.</p>
+        <p style="color:var(--text-secondary); font-size:15px; margin:0;">{{ dashboard_summary }}</p>
+    </div>
+
+    <!-- Quick add -->
+    <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="cost-tab-btn cost-tab-active" data-quick-tab="transaction">+ Transaction</button>
+            <button type="button" class="cost-tab-btn" data-quick-tab="note">+ Note</button>
+            <button type="button" class="cost-tab-btn" data-quick-tab="event">+ Event</button>
+        </div>
+
+        <form method="POST" action="{{ url_for('finance.add_transaction') }}" id="quick-add-transaction" class="quick-add-form" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="description" placeholder="Description" required class="field-input" style="flex:2; min-width:160px; height:40px; font-size:14px;">
+            <div style="position:relative; flex:1; min-width:110px;">
+                <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px; pointer-events:none;" data-currency-symbol>$</span>
+                <input type="number" name="amount" placeholder="Amount" step="0.01" inputmode="decimal" required class="field-input" style="width:100%; height:40px; font-size:14px; padding-left:26px;">
+            </div>
+            <select name="type" class="field-input" style="height:40px; font-size:14px;">
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+            </select>
+            <button type="submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px;">Add</button>
+        </form>
+
+        <form method="POST" action="{{ url_for('dashboard.index') }}" id="quick-add-note" class="quick-add-form" style="display:none; gap:8px; align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="note" placeholder="Write a quick note..." required class="field-input" style="flex:1; height:40px; font-size:14px;">
+            <button type="submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px;">Add</button>
+        </form>
+
+        <div id="quick-add-event" class="quick-add-form" style="display:none; flex-direction:column; gap:8px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="quick-event-title" placeholder="Event title" class="field-input" style="flex:1; height:40px; font-size:14px;">
+                <button type="button" id="quick-event-submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px; white-space:nowrap;">Add</button>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin:0;">Adds a 1-hour event starting now. Fine-tune the time on the Calendar page.</p>
+        </div>
     </div>
 
     <!-- 4 Stat Cards -->
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
+                </span>
                 <span class="eyebrow">Income</span>
             </div>
             <div id="finance-income" class="stat-number money-positive" data-money-value="{{ income }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(income) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
         </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span class="finance-stat-icon" style="background:var(--red-dim); color:var(--red);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
+                </span>
                 <span class="eyebrow">Expenses</span>
             </div>
             <div id="finance-expense" class="stat-number money-negative" data-money-value="{{ expense }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(expense) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
         </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block;"></span>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+                </span>
                 <span class="eyebrow">Net Balance</span>
             </div>
             <div id="finance-balance" class="stat-number money-gold" data-money-value="{{ balance }}" style="font-size:24px;">${{ "%.2f"|format(balance) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
         </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--sky); display:inline-block;"></span>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </span>
                 <span class="eyebrow">Transactions</span>
             </div>
             <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
+        </div>
+    </div>
+
+    <!-- Today + Renewals -->
+    <div style="display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:16px;" class="dashboard-row">
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                <span class="eyebrow">Today</span>
+                <a href="{{ url_for('dashboard.calendar_page') }}" style="font-size:12px; color:var(--gold); text-decoration:none;">Open calendar →</a>
+            </div>
+
+            {% if todays_events or overdue_notes or due_today_notes %}
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    {% for ev in todays_events %}
+                        <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle);">
+                            <span style="width:8px; height:8px; border-radius:50%; background:var(--note-{{ ev.color }}-text); flex-shrink:0;"></span>
+                            <span style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono',monospace; flex-shrink:0; min-width:78px;">{{ ev.start_label }}</span>
+                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ ev.title }}</span>
+                        </div>
+                    {% endfor %}
+                    {% for note in overdue_notes %}
+                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--red-dim); border:1px solid rgba(239,68,68,0.25); text-decoration:none;">
+                            <span class="finance-mini-icon" style="width:22px; height:22px; background:none; color:var(--red);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path d="M12 9.5v4.5"/><circle cx="12" cy="17.1" r="0.75" fill="currentColor" stroke="none"/></svg>
+                            </span>
+                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ note.title or 'Untitled' }}</span>
+                            <span style="font-size:11px; color:var(--red); font-weight:600; flex-shrink:0;">Overdue</span>
+                        </a>
+                    {% endfor %}
+                    {% for note in due_today_notes %}
+                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
+                            <span class="finance-mini-icon" style="width:22px; height:22px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+                            </span>
+                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ note.title or 'Untitled' }}</span>
+                            <span style="font-size:11px; color:var(--gold); font-weight:600; flex-shrink:0;">Due today</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">Nothing on the calendar or due today.</p>
+            {% endif %}
+        </div>
+
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div class="eyebrow" style="margin-bottom:16px;">Renewals This Week</div>
+            {% if renewals_this_week %}
+                <p class="stat-number" style="font-size:26px; margin:0 0 14px;" data-money-value="{{ renewals_total }}">${{ "%.2f"|format(renewals_total) }}</p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    {% for r in renewals_this_week[:4] %}
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                            <span style="font-size:13px; color:var(--text-primary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
+                            <span style="font-size:11px; color:var(--text-muted); flex-shrink:0;">{{ r.due_label }}</span>
+                        </div>
+                    {% endfor %}
+                    {% if renewals_this_week|length > 4 %}
+                        <p style="font-size:11px; color:var(--text-muted); margin:0;">+{{ renewals_this_week|length - 4 }} more</p>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No renewals this week.</p>
+            {% endif %}
         </div>
     </div>
 
@@ -130,10 +237,10 @@
             {% if recent_notes %}
                 <div style="display:flex; flex-direction:column; gap:2px;">
                     {% for note in recent_notes[:3] %}
-                        {% set display_title = note.title if note.title else (note.content.split('\n')[0]|truncate(40, True) if note.content else '') %}
+                        {% set display_title = note.title if note.title else (note.preview|truncate(40, True) if note.preview else '') %}
                         <a href="{{ url_for('notes.notes_page') }}" class="dashboard-note-row" style="display:block; padding:10px 14px; border-radius:8px; text-decoration:none;">
                             <div style="font-weight:600; font-size:13px; color:var(--text-primary); overflow-wrap:break-word;">{{ display_title if display_title else 'Untitled' }}</div>
-                            <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">{{ note.content|truncate(60) if note.content else '' }}</div>
+                            <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">{{ note.preview|truncate(60) if note.preview else '' }}</div>
                         </a>
                     {% endfor %}
                 </div>
@@ -147,6 +254,89 @@
         .dashboard-note-row { border-left: 2px solid transparent; transition: background 0.12s ease, border-color 0.12s ease; }
         .dashboard-note-row:hover { background: var(--bg-hover); border-left-color: var(--gold); }
     </style>
+
+    <script type="module">
+        import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+
+        const tabs = document.querySelectorAll("[data-quick-tab]");
+        const forms = {
+            transaction: document.getElementById("quick-add-transaction"),
+            note: document.getElementById("quick-add-note"),
+            event: document.getElementById("quick-add-event"),
+        };
+
+        function selectQuickTab(name) {
+            tabs.forEach((btn) => btn.classList.toggle("cost-tab-active", btn.dataset.quickTab === name));
+            Object.entries(forms).forEach(([key, el]) => {
+                if (!el) return;
+                el.style.display = key === name ? "flex" : "none";
+            });
+        }
+
+        tabs.forEach((btn) => {
+            btn.addEventListener("click", () => selectQuickTab(btn.dataset.quickTab));
+        });
+
+        const eventTitleInput = document.getElementById("quick-event-title");
+        const eventSubmitBtn = document.getElementById("quick-event-submit");
+
+        function toLocalIso(d) {
+            const pad = (n) => String(n).padStart(2, "0");
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+        }
+
+        function getCsrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.content : "";
+        }
+
+        async function submitQuickEvent() {
+            const title = eventTitleInput.value.trim();
+            if (!title) {
+                showToast("Event title is required", "error");
+                return;
+            }
+
+            const start = new Date();
+            start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
+            const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+            eventSubmitBtn.disabled = true;
+            try {
+                const res = await fetch("{{ url_for('dashboard.create_event') }}", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                    body: JSON.stringify({
+                        title,
+                        start: toLocalIso(start),
+                        end: toLocalIso(end),
+                        color: "sky",
+                    }),
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    showToast(data.message || "Could not add event", "error");
+                    eventSubmitBtn.disabled = false;
+                    return;
+                }
+                window.location.reload();
+            } catch {
+                showToast("Network error. Check your connection.", "error");
+                eventSubmitBtn.disabled = false;
+            }
+        }
+
+        if (eventSubmitBtn) {
+            eventSubmitBtn.addEventListener("click", submitQuickEvent);
+            eventTitleInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitQuickEvent();
+                }
+            });
+        }
+    </script>
 
 {% endif %}
 
