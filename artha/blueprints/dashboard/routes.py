@@ -175,6 +175,14 @@ def index():
     renewals_this_week.sort(key=lambda e: e["due"])
     renewals_total = sum(e["amount"] for e in renewals_this_week if e["type"] == "expense")
 
+    # Surfaced in the Today panel too, not moved out of Renewals This
+    # Week — that card still needs every one of them for its own weekly
+    # total to stay accurate. This is deliberate duplication: Today
+    # answers "what needs my attention right now," Renewals answers
+    # "what's my near-term recurring spending," and a bill due today is a
+    # real answer to both questions at once.
+    todays_renewals = [r for r in renewals_this_week if r["due"] == today]
+
     # ------------------------------------------------------------------
     # One-line contextual summary, capped at 3 clauses so it stays a
     # single readable line even on a busy day.
@@ -209,6 +217,7 @@ def index():
         todays_events=todays_events,
         overdue_notes=overdue_notes,
         due_today_notes=due_today_notes,
+        todays_renewals=todays_renewals,
         renewals_this_week=renewals_this_week,
         renewals_total=renewals_total,
         dashboard_summary=dashboard_summary,

@@ -62,7 +62,15 @@ def create_app(config_name: str = "default") -> Flask:
     limiter.init_app(app)
 
     login_manager.login_view = "auth.login"
-    login_manager.session_protection = "strong"
+    # "strong" mode fingerprints the session against IP + User-Agent and
+    # wipes the session *and* the remember-me cookie outright the moment
+    # that fingerprint changes — which it does, harmlessly, whenever
+    # Render's proxy chain shifts slightly around a new deploy (same
+    # person, same network, different perceived IP for a request or two).
+    # That was logging everyone out on every push regardless of "remember
+    # me". "basic" still asks for a fresh login before anything sensitive
+    # if the fingerprint changes, without discarding the whole session.
+    login_manager.session_protection = "basic"
 
     # ------------------------------------------------------------------
     # Models — must be imported so Flask-Migrate sees them
