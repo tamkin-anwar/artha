@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v11";
+const CACHE_NAME = "artha-cache-v12";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -98,6 +98,25 @@ self.addEventListener("push", (event) => {
     };
 
     event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Chrome/FCM can silently invalidate and rotate a subscription's
+// endpoint on its own — no user action, no page even open — which is
+// exactly the flakiness that made reminders stop arriving after working
+// once. This is the browser's own signal that it happened; without a
+// handler here the server keeps a dead endpoint forever, since nothing
+// else would ever tell it the subscription changed.
+self.addEventListener("pushsubscriptionchange", (event) => {
+    const resubscribe = self.registration.pushManager
+        .subscribe(event.oldSubscription ? event.oldSubscription.options : { userVisibleOnly: true })
+        .then((newSubscription) =>
+            fetch("/push/subscribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newSubscription.toJSON()),
+            })
+        );
+    event.waitUntil(resubscribe);
 });
 
 // Focuses an already-open Artha tab if one exists rather than always

@@ -3,7 +3,7 @@ import logging
 from flask import jsonify, request
 from flask_login import current_user, login_required
 
-from ...extensions import db
+from ...extensions import csrf, db
 from ...models.push_subscription import PushSubscription
 from . import push_bp
 
@@ -11,8 +11,22 @@ log = logging.getLogger(__name__)
 
 
 @push_bp.route("/subscribe", methods=["POST"])
+@csrf.exempt
 @login_required
 def subscribe():
+    """
+    CSRF-exempt: this is also called from inside the service worker's own
+    pushsubscriptionchange handler (Chrome/FCM can silently rotate a
+    subscription's endpoint without the page ever being open), and a
+    service worker has no DOM to read the CSRF meta tag from. Still
+    requires a valid session cookie (@login_required), and the payload
+    itself can only come from a real pushManager.subscribe() call, which
+    only succeeds for a page/worker running on this exact origin with
+    notification permission already granted for it — a third-party site
+    can't forge one, so the usual CSRF threat (a hostile page silently
+    submitting a form on the victim's behalf) doesn't apply here the way
+    it would for a normal state-changing form post.
+    """
     data = request.get_json(silent=True) or {}
     endpoint = (data.get("endpoint") or "").strip()
     keys = data.get("keys") or {}

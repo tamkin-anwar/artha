@@ -483,7 +483,23 @@
 
                 navigator.serviceWorker.ready
                     .then(function (reg) { return reg.pushManager.getSubscription(); })
-                    .then(function (sub) { setLabel(!!sub); })
+                    .then(function (sub) {
+                        setLabel(!!sub);
+                        if (!sub) return;
+                        // Re-POSTing on every page load (not just at
+                        // subscribe time) is a second safety net for the
+                        // same drift the service worker's own
+                        // pushsubscriptionchange handler covers — cheap
+                        // (one upsert-by-endpoint) and catches it sooner,
+                        // any time the person's actually using the app,
+                        // rather than only when a rotation happens to
+                        // fire while a tab is open to receive the event.
+                        fetch("{{ url_for('push.subscribe') }}", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                            body: JSON.stringify(sub.toJSON()),
+                        });
+                    })
                     .catch(function () {});
 
                 toggles.forEach(function (btn) {
