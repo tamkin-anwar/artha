@@ -14,7 +14,11 @@ import { updateChartData } from "./chart.js";
 async function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
     try {
-        await navigator.serviceWorker.register("/static/service-worker.js");
+        // Served from the site root (see /service-worker.js in
+        // artha/__init__.py) rather than /static/service-worker.js, so its
+        // default scope is "/" and it can actually control app pages, not
+        // just requests under /static/.
+        await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
     } catch (err) {
         console.warn("Service worker registration failed:", err);
     }

@@ -2,12 +2,12 @@ import logging
 import os
 
 import click
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, send_from_directory
 from flask_wtf.csrf import generate_csrf, CSRFError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import config, ROOT_DIR
-from .extensions import db, login_manager, migrate, csrf
+from .extensions import db, login_manager, migrate, csrf, limiter
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -37,6 +37,16 @@ def create_app(config_name: str = "default") -> Flask:
     if config_name == "production" and app.config["SECRET_KEY"] == "dev-only-change-me":
         raise RuntimeError("SECRET_KEY environment variable is required in production.")
 
+    # Softer guard for VAPID: push notifications degrade gracefully (the
+    # subscribe button just won't work) rather than being essential to the
+    # app loading at all, so this warns instead of refusing to start.
+    if config_name == "production" and app.config["VAPID_PRIVATE_KEY"] == "308EL19hh8MOodozDcYdBquW4xOo0dIPGM1y28bvwMc":
+        log.warning(
+            "VAPID_PRIVATE_KEY/VAPID_PUBLIC_KEY are not set. Every deployed "
+            "environment would share the same dev keypair. Push notifications "
+            "will work but generate real VAPID keys for production."
+        )
+
     # ------------------------------------------------------------------
     # Middleware
     # ------------------------------------------------------------------
@@ -49,6 +59,7 @@ def create_app(config_name: str = "default") -> Flask:
     login_manager.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
+    limiter.init_app(app)
 
     login_manager.login_view = "auth.login"
     login_manager.session_protection = "strong"
@@ -56,7 +67,7 @@ def create_app(config_name: str = "default") -> Flask:
     # ------------------------------------------------------------------
     # Models — must be imported so Flask-Migrate sees them
     # ------------------------------------------------------------------
-    from .models import User, Note, Transaction, Feedback  # noqa: F401
+    from .models import User, Note, Transaction, Feedback, Budget, PushSubscription  # noqa: F401
     from .models.scenario import Scenario  # noqa: F401
 
     @login_manager.user_loader
@@ -74,6 +85,7 @@ def create_app(config_name: str = "default") -> Flask:
     from .blueprints.scenarios import scenarios_bp
     from .blueprints.feedback import feedback_bp
     from .blueprints.admin import admin_bp
+    from .blueprints.push import push_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -83,6 +95,20 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(scenarios_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(push_bp)
+
+    # ------------------------------------------------------------------
+    # Service worker — served from the site root (not /static/...) so its
+    # default scope is "/", covering real app pages instead of just
+    # /static/*. A script served under /static/ can only be granted a
+    # wider scope via a Service-Worker-Allowed response header; serving it
+    # from root sidesteps that entirely, which is the standard approach.
+    # ------------------------------------------------------------------
+    @app.route("/service-worker.js")
+    def service_worker():
+        response = send_from_directory(app.static_folder, "service-worker.js")
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     # ------------------------------------------------------------------
     # Context processors
@@ -117,6 +143,14 @@ def create_app(config_name: str = "default") -> Flask:
         flash("Security check failed. Please refresh and try again.", "error")
         return redirect(request.referrer or url_for("dashboard.index"))
 
+    @app.errorhandler(429)
+    def handle_rate_limit(e):
+        log.info("Rate limit hit: %s", request.path)
+        if is_ajax_request():
+            return jsonify({"message": "Too many attempts. Please wait a moment and try again."}), 429
+        flash("Too many attempts. Please wait a moment and try again.", "error")
+        return redirect(request.referrer or url_for("auth.login"))
+
     @login_manager.unauthorized_handler
     def unauthorized():
         if is_ajax_request():
@@ -150,5 +184,9 @@ def create_app(config_name: str = "default") -> Flask:
         user.is_admin = True
         db.session.commit()
         click.echo(f"{username} is now an admin.")
+
+    from .cli import register_cli
+
+    register_cli(app)
 
     return app

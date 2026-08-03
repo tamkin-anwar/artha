@@ -8,6 +8,10 @@
     <!-- CSRF for AJAX (read by notes.js / transactions.js) -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
+    {% if not hide_app_shell %}
+        <meta name="vapid-public-key" content="{{ config.VAPID_PUBLIC_KEY }}">
+    {% endif %}
+
     <!-- PWA -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#d4a843">
@@ -189,6 +193,16 @@
                                     Toggle theme
                                 </button>
 
+                                <button
+                                    id="toggle-push"
+                                    type="button"
+                                    class="nav-link"
+                                    style="width:100%; text-align:left; padding:8px 12px; border-radius:8px; font-size:14px; background:none; border:none; display:none;"
+                                    role="menuitem"
+                                >
+                                    Enable renewal reminders
+                                </button>
+
                                 <div class="eyebrow" style="padding:10px 12px 4px;">Currency</div>
 
                                 <select
@@ -249,6 +263,10 @@
                     <div id="mobile-settings-panel" class="hidden" style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
                         <button id="toggle-theme-mobile" type="button" class="btn-secondary" style="width:100%; padding:9px 12px; font-size:14px;">
                             Toggle theme
+                        </button>
+
+                        <button id="toggle-push-mobile" type="button" class="btn-secondary" style="width:100%; padding:9px 12px; font-size:14px; display:none;">
+                            Enable renewal reminders
                         </button>
 
                         <select
@@ -391,6 +409,100 @@
                             errorEl.textContent = "Network error. Please try again.";
                             errorEl.style.display = "";
                         });
+                });
+            })();
+        </script>
+
+        <script type="module">
+            (function () {
+                var toggles = [document.getElementById("toggle-push"), document.getElementById("toggle-push-mobile")].filter(Boolean);
+                if (!toggles.length) return;
+                if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+
+                var vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
+                var vapidPublicKey = vapidMeta ? vapidMeta.content : "";
+
+                function getCsrfToken() {
+                    var meta = document.querySelector('meta[name="csrf-token"]');
+                    return meta ? meta.content : "";
+                }
+
+                // Web Push wants the VAPID key as a raw Uint8Array, but the
+                // server hands it over base64url-encoded (the same string
+                // browsers themselves use for applicationServerKey).
+                function urlBase64ToUint8Array(base64String) {
+                    var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+                    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+                    var rawData = window.atob(base64);
+                    var outputArray = new Uint8Array(rawData.length);
+                    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                    return outputArray;
+                }
+
+                function setLabel(subscribed) {
+                    toggles.forEach(function (btn) {
+                        btn.textContent = subscribed ? "Disable renewal reminders" : "Enable renewal reminders";
+                        btn.style.display = "";
+                    });
+                }
+
+                function subscribe() {
+                    return navigator.serviceWorker.ready
+                        .then(function (reg) {
+                            return reg.pushManager.subscribe({
+                                userVisibleOnly: true,
+                                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+                            });
+                        })
+                        .then(function (sub) {
+                            return fetch("{{ url_for('push.subscribe') }}", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                                body: JSON.stringify(sub.toJSON()),
+                            });
+                        })
+                        .then(function () { setLabel(true); });
+                }
+
+                function unsubscribe() {
+                    return navigator.serviceWorker.ready
+                        .then(function (reg) { return reg.pushManager.getSubscription(); })
+                        .then(function (sub) {
+                            if (!sub) return;
+                            var endpoint = sub.endpoint;
+                            return sub.unsubscribe().then(function () {
+                                return fetch("{{ url_for('push.unsubscribe') }}", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                                    body: JSON.stringify({ endpoint: endpoint }),
+                                });
+                            });
+                        })
+                        .then(function () { setLabel(false); });
+                }
+
+                navigator.serviceWorker.ready
+                    .then(function (reg) { return reg.pushManager.getSubscription(); })
+                    .then(function (sub) { setLabel(!!sub); })
+                    .catch(function () {});
+
+                toggles.forEach(function (btn) {
+                    btn.addEventListener("click", function () {
+                        btn.disabled = true;
+                        var isEnabling = btn.textContent.indexOf("Enable") === 0;
+                        var action = isEnabling
+                            ? (Notification.permission === "granted"
+                                ? subscribe()
+                                : Notification.requestPermission().then(function (perm) {
+                                    if (perm !== "granted") throw new Error("denied");
+                                    return subscribe();
+                                }))
+                            : unsubscribe();
+
+                        action
+                            .catch(function () { /* permission denied or user cancelled — leave label as-is */ })
+                            .finally(function () { btn.disabled = false; });
+                    });
                 });
             })();
         </script>

@@ -109,7 +109,13 @@
 
 <!-- Month summary card -->
 <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
-    <div class="eyebrow" style="margin-bottom:16px;">{{ selected_month_label|upper }}</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <div class="eyebrow">{{ selected_month_label|upper }}</div>
+        <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); text-decoration:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
+            Export CSV
+        </a>
+    </div>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:20px; align-items:center;">
         <div style="display:flex; align-items:center; gap:14px;">
             {% set ring_color = 'var(--gold)' if savings_rate > 20 else ('var(--red)' if savings_rate < 0 else 'var(--emerald)') %}
@@ -150,6 +156,65 @@
         </div>
     </div>
 </div>
+
+<!-- Monthly budget -->
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <span class="eyebrow">Monthly Budget</span>
+        <button type="button" id="budget-edit-toggle" style="background:none; border:none; color:var(--gold); font-size:12px; cursor:pointer; padding:0;">
+            {{ 'Edit' if budget.has_budget else 'Set a budget' }}
+        </button>
+    </div>
+
+    {% if budget.has_budget %}
+        {% set bar_color = 'var(--red)' if budget.tier == 'over' else ('var(--gold)' if budget.tier == 'warning' else 'var(--emerald)') %}
+        <div id="budget-display">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-size:20px; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">${{ '%.2f'|format(budget.spent) }}</span>
+                <span style="font-size:13px; color:var(--text-secondary);">of ${{ '%.2f'|format(budget.cap) }}</span>
+            </div>
+            <div style="height:8px; border-radius:999px; background:var(--bg-page); overflow:hidden;">
+                <div style="height:100%; width:{{ budget.pct_clamped }}%; background:{{ bar_color }}; border-radius:999px; transition:width 0.3s ease;"></div>
+            </div>
+            <p style="font-size:12px; color:{{ bar_color }}; margin:8px 0 0;">
+                {% if budget.tier == 'over' %}
+                    ${{ '%.2f'|format(budget.spent - budget.cap) }} over budget this month.
+                {% elif budget.tier == 'warning' %}
+                    {{ '%.0f'|format(budget.pct) }}% spent, getting close.
+                {% else %}
+                    {{ '%.0f'|format(budget.pct) }}% spent, on track.
+                {% endif %}
+            </p>
+        </div>
+    {% else %}
+        <p id="budget-display" style="font-size:13px; color:var(--text-secondary); margin:0;">No budget set yet. You'll get a heads-up here and on the dashboard if spending gets close.</p>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('finance.set_budget') }}" id="budget-form" style="display:none; gap:8px; align-items:center; margin-top:4px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="position:relative; flex:1; min-width:120px;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13px; pointer-events:none;">$</span>
+            <input type="number" name="monthly_cap" placeholder="Monthly cap" step="0.01" min="0" inputmode="decimal" value="{{ budget_cap_raw or '' }}" class="field-input" style="width:100%; height:38px; font-size:14px; padding-left:26px;">
+        </div>
+        <button type="submit" class="btn-primary" style="height:38px; padding:0 16px; font-size:13px;">Save</button>
+    </form>
+</div>
+
+<script>
+    (function () {
+        var toggle = document.getElementById("budget-edit-toggle");
+        var display = document.getElementById("budget-display");
+        var form = document.getElementById("budget-form");
+        if (!toggle) return;
+        toggle.addEventListener("click", function () {
+            var showingForm = form.style.display === "flex";
+            form.style.display = showingForm ? "none" : "flex";
+            if (display) display.style.display = showingForm ? "" : "none";
+            toggle.textContent = showingForm ? ("{{ 'Edit' if budget.has_budget else 'Set a budget' }}") : "Cancel";
+            if (!showingForm) form.querySelector("input[name='monthly_cap']").focus();
+        });
+    })();
+</script>
 
 <!-- 6-month trend -->
 <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">

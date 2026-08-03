@@ -10,8 +10,9 @@ from sqlalchemy import func
 
 from ...extensions import db
 from ...models import Note, Transaction, Event
+from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates
-from ...utils import current_month_bounds, derive_title_and_preview
+from ...utils import current_month_bounds, derive_title_and_preview, budget_status
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
@@ -190,6 +191,9 @@ def index():
         summary_parts.append(f"{n} note{'s' if n != 1 else ''} due today")
     if renewals_this_week:
         summary_parts.append(f"${renewals_total:,.0f} in renewals this week")
+    budget_row = Budget.query.filter_by(user_id=uid).first()
+    budget = budget_status(budget_row.monthly_cap if budget_row else None, Decimal(expense))
+
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
 
@@ -208,6 +212,7 @@ def index():
         renewals_this_week=renewals_this_week,
         renewals_total=renewals_total,
         dashboard_summary=dashboard_summary,
+        budget=budget,
     )
 
 

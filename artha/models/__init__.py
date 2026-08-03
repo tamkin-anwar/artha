@@ -6,5 +6,9 @@ from .finance import Transaction
 from .exchange_rate import ExchangeRate
 from .event import Event
 from .feedback import Feedback
+from .budget import Budget
+from .push_subscription import PushSubscription
 
-__all__ = ["User", "Note", "Transaction", "ExchangeRate", "Event", "Feedback"]
+__all__ = [
+    "User", "Note", "Transaction", "ExchangeRate", "Event", "Feedback", "Budget", "PushSubscription",
+]

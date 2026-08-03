@@ -1,4 +1,6 @@
 import calendar
+import csv
+import io
 import math
 import time
 import logging
@@ -6,13 +8,14 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from flask import render_template, redirect, url_for, request, flash, session, jsonify
+from flask import render_template, redirect, url_for, request, flash, session, jsonify, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from ...extensions import db
 from ...models import Transaction
-from ...utils import is_ajax_request, current_month_bounds
+from ...models.budget import Budget
+from ...utils import is_ajax_request, current_month_bounds, budget_status
 from . import finance_bp
 
 log = logging.getLogger(__name__)
@@ -634,6 +637,13 @@ def finance_page():
     recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
     recurring_count = len({(t.description, t.type) for t in recurring_rows})
 
+    # Always the real current month's spend, independent of whatever month
+    # is being browsed above — "my budget" means this calendar month, not
+    # whichever one the filter tabs happen to be showing.
+    budget_row = Budget.query.filter_by(user_id=uid).first()
+    current_month_expense = bucket_for(_month_start(today.year, today.month))["expense"]
+    budget = budget_status(budget_row.monthly_cap if budget_row else None, current_month_expense)
+
     return render_template(
         "finance.html",
         transactions=transactions,
@@ -651,5 +661,101 @@ def finance_page():
         biggest_day_label=biggest_day_label,
         trend_data=trend_data,
         recurring_count=recurring_count,
+        budget=budget,
+        budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
         today_date=today.strftime("%Y-%m-%d"),
     )
+
+
+@finance_bp.route("/finance/export")
+@login_required
+def export_csv():
+    """
+    Downloads the signed-in user's transactions as CSV.
+
+    Honors the same ?month=YYYY-MM / ?month=all convention as finance_page()
+    so an "Export" link on a filtered view exports exactly what's on
+    screen, not a surprise full-history dump.
+    """
+    uid = current_user.id
+    month_param = (request.args.get("month") or "").strip()
+    all_time = month_param == "all"
+
+    query = Transaction.query.filter_by(user_id=uid)
+    if all_time:
+        filename_part = "all-time"
+    elif month_param:
+        try:
+            sel_year, sel_month = (int(part) for part in month_param.split("-", 1))
+            selected_date = _month_start(sel_year, sel_month)
+        except (ValueError, TypeError):
+            selected_date = _month_start(date.today().year, date.today().month)
+        next_month = (
+            _month_start(selected_date.year + 1, 1)
+            if selected_date.month == 12
+            else _month_start(selected_date.year, selected_date.month + 1)
+        )
+        query = query.filter(
+            Transaction.timestamp >= selected_date,
+            Transaction.timestamp < next_month,
+        )
+        filename_part = selected_date.strftime("%Y-%m")
+    else:
+        today = date.today()
+        selected_date = _month_start(today.year, today.month)
+        next_month = (
+            _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
+        )
+        query = query.filter(
+            Transaction.timestamp >= selected_date,
+            Transaction.timestamp < next_month,
+        )
+        filename_part = selected_date.strftime("%Y-%m")
+
+    rows = query.order_by(Transaction.timestamp.asc(), Transaction.id.asc()).all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Date", "Description", "Type", "Amount", "Recurring"])
+    for t in rows:
+        writer.writerow([
+            t.timestamp.strftime("%Y-%m-%d") if t.timestamp else "",
+            t.description,
+            t.type,
+            f"{t.amount:.2f}",
+            "yes" if t.is_recurring else "no",
+        ])
+
+    response = Response(buffer.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = f"attachment; filename=artha-transactions-{filename_part}.csv"
+    return response
+
+
+@finance_bp.route("/finance/budget", methods=["POST"])
+@login_required
+def set_budget():
+    """Upsert the signed-in user's single monthly spending cap."""
+    raw = (request.form.get("monthly_cap") or "").strip()
+
+    try:
+        cap = _validate_amount(raw) if raw else Decimal("0")
+    except ValidationError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("finance.finance_page"))
+
+    row = Budget.query.filter_by(user_id=current_user.id).first()
+    if row is None:
+        row = Budget(user_id=current_user.id, monthly_cap=cap)
+        db.session.add(row)
+    else:
+        row.monthly_cap = cap
+
+    try:
+        db.session.commit()
+        flash("Budget updated." if cap > 0 else "Budget cleared.", "success")
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error saving budget: %s", e, exc_info=True)
+        flash("Error saving budget.", "error")
+
+    return redirect(url_for("finance.finance_page"))

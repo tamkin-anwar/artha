@@ -28,6 +28,19 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = "Lax"
 
+    # Web Push (renewal reminders). The fallback pair below is a fixed,
+    # non-secret dev-only keypair (generated once with py_vapid) — good
+    # enough for testing push locally, but every deployed environment
+    # must set real env vars or all its browsers share one identity.
+    VAPID_PUBLIC_KEY = os.environ.get(
+        "VAPID_PUBLIC_KEY",
+        "BDtdnorACqlilTm8hiSQ4ZYlji8GdaJxxfPCs0P44FtO9tejgpt-rHDQf9zNJCOHmKtf2WYiJqvbqH45-qwai7E",
+    )
+    VAPID_PRIVATE_KEY = os.environ.get(
+        "VAPID_PRIVATE_KEY", "308EL19hh8MOodozDcYdBquW4xOo0dIPGM1y28bvwMc"
+    )
+    VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "tamkinanwar7@gmail.com")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
@@ -51,8 +64,19 @@ class ProductionConfig(Config):
     }
 
 
+class TestingConfig(Config):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    WTF_CSRF_ENABLED = False
+    # Off by default so ordinary tests never trip it just from hitting
+    # /login a few times across a shared-process test run; the one test
+    # that actually exercises rate limiting flips this on for itself.
+    RATELIMIT_ENABLED = False
+
+
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
+    "testing": TestingConfig,
     "default": DevelopmentConfig,
 }

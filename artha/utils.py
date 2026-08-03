@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from html.parser import HTMLParser
 
 from flask import request
@@ -124,3 +125,34 @@ def current_month_bounds() -> tuple[datetime, datetime]:
     else:
         end = datetime(today.year, today.month + 1, 1)
     return start, end
+
+
+def budget_status(cap: Decimal | None, spent: Decimal) -> dict:
+    """
+    Shared by the dashboard (alert banner) and Finance page (progress
+    card) so both agree on the exact same thresholds. `cap` is None or
+    <= 0 when the user hasn't set a budget yet — has_budget=False lets
+    both callers skip rendering anything rather than showing a 0/$0 cap.
+
+    tier: "ok" under 90%, "warning" 90-99%, "over" 100%+. Fixed rather
+    than user-configurable — one less setting for a feature this small.
+    """
+    if not cap or cap <= 0:
+        return {"has_budget": False}
+
+    pct = float(spent / cap * 100)
+    if pct >= 100:
+        tier = "over"
+    elif pct >= 90:
+        tier = "warning"
+    else:
+        tier = "ok"
+
+    return {
+        "has_budget": True,
+        "cap": float(cap),
+        "spent": float(spent),
+        "pct": pct,
+        "pct_clamped": min(100.0, max(0.0, pct)),
+        "tier": tier,
+    }

@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v10";
+const CACHE_NAME = "artha-cache-v11";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -73,5 +73,45 @@ const ASSETS_TO_CACHE = [
     // Static assets: cache first, fallback to network
     event.respondWith(
         caches.match(event.request).then((cached) => cached || fetch(event.request))
+    );
+});
+
+// Renewal reminders — the server sends { title, body, url } as the push
+// payload (see artha/services/push_service.py). event.data can be missing
+// entirely (some push services deliver empty "wake up and check" pings),
+// so this always falls back to a generic notification rather than
+// silently doing nothing.
+self.addEventListener("push", (event) => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (e) {
+        payload = {};
+    }
+
+    const title = payload.title || "Artha";
+    const options = {
+        body: payload.body || "You have a reminder.",
+        icon: "/static/icons/icon-192.png",
+        badge: "/static/icons/icon-192.png",
+        data: { url: payload.url || "/" },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Focuses an already-open Artha tab if one exists rather than always
+// opening a new one — most people already have it open in a pinned tab.
+self.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    const targetUrl = (event.notification.data && event.notification.data.url) || "/";
+
+    event.waitUntil(
+        self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if ("focus" in client) return client.focus();
+            }
+            if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+        })
     );
 });
