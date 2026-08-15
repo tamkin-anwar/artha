@@ -1568,11 +1568,57 @@
     titleInput.addEventListener("input", scheduleSave);
     contentEditable.addEventListener("input", function () { updateMeta(); scheduleSave(); });
 
+    // A tag filter chip should appear the moment a note first uses it —
+    // without this, a brand-new tag only shows up in the row after a full
+    // page reload, since the chips are otherwise only ever rendered
+    // server-side at load time.
+    function ensureFilterChip(tag) {
+        if (!tag) return;
+        var exists = false;
+        filterChipsEl.querySelectorAll(".notes-chip").forEach(function (c) {
+            if ((c.dataset.tag || "").toLowerCase() === tag) exists = true;
+        });
+        if (exists) return;
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "notes-chip";
+        chip.dataset.tag = tag;
+        chip.textContent = tag.charAt(0).toUpperCase() + tag.slice(1);
+        filterChipsEl.appendChild(chip);
+    }
+
+    // Mirror image of the above: a chip shouldn't outlive every note that
+    // used it — remove it if this was the last one holding it up.
+    function pruneFilterChipIfUnused(tag) {
+        if (!tag) return;
+        var stillUsed = false;
+        document.querySelectorAll(".note-card[data-id]").forEach(function (c) {
+            if ((c.dataset.tag || "").toLowerCase() === tag) stillUsed = true;
+        });
+        if (stillUsed) return;
+        var chip = null;
+        filterChipsEl.querySelectorAll(".notes-chip").forEach(function (c) {
+            if ((c.dataset.tag || "").toLowerCase() === tag) chip = c;
+        });
+        if (!chip) return;
+        if (chip.classList.contains("active")) {
+            // Currently filtering on a tag that's about to disappear —
+            // fall back to "All" rather than leaving the grid stuck on a
+            // filter nothing matches anymore.
+            currentFilterTag = "";
+            filterChipsEl.querySelectorAll(".notes-chip").forEach(function (c, i) { c.classList.toggle("active", i === 0); });
+            applyFilters();
+        }
+        chip.remove();
+    }
+
     // -----------------------------------------------------------------
     // Color / tag / due-date / pin controls (auto-apply on change)
     // -----------------------------------------------------------------
     function patchField(fields) {
         if (!currentNoteId) return;
+        var card = document.querySelector('.note-card[data-id="' + currentNoteId + '"]');
+        var oldTag = ("tag" in fields && card) ? (card.dataset.tag || "").toLowerCase() : null;
         fetch("/notes/" + currentNoteId + "/update", {
             method: "PATCH",
             credentials: "same-origin",
@@ -1583,6 +1629,11 @@
             .then(function (result) {
                 if (!result.ok) return;
                 updateNoteCard(result.data.id, result.data);
+                if ("tag" in fields) {
+                    var newTag = result.data.tag;
+                    if (newTag) ensureFilterChip(newTag);
+                    if (oldTag && oldTag !== newTag) pruneFilterChipIfUnused(oldTag);
+                }
             })
             .catch(function (err) { console.error("Error saving field:", err); });
     }
