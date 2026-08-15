@@ -61,7 +61,7 @@ def index():
     today = date.today()
 
     notes = (
-        Note.query.filter_by(user_id=uid)
+        Note.query.filter_by(user_id=uid, archived=False)
         .order_by(Note.position.asc(), Note.id.asc())
         .all()
     )
@@ -140,6 +140,7 @@ def index():
             Note.user_id == uid,
             Note.due_date.isnot(None),
             Note.due_date <= today,
+            Note.archived.is_(False),
         )
         .order_by(Note.due_date.asc(), Note.pinned.desc())
         .all()
@@ -351,6 +352,7 @@ def calendar_page():
             Note.due_date.isnot(None),
             Note.due_date >= fetch_start,
             Note.due_date <= fetch_end,
+            Note.archived.is_(False),
         )
         .order_by(Note.pinned.desc(), Note.due_date.asc(), Note.id.asc())
         .all()
