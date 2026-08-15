@@ -132,9 +132,15 @@
     .notes-chip:hover { background: var(--bg-hover); }
     .notes-chip.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
 
+    /* Groups the Archived/Trash/Back/New-note links so only the group as
+       a whole gets pushed to the row's right edge — margin-left:auto on
+       each individual link would split the free space between however
+       many of them are present, opening an uneven gap between them
+       instead of one clean gap before the group. */
+    .notes-toolbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
     .notes-archive-link {
         box-sizing: border-box;
-        margin-left: auto;
         display: inline-flex; align-items: center; gap: 6px;
         font-size: 13px; font-weight: 600; line-height: 1;
         color: var(--text-secondary);
@@ -397,6 +403,54 @@
     }
     .note-modal-backdrop[hidden] { display: none; }
 
+    /* Confirmation for permanent delete — an in-app modal instead of the
+       browser's native confirm(), which can't be themed and looks like a
+       Chrome dialog rather than part of the app. Sits above the note
+       modal (z-index 200) since it can be triggered from within it. */
+    .confirm-modal-backdrop {
+        position: fixed; inset: 0; z-index: 300;
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px;
+        background: rgba(10, 10, 14, 0.5);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .confirm-modal-backdrop[hidden] { display: none; }
+    .confirm-modal {
+        width: 100%; max-width: 340px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 28px 28px 24px;
+        text-align: center;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.16);
+    }
+    .dark .confirm-modal { box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3); }
+    .confirm-modal-icon {
+        width: 44px; height: 44px; margin: 0 auto 14px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        background: var(--red-dim); color: var(--red);
+    }
+    .confirm-modal-icon i { width: 20px; height: 20px; }
+    .confirm-modal-title {
+        font-family: 'Fraunces', serif; font-size: 19px; font-weight: 500;
+        color: var(--text-primary); margin-bottom: 6px;
+    }
+    .confirm-modal-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 22px; }
+    .confirm-modal-actions { display: flex; gap: 10px; }
+    .confirm-modal-cancel, .confirm-modal-confirm {
+        flex: 1;
+        font-size: 13.5px; font-weight: 600;
+        border-radius: 10px; padding: 10px 16px;
+        cursor: pointer;
+        transition: filter 0.12s ease, transform 0.12s ease, background 0.15s ease;
+    }
+    .confirm-modal-cancel { background: var(--bg-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
+    .confirm-modal-cancel:hover { background: var(--bg-hover); }
+    .confirm-modal-confirm { background: var(--red); border: 1px solid var(--red); color: #fff; }
+    .confirm-modal-confirm:hover { filter: brightness(1.08); }
+    .confirm-modal-cancel:active, .confirm-modal-confirm:active { transform: scale(0.97); }
+
     .note-modal {
         width: 100%; max-width: 640px; max-height: 85vh;
         overflow-y: auto;
@@ -624,26 +678,28 @@
             <button type="button" class="notes-chip" data-tag="{{ t }}">{{ t|title }}</button>
             {% endfor %}
         </div>
-        {% if show_trash %}
-        <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
-            <i data-lucide="arrow-left"></i>Back to notes
-        </a>
-        {% elif show_archived %}
-        <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
-            <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
-        </a>
-        <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
-            <i data-lucide="arrow-left"></i>Back to notes
-        </a>
-        {% else %}
-        <a href="{{ url_for('notes.notes_page', view='archived') }}" class="notes-archive-link">
-            <i data-lucide="archive"></i>Archived{{ ' (' + archived_count|string + ')' if archived_count }}
-        </a>
-        <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
-            <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
-        </a>
-        <button type="button" id="new-note-btn" class="notes-new-btn">+ New note</button>
-        {% endif %}
+        <div class="notes-toolbar-actions">
+            {% if show_trash %}
+            <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
+                <i data-lucide="arrow-left"></i>Back to notes
+            </a>
+            {% elif show_archived %}
+            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+                <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
+            </a>
+            <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
+                <i data-lucide="arrow-left"></i>Back to notes
+            </a>
+            {% else %}
+            <a href="{{ url_for('notes.notes_page', view='archived') }}" class="notes-archive-link">
+                <i data-lucide="archive"></i>Archived{{ ' (' + archived_count|string + ')' if archived_count }}
+            </a>
+            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+                <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
+            </a>
+            <button type="button" id="new-note-btn" class="notes-new-btn">+ New note</button>
+            {% endif %}
+        </div>
     </div>
 
     <div class="notes-section" id="pinned-section"{{ ' hidden' if not pinned_notes }}>
@@ -774,6 +830,18 @@
         <div class="notes-action-bar">
             <span class="notes-word-count" id="notes-word-count">0 words</span>
             <button type="button" class="notes-action-btn-delete{{ '' if show_trash else ' notes-action-btn-soft' }}" id="notes-delete-btn">{{ 'Delete forever' if show_trash else ('Move to trash' if show_archived else 'Archive') }}</button>
+        </div>
+    </div>
+</div>
+
+<div class="confirm-modal-backdrop" id="confirm-modal-backdrop" hidden>
+    <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="confirm-modal-icon"><i data-lucide="trash-2"></i></div>
+        <div class="confirm-modal-title" id="confirm-modal-title">Delete this note forever?</div>
+        <div class="confirm-modal-sub">This can't be undone.</div>
+        <div class="confirm-modal-actions">
+            <button type="button" class="confirm-modal-cancel" id="confirm-modal-cancel">Cancel</button>
+            <button type="button" class="confirm-modal-confirm" id="confirm-modal-confirm">Delete forever</button>
         </div>
     </div>
 </div>
@@ -1777,21 +1845,58 @@
     }
 
     // -----------------------------------------------------------------
+    // Confirm modal — in-app replacement for window.confirm(), which
+    // can't be themed and renders as a bare Chrome dialog rather than
+    // part of the app. Resolves true/false; only one confirmation is
+    // ever in flight at a time, which is all this app needs it for.
+    // -----------------------------------------------------------------
+    var confirmModalBackdrop = document.getElementById("confirm-modal-backdrop");
+    var confirmModalCancel = document.getElementById("confirm-modal-cancel");
+    var confirmModalConfirm = document.getElementById("confirm-modal-confirm");
+    var confirmModalResolve = null;
+
+    function showConfirmModal() {
+        confirmModalBackdrop.hidden = false;
+        refreshIcons();
+        confirmModalConfirm.focus();
+        return new Promise(function (resolve) {
+            confirmModalResolve = resolve;
+        });
+    }
+    function resolveConfirmModal(result) {
+        confirmModalBackdrop.hidden = true;
+        if (confirmModalResolve) {
+            confirmModalResolve(result);
+            confirmModalResolve = null;
+        }
+    }
+    confirmModalCancel.addEventListener("click", function () { resolveConfirmModal(false); });
+    confirmModalConfirm.addEventListener("click", function () { resolveConfirmModal(true); });
+    confirmModalBackdrop.addEventListener("click", function (e) {
+        if (e.target === confirmModalBackdrop) resolveConfirmModal(false);
+    });
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !confirmModalBackdrop.hidden) resolveConfirmModal(false);
+    });
+
+    // -----------------------------------------------------------------
     // Permanent delete — Trash view only, no undo (see /delete_note's
     // docstring: this is the one action that survives nothing).
     // -----------------------------------------------------------------
     function permanentlyDeleteNoteById(id, card) {
-        if (!window.confirm("Delete this note forever? This can't be undone.")) return;
-        fetch("/delete_note/" + id, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
-            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-            .then(function (result) {
-                if (!result.ok) { console.warn("Delete failed:", result.data && result.data.message); return; }
-                removeCardWithFade(card);
-                import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
-                    mod.showToast("Note deleted forever", "success", 4000);
-                });
-            })
-            .catch(function (err) { console.error("Network error deleting note:", err); });
+        showConfirmModal().then(function (confirmed) {
+            if (!confirmed) return;
+            fetch("/delete_note/" + id, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
+                .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+                .then(function (result) {
+                    if (!result.ok) { console.warn("Delete failed:", result.data && result.data.message); return; }
+                    removeCardWithFade(card);
+                    import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                        mod.showToast("Note deleted forever", "success", 4000);
+                    });
+                })
+                .catch(function (err) { console.error("Network error deleting note:", err); });
+        });
     }
 
     // Mirrors the card's merged trash button: what it does depends on
