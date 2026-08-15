@@ -15,7 +15,7 @@
     {% endif %}
 {% endwith %}
 
-{% macro note_card(note, index, show_archived) %}
+{% macro note_card(note, index, view) %}
 <div class="note-card"
      data-id="{{ note.id }}"
      data-tag="{{ note.tag or '' }}"
@@ -33,20 +33,35 @@
             <span class="note-tag-chip"{{ ' hidden' if not note.tag }}>{{ (note.tag or '')|title }}</span>
         </div>
         <div class="note-card-top-right">
-            <button type="button" class="note-archive-btn" data-archived="{{ 'true' if show_archived else 'false' }}"
-                    aria-label="{{ 'Unarchive note' if show_archived else 'Archive note' }}">
-                <i data-lucide="{{ 'archive-restore' if show_archived else 'archive' }}"></i>
+            {% if view != 'active' %}
+            <button type="button" class="note-archive-btn"
+                    aria-label="{{ 'Restore note' if view == 'trash' else 'Unarchive note' }}">
+                <i data-lucide="archive-restore"></i>
             </button>
-            <button type="button" class="note-delete-btn" aria-label="Delete note">
+            {% endif %}
+            {% if view == 'trash' %}
+            <button type="button" class="note-delete-btn" aria-label="Delete forever">
                 <i data-lucide="trash-2"></i>
             </button>
+            {% else %}
+            <button type="button" class="note-delete-btn note-delete-btn-soft"
+                    aria-label="{{ 'Move to trash' if view == 'archived' else 'Archive note' }}">
+                <i data-lucide="trash-2"></i>
+            </button>
+            {% endif %}
         </div>
     </div>
     <div class="note-card-title{{ ' untitled' if not note.title }}">{{ note.title or 'Untitled' }}</div>
     <div class="note-card-body"><p class="note-card-preview">{{ note.preview or '' }}</p></div>
+    {% if view == 'trash' %}
+    <div class="note-purge-pill" data-deleted-at="{{ note.deleted_at.isoformat() if note.deleted_at else '' }}">
+        <i data-lucide="clock"></i><span></span>
+    </div>
+    {% else %}
     <div class="note-due-pill" data-due="{{ note.due_date.isoformat() if note.due_date else '' }}"{{ ' hidden' if not note.due_date }}>
         <i data-lucide="calendar"></i><span></span>
     </div>
+    {% endif %}
     <template class="note-content-src">{{ note.content|safe }}</template>
 </div>
 {% endmacro %}
@@ -75,6 +90,7 @@
         color: var(--text-primary);
         margin-top: 4px;
     }
+    .notes-heading-sub { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
 
     .notes-toolbar-row {
         display: flex;
@@ -117,27 +133,36 @@
     .notes-chip.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
 
     .notes-archive-link {
+        box-sizing: border-box;
         margin-left: auto;
         display: inline-flex; align-items: center; gap: 6px;
-        font-size: 13px; font-weight: 500;
+        font-size: 13px; font-weight: 600; line-height: 1;
         color: var(--text-secondary);
         background: var(--bg-card);
         border: 1px solid var(--border-subtle);
         border-radius: 8px;
-        padding: 8px 14px;
+        padding: 9px 16px;
         text-decoration: none;
         white-space: nowrap;
         transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
-    .notes-archive-link i { width: 14px; height: 14px; }
+    /* lucide.createIcons() replaces the <i data-lucide> element with an
+       <svg> outright (not a child of it), so a selector targeting `i`
+       never matches post-render and the icon falls back to its default
+       24x24 size — inflating this button well past the New note button's
+       height. Target svg directly, matching the convention used
+       elsewhere in the app (e.g. .finance-stat-icon svg). */
+    .notes-archive-link svg { width: 14px; height: 14px; }
     .notes-archive-link:hover { background: var(--bg-hover); color: var(--text-primary); }
 
     .notes-new-btn {
+        box-sizing: border-box;
         background: var(--gold);
         color: #000;
         font-weight: 600;
         font-size: 13px;
-        border: none;
+        line-height: 1;
+        border: 1px solid var(--gold);
         border-radius: 8px;
         padding: 9px 16px;
         cursor: pointer;
@@ -252,6 +277,10 @@
     .note-delete-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-delete-btn { opacity: 0.85; }
     .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
+    /* In the active view this same trash icon archives rather than
+       permanently deletes, so its hover shouldn't read as destructive —
+       gold (matching the old dedicated archive button) instead of red. */
+    .note-delete-btn.note-delete-btn-soft:hover { color: var(--gold); }
 
     .note-archive-btn {
         background: none; border: none; padding: 8px; margin: -8px;
@@ -300,6 +329,20 @@
     .note-due-pill i { width: 11px; height: 11px; }
     .note-due-pill.overdue { color: var(--red); background: var(--red-dim); }
     .note-due-pill[hidden] { display: none; }
+
+    .note-purge-pill {
+        display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+        color: var(--text-secondary);
+        background: rgba(0, 0, 0, 0.05);
+        padding: 3px 8px; border-radius: 999px;
+    }
+    .dark .note-purge-pill { background: rgba(255, 255, 255, 0.07); }
+    .note-purge-pill i { width: 11px; height: 11px; }
+    /* Same soon-to-happen visual cue the overdue due-pill uses, past the
+       halfway point of the retention window rather than only right at 0. */
+    .note-purge-pill.soon { color: var(--red); background: var(--red-dim); }
+    .note-purge-pill[hidden] { display: none; }
 
     .note-card-add {
         align-items: center; justify-content: center;
@@ -538,6 +581,8 @@
     }
     .notes-autosave-indicator.visible { opacity: 1; }
     .notes-action-btn-delete { background: none; border: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 7px 10px; }
+    /* Archiving isn't destructive — red would misleadingly signal it is. */
+    .notes-action-btn-delete.notes-action-btn-soft { color: var(--gold); }
 
     @media (prefers-reduced-motion: reduce) {
         .note-card, .note-card-add, .note-modal, .note-modal-backdrop, .notes-chip,
@@ -553,8 +598,16 @@
 
 <div class="notes-page" id="notes-page"{{ ' hidden' if not (pinned_notes or other_notes) }}>
     <div class="notes-header-row">
-        <div class="eyebrow">Notes{{ ' — Archived' if show_archived }}</div>
-        <h1 class="notes-heading">{{ 'Notes you put away' if show_archived else "Everything you'd otherwise forget" }}</h1>
+        <div class="eyebrow">Notes{{ ' — Archived' if show_archived }}{{ ' — Trash' if show_trash }}</div>
+        <h1 class="notes-heading">
+            {% if show_trash %}Deleted notes
+            {% elif show_archived %}Notes you put away
+            {% else %}Everything you'd otherwise forget
+            {% endif %}
+        </h1>
+        {% if show_trash %}
+        <p class="notes-heading-sub">Permanently deleted after {{ trash_retention_days }} days.</p>
+        {% endif %}
     </div>
 
     <div class="notes-toolbar-row">
@@ -571,13 +624,23 @@
             <button type="button" class="notes-chip" data-tag="{{ t }}">{{ t|title }}</button>
             {% endfor %}
         </div>
-        {% if show_archived %}
+        {% if show_trash %}
+        <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
+            <i data-lucide="arrow-left"></i>Back to notes
+        </a>
+        {% elif show_archived %}
+        <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+            <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
+        </a>
         <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
             <i data-lucide="arrow-left"></i>Back to notes
         </a>
         {% else %}
         <a href="{{ url_for('notes.notes_page', view='archived') }}" class="notes-archive-link">
             <i data-lucide="archive"></i>Archived{{ ' (' + archived_count|string + ')' if archived_count }}
+        </a>
+        <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+            <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
         </a>
         <button type="button" id="new-note-btn" class="notes-new-btn">+ New note</button>
         {% endif %}
@@ -586,19 +649,19 @@
     <div class="notes-section" id="pinned-section"{{ ' hidden' if not pinned_notes }}>
         <div class="notes-section-label"><i data-lucide="pin"></i>Pinned</div>
         <div class="notes-grid" id="pinned-grid">
-            {% for note in pinned_notes %}{{ note_card(note, loop.index0, show_archived) }}{% endfor %}
+            {% for note in pinned_notes %}{{ note_card(note, loop.index0, view) }}{% endfor %}
         </div>
     </div>
 
     <div class="notes-section" id="all-section">
         <div class="notes-section-label"{{ ' hidden' if not pinned_notes }}><i data-lucide="layout-grid"></i>All notes</div>
         <div class="notes-grid" id="all-grid">
-            {% if not show_archived %}
+            {% if view == 'active' %}
             <div class="note-card note-card-add" id="ghost-add-card" tabindex="0" role="button" aria-label="Create new note">
                 <i data-lucide="plus"></i><span>New note</span>
             </div>
             {% endif %}
-            {% for note in other_notes %}{{ note_card(note, loop.index0, show_archived) }}{% endfor %}
+            {% for note in other_notes %}{{ note_card(note, loop.index0, view) }}{% endfor %}
         </div>
     </div>
 
@@ -610,10 +673,20 @@
 </div>
 
 <div class="notes-empty-state" id="notes-empty-state"{{ '' if not (pinned_notes or other_notes) else ' hidden' }}>
-    <div class="notes-empty-icon"><i data-lucide="{{ 'archive' if show_archived else 'notebook-pen' }}"></i></div>
-    <div class="notes-empty-title">{{ 'No archived notes' if show_archived else 'No notes yet' }}</div>
-    <div class="notes-empty-sub">{{ "Notes you archive will show up here." if show_archived else "Notes are for the ideas that don't fit anywhere else." }}</div>
-    {% if show_archived %}
+    <div class="notes-empty-icon"><i data-lucide="{{ 'trash-2' if show_trash else ('archive' if show_archived else 'notebook-pen') }}"></i></div>
+    <div class="notes-empty-title">
+        {% if show_trash %}Trash is empty
+        {% elif show_archived %}No archived notes
+        {% else %}No notes yet
+        {% endif %}
+    </div>
+    <div class="notes-empty-sub">
+        {% if show_trash %}Notes you delete from Archived land here for {{ trash_retention_days }} days before they're gone for good.
+        {% elif show_archived %}Notes you archive will show up here.
+        {% else %}Notes are for the ideas that don't fit anywhere else.
+        {% endif %}
+    </div>
+    {% if view != 'active' %}
     <a href="{{ url_for('notes.notes_page') }}" class="notes-empty-cta">Back to notes</a>
     {% else %}
     <button type="button" class="notes-empty-cta" id="notes-empty-cta">+ Create your first note</button>
@@ -628,10 +701,12 @@
             <button type="button" class="note-modal-pin-btn" id="note-modal-pin-btn" aria-pressed="false" aria-label="Pin note">
                 <i data-lucide="pin"></i>
             </button>
+            {% if view != 'active' %}
             <button type="button" class="note-modal-pin-btn" id="note-modal-archive-btn"
-                    aria-label="{{ 'Unarchive note' if show_archived else 'Archive note' }}">
-                <i data-lucide="{{ 'archive-restore' if show_archived else 'archive' }}"></i>
+                    aria-label="{{ 'Restore note' if show_trash else 'Unarchive note' }}">
+                <i data-lucide="archive-restore"></i>
             </button>
+            {% endif %}
             <button type="button" class="note-modal-close" id="note-modal-close" aria-label="Close">
                 <i data-lucide="x"></i>
             </button>
@@ -698,7 +773,7 @@
 
         <div class="notes-action-bar">
             <span class="notes-word-count" id="notes-word-count">0 words</span>
-            <button type="button" class="notes-action-btn-delete" id="notes-delete-btn">Delete</button>
+            <button type="button" class="notes-action-btn-delete{{ '' if show_trash else ' notes-action-btn-soft' }}" id="notes-delete-btn">{{ 'Delete forever' if show_trash else ('Move to trash' if show_archived else 'Archive') }}</button>
         </div>
     </div>
 </div>
@@ -706,10 +781,12 @@
 <script>
 (function () {
     var NOTE_COLORS = {{ note_colors|tojson }};
-    // Page-level context (not per-note) — which button/icon the archive
-    // toggle shows, and whether the "+ New note" affordances exist at all
-    // (they're server-omitted from the DOM entirely in the archived view).
-    var showArchived = {{ 'true' if show_archived else 'false' }};
+    // Page-level context (not per-note) — "active" | "archived" | "trash".
+    // Drives which button/icon each card shows and what its actions do,
+    // and whether the "+ New note" affordances exist at all (they're
+    // server-omitted from the DOM entirely outside the active view).
+    var currentView = {{ view|tojson }};
+    var TRASH_RETENTION_DAYS = {{ trash_retention_days }};
 
     var notesPageEl = document.getElementById("notes-page");
     var pinnedSection = document.getElementById("pinned-section");
@@ -851,6 +928,21 @@
         pillEl.classList.toggle("overdue", info.overdue);
     }
 
+    // Trash-view-only countdown to permanent deletion.
+    function applyPurgePill(pillEl, deletedAtIso) {
+        if (!deletedAtIso) { pillEl.hidden = true; return; }
+        var purgeAt = new Date(deletedAtIso);
+        purgeAt.setDate(purgeAt.getDate() + TRASH_RETENTION_DAYS);
+        var daysLeft = Math.max(0, Math.ceil((purgeAt - new Date()) / 86400000));
+        var text;
+        if (daysLeft === 0) text = "Deletes today";
+        else if (daysLeft === 1) text = "Deletes tomorrow";
+        else text = "Deletes in " + daysLeft + " days";
+        pillEl.hidden = false;
+        pillEl.querySelector("span").textContent = text;
+        pillEl.classList.toggle("soon", daysLeft <= 7);
+    }
+
     // -----------------------------------------------------------------
     // Card body (preview text or read-only checklist)
     // -----------------------------------------------------------------
@@ -982,9 +1074,11 @@
             var oldBody = card.querySelector(".note-card-body");
             var newBody = buildCardBodyEl(contentHtml, oldBody ? oldBody.textContent : "");
             if (oldBody) card.replaceChild(newBody, oldBody);
-            else card.insertBefore(newBody, card.querySelector(".note-due-pill"));
+            else card.insertBefore(newBody, card.querySelector(".note-due-pill, .note-purge-pill"));
             var duePill = card.querySelector(".note-due-pill");
             if (duePill) applyDuePill(duePill, duePill.dataset.due);
+            var purgePill = card.querySelector(".note-purge-pill");
+            if (purgePill) applyPurgePill(purgePill, purgePill.dataset.deletedAt);
         });
     }
 
@@ -1006,16 +1100,34 @@
             e.stopPropagation();
             togglePin(card.dataset.id, !(card.dataset.pinned === "true"));
         });
+        // What the trash icon does depends entirely on which view it's
+        // sitting in: active archives (soft, reversible any time from
+        // Archived), archived moves to Trash (soft, reversible for 30
+        // days), trash is the one place it's actually final.
         var deleteBtnOnCard = card.querySelector(".note-delete-btn");
         deleteBtnOnCard.addEventListener("click", function (e) {
             e.stopPropagation();
-            deleteNoteById(card.dataset.id, card);
+            if (currentView === "trash") {
+                permanentlyDeleteNoteById(card.dataset.id, card);
+            } else if (currentView === "archived") {
+                trashNoteById(card.dataset.id, card, true);
+            } else {
+                archiveNoteById(card.dataset.id, card, true);
+            }
         });
+        // Restore button — only present outside the active view. Means
+        // "unarchive" in Archived, "un-trash" (back to Archived) in Trash.
         var archiveBtnOnCard = card.querySelector(".note-archive-btn");
-        archiveBtnOnCard.addEventListener("click", function (e) {
-            e.stopPropagation();
-            archiveNoteById(card.dataset.id, card, !showArchived);
-        });
+        if (archiveBtnOnCard) {
+            archiveBtnOnCard.addEventListener("click", function (e) {
+                e.stopPropagation();
+                if (currentView === "trash") {
+                    trashNoteById(card.dataset.id, card, false);
+                } else {
+                    archiveNoteById(card.dataset.id, card, false);
+                }
+            });
+        }
     }
 
     function buildNoteCard(note, index) {
@@ -1046,20 +1158,24 @@
         tagChip.textContent = note.tag ? note.tag.charAt(0).toUpperCase() + note.tag.slice(1) : "";
         var topRight = document.createElement("div");
         topRight.className = "note-card-top-right";
-        var archiveBtnEl = document.createElement("button");
-        archiveBtnEl.type = "button";
-        archiveBtnEl.className = "note-archive-btn";
-        archiveBtnEl.dataset.archived = showArchived ? "true" : "false";
-        archiveBtnEl.setAttribute("aria-label", showArchived ? "Unarchive note" : "Archive note");
-        archiveBtnEl.innerHTML = '<i data-lucide="' + (showArchived ? "archive-restore" : "archive") + '"></i>';
+        // Only outside the active view is there a dedicated restore
+        // button — in the active view, the trash icon itself archives
+        // (see attachCardListeners).
+        if (currentView !== "active") {
+            var archiveBtnEl = document.createElement("button");
+            archiveBtnEl.type = "button";
+            archiveBtnEl.className = "note-archive-btn";
+            archiveBtnEl.setAttribute("aria-label", currentView === "trash" ? "Restore note" : "Unarchive note");
+            archiveBtnEl.innerHTML = '<i data-lucide="archive-restore"></i>';
+            topRight.appendChild(archiveBtnEl);
+        }
         var deleteBtnEl = document.createElement("button");
         deleteBtnEl.type = "button";
-        deleteBtnEl.className = "note-delete-btn";
-        deleteBtnEl.setAttribute("aria-label", "Delete note");
+        deleteBtnEl.className = "note-delete-btn" + (currentView === "trash" ? "" : " note-delete-btn-soft");
+        deleteBtnEl.setAttribute("aria-label", currentView === "trash" ? "Delete forever" : (currentView === "archived" ? "Move to trash" : "Archive note"));
         deleteBtnEl.innerHTML = '<i data-lucide="trash-2"></i>';
         topLeft.appendChild(pinBtn);
         topLeft.appendChild(tagChip);
-        topRight.appendChild(archiveBtnEl);
         topRight.appendChild(deleteBtnEl);
         top.appendChild(topLeft);
         top.appendChild(topRight);
@@ -1070,15 +1186,23 @@
 
         var body = buildCardBodyEl(note.content, note.preview);
 
-        var duePill = document.createElement("div");
-        duePill.className = "note-due-pill";
-        duePill.innerHTML = '<i data-lucide="calendar"></i><span></span>';
-
         card.appendChild(top);
         card.appendChild(title);
         card.appendChild(body);
-        card.appendChild(duePill);
-        applyDuePill(duePill, note.due_date);
+
+        if (currentView === "trash") {
+            var purgePill = document.createElement("div");
+            purgePill.className = "note-purge-pill";
+            purgePill.innerHTML = '<i data-lucide="clock"></i><span></span>';
+            card.appendChild(purgePill);
+            applyPurgePill(purgePill, note.deleted_at);
+        } else {
+            var duePill = document.createElement("div");
+            duePill.className = "note-due-pill";
+            duePill.innerHTML = '<i data-lucide="calendar"></i><span></span>';
+            card.appendChild(duePill);
+            applyDuePill(duePill, note.due_date);
+        }
 
         attachCardListeners(card);
         // Not refreshIcons() here — the card is still detached from the
@@ -1515,61 +1639,49 @@
     }
 
     // -----------------------------------------------------------------
-    // Delete + undo
+    // Shared fade-out-and-remove used by every "this note leaves the
+    // current view" action (archive, trash, restore, permanent delete) —
+    // the only things that differ between them are the request and the
+    // toast, not how the card disappears.
     // -----------------------------------------------------------------
-    function undoDelete() {
-        fetch("/undo_delete_note", { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
-            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-            .then(function (result) {
-                if (!result.ok) return;
-                revealNotesPage();
-                var note = result.data;
-                var card = buildNoteCard(note, 0);
-                if (note.pinned) {
-                    pinnedGrid.insertBefore(card, pinnedGrid.firstChild);
-                } else {
-                    insertAtTopOfAllGrid(card);
-                }
-                refreshIcons();
-                updatePinnedVisibility();
-                applyFilterToCard(card);
-            })
-            .catch(function (err) { console.error("Error restoring note:", err); });
+    function removeCardWithFade(card) {
+        if (!card) return;
+        card.classList.add("removing");
+        var removed = false;
+        var remove = function () {
+            if (removed) return;
+            removed = true;
+            card.remove();
+            updatePinnedVisibility();
+        };
+        if (prefersReducedMotion()) {
+            remove();
+        } else {
+            card.addEventListener("transitionend", function handler(e) {
+                if (e.propertyName !== "opacity") return;
+                card.removeEventListener("transitionend", handler);
+                remove();
+            });
+            // Safety net: if the transition never fires (e.g. an in-flight
+            // state left opacity with nothing to animate from), don't
+            // leave a dead card behind.
+            setTimeout(remove, 400);
+        }
     }
 
-    function deleteNoteById(idToDelete, card) {
-        fetch("/delete_note/" + idToDelete, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
-            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-            .then(function (result) {
-                if (!result.ok) { console.warn("Delete failed:", result.data && result.data.message); return; }
-                if (card) {
-                    card.classList.add("removing");
-                    var removed = false;
-                    var remove = function () {
-                        if (removed) return;
-                        removed = true;
-                        card.remove();
-                        updatePinnedVisibility();
-                    };
-                    if (prefersReducedMotion()) {
-                        remove();
-                    } else {
-                        card.addEventListener("transitionend", function handler(e) {
-                            if (e.propertyName !== "opacity") return;
-                            card.removeEventListener("transitionend", handler);
-                            remove();
-                        });
-                        // Safety net: if the transition never fires (e.g. an
-                        // in-flight state left opacity with nothing to
-                        // animate from), don't leave a dead card behind.
-                        setTimeout(remove, 400);
-                    }
-                }
-                import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
-                    mod.showToast("Note deleted", "success", 6000, { actionText: "Undo", onAction: undoDelete });
-                });
-            })
-            .catch(function (err) { console.error("Network error deleting note:", err); });
+    // Reinserts a note into the grid it belongs in for the *current* view
+    // — shared by every undo path (archive/unarchive, trash/restore).
+    function reinsertCard(note) {
+        revealNotesPage();
+        var card = buildNoteCard(note, 0);
+        if (note.pinned && currentView === "active") {
+            pinnedGrid.insertBefore(card, pinnedGrid.firstChild);
+        } else {
+            insertAtTopOfAllGrid(card);
+        }
+        refreshIcons();
+        updatePinnedVisibility();
+        applyFilterToCard(card);
     }
 
     // -----------------------------------------------------------------
@@ -1578,8 +1690,8 @@
     // `archiving` is the value the note's archived flag is being set TO.
     // Both directions leave the current view (a just-archived note has no
     // business in the active grid; a just-restored one has no business in
-    // the archived grid), so both reuse the same fade-out-and-remove path
-    // as delete — the only difference is the PATCH body and the toast text.
+    // the archived grid), so both fade the card out the same way — only
+    // the PATCH body and toast text differ.
     function archiveNoteById(id, card, archiving) {
         fetch("/notes/" + id + "/update", {
             method: "PATCH",
@@ -1590,26 +1702,7 @@
             .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
             .then(function (result) {
                 if (!result.ok) { console.warn("Archive toggle failed:", result.data && result.data.message); return; }
-                if (card) {
-                    card.classList.add("removing");
-                    var removed = false;
-                    var remove = function () {
-                        if (removed) return;
-                        removed = true;
-                        card.remove();
-                        updatePinnedVisibility();
-                    };
-                    if (prefersReducedMotion()) {
-                        remove();
-                    } else {
-                        card.addEventListener("transitionend", function handler(e) {
-                            if (e.propertyName !== "opacity") return;
-                            card.removeEventListener("transitionend", handler);
-                            remove();
-                        });
-                        setTimeout(remove, 400);
-                    }
-                }
+                removeCardWithFade(card);
                 import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
                     mod.showToast(archiving ? "Note archived" : "Note restored", "success", 6000, {
                         actionText: "Undo",
@@ -1634,36 +1727,104 @@
                 // Only reappear if the restored state actually belongs in
                 // *this* view — undoing while still looking at the view the
                 // note left is the only case that should bring it back.
-                if (Boolean(note.archived) !== showArchived) return;
-                revealNotesPage();
-                var card = buildNoteCard(note, 0);
-                if (note.pinned && !showArchived) {
-                    pinnedGrid.insertBefore(card, pinnedGrid.firstChild);
-                } else {
-                    insertAtTopOfAllGrid(card);
-                }
-                refreshIcons();
-                updatePinnedVisibility();
-                applyFilterToCard(card);
+                if (Boolean(note.archived) !== (currentView === "archived")) return;
+                reinsertCard(note);
             })
             .catch(function (err) { console.error("Error undoing archive toggle:", err); });
     }
 
-    deleteBtn.addEventListener("click", function () {
-        if (!currentNoteId) return;
-        var idToDelete = currentNoteId;
-        var card = document.querySelector('.note-card[data-id="' + idToDelete + '"]');
-        closeNoteModal();
-        deleteNoteById(idToDelete, card);
-    });
+    // -----------------------------------------------------------------
+    // Trash + restore-from-trash
+    // -----------------------------------------------------------------
+    // `trashing` is the value the note's trashed state is being set TO.
+    // Mirrors archiveNoteById exactly — see its comment above.
+    function trashNoteById(id, card, trashing) {
+        fetch("/notes/" + id + "/update", {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: Object.assign({ "Content-Type": "application/json" }, csrfHeaders()),
+            body: JSON.stringify({ deleted: trashing }),
+        })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+                if (!result.ok) { console.warn("Trash toggle failed:", result.data && result.data.message); return; }
+                removeCardWithFade(card);
+                import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                    mod.showToast(trashing ? "Note moved to trash" : "Note restored to Archived", "success", 6000, {
+                        actionText: "Undo",
+                        onAction: function () { undoTrashToggle(id, !trashing); },
+                    });
+                });
+            })
+            .catch(function (err) { console.error("Network error toggling trash:", err); });
+    }
 
-    modalArchiveBtn.addEventListener("click", function () {
+    function undoTrashToggle(id, restoreDeleted) {
+        fetch("/notes/" + id + "/update", {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: Object.assign({ "Content-Type": "application/json" }, csrfHeaders()),
+            body: JSON.stringify({ deleted: restoreDeleted }),
+        })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+                if (!result.ok) return;
+                var note = result.data;
+                if (Boolean(note.deleted_at) !== (currentView === "trash")) return;
+                reinsertCard(note);
+            })
+            .catch(function (err) { console.error("Error undoing trash toggle:", err); });
+    }
+
+    // -----------------------------------------------------------------
+    // Permanent delete — Trash view only, no undo (see /delete_note's
+    // docstring: this is the one action that survives nothing).
+    // -----------------------------------------------------------------
+    function permanentlyDeleteNoteById(id, card) {
+        if (!window.confirm("Delete this note forever? This can't be undone.")) return;
+        fetch("/delete_note/" + id, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+                if (!result.ok) { console.warn("Delete failed:", result.data && result.data.message); return; }
+                removeCardWithFade(card);
+                import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                    mod.showToast("Note deleted forever", "success", 4000);
+                });
+            })
+            .catch(function (err) { console.error("Network error deleting note:", err); });
+    }
+
+    // Mirrors the card's merged trash button: what it does depends on
+    // which view the modal was opened from.
+    deleteBtn.addEventListener("click", function () {
         if (!currentNoteId) return;
         var id = currentNoteId;
         var card = document.querySelector('.note-card[data-id="' + id + '"]');
         closeNoteModal();
-        archiveNoteById(id, card, !showArchived);
+        if (currentView === "trash") {
+            permanentlyDeleteNoteById(id, card);
+        } else if (currentView === "archived") {
+            trashNoteById(id, card, true);
+        } else {
+            archiveNoteById(id, card, true);
+        }
     });
+
+    // Only rendered outside the active view. Means "unarchive" in
+    // Archived, "un-trash" (back to Archived) in Trash.
+    if (modalArchiveBtn) {
+        modalArchiveBtn.addEventListener("click", function () {
+            if (!currentNoteId) return;
+            var id = currentNoteId;
+            var card = document.querySelector('.note-card[data-id="' + id + '"]');
+            closeNoteModal();
+            if (currentView === "trash") {
+                trashNoteById(id, card, false);
+            } else {
+                archiveNoteById(id, card, false);
+            }
+        });
+    }
 
     // -----------------------------------------------------------------
     // Filtering (search + tag chip), combined with AND

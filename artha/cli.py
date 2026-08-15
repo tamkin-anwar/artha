@@ -19,12 +19,13 @@ schedule until someone noticed and updated it there too.
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import click
 from flask import current_app
 
 from .blueprints.dashboard.routes import _next_due_date
+from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
 from .models import Note, PushSubscription, Transaction
 from .services.push_service import send_push
@@ -107,3 +108,26 @@ def register_cli(app):
             f"Sent {sent}, skipped {skipped} (already notified today), "
             f"pruned {pruned} dead subscriptions, {failed} failed (will retry next run)."
         )
+
+    @app.cli.command("purge-expired-trash")
+    def purge_expired_trash():
+        """Permanently delete notes that have sat in Trash past
+        TRASH_RETENTION_DAYS, across all users.
+
+        Not strictly required: notes.routes._purge_expired_trash already
+        does this lazily for a given user on every /notes page load, so
+        the 30-day promise holds on its own for anyone who reopens Notes.
+        This command exists for the same reason send-renewal-reminders
+        does — an optional daily Render Cron Job (`flask
+        purge-expired-trash`) gives a hard guarantee even for accounts
+        that never revisit Notes long enough to trigger the lazy sweep.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
+        expired = Note.query.filter(
+            Note.deleted_at.isnot(None), Note.deleted_at < cutoff
+        ).all()
+        count = len(expired)
+        for note in expired:
+            db.session.delete(note)
+        db.session.commit()
+        click.echo(f"Purged {count} note(s) from trash.")

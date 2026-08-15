@@ -48,18 +48,17 @@ def test_unarchiving_restores_note_to_default_view(app, auth_client, user):
     assert "Coming back" in body
 
 
-def test_delete_then_undo_preserves_archived_flag(app, auth_client, user):
+def test_delete_note_from_archived_view_is_now_permanent(app, auth_client, user):
+    # /delete_note is real, unconditional deletion now — moving a note to
+    # Trash (the reversible step) is a PATCH {deleted: true} via
+    # update_note_fields, exercised in test_notes_trash.py. This endpoint
+    # is only ever reached from the Trash view's "Delete forever" button.
     note = _make_note(user, title="Filed away", archived=True)
-    resp = auth_client.post(f"/delete_note/{note.id}", headers={"X-Requested-With": "XMLHttpRequest"})
+    note_id = note.id
+    resp = auth_client.post(f"/delete_note/{note_id}", headers={"X-Requested-With": "XMLHttpRequest"})
     assert resp.status_code == 200
 
-    undo_resp = auth_client.post("/undo_delete_note")
-    assert undo_resp.status_code == 200
-    data = undo_resp.get_json()
-    assert data["archived"] is True
-
-    restored = db.session.get(Note, data["id"])
-    assert restored.archived is True
+    assert db.session.get(Note, note_id) is None
 
 
 def test_archived_notes_dont_appear_in_active_filter_chip_tags(app, auth_client, user):

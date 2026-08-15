@@ -25,6 +25,15 @@ class Note(db.Model):
     archived = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.false()
     )
+    # Trash. NULL = not trashed; set = the note was moved to Trash at this
+    # timestamp and is purged 30 days later (see cli.purge_expired_trash and
+    # notes.routes._purge_expired_trash, the lazy on-page-load sweep that
+    # makes that 30-day promise hold even without a cron configured).
+    # Restoring from Trash always clears this and leaves `archived` alone
+    # (it's set True the moment a note is trashed), so a restored note
+    # lands back in Archived, never Active — the one predictable place
+    # given Trash is only ever reached by trashing an already-archived note.
+    deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     # color: small fixed vocabulary (NOTE_COLORS in
     # artha.blueprints.notes.routes) rather than a DB enum, so the set can
     # change without an alter-type migration. tag: free text, normalized

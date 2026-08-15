@@ -1,8 +1,7 @@
-import time
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import render_template, redirect, url_for, request, flash, session, jsonify
+from flask import render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
@@ -12,6 +11,11 @@ from ...utils import is_ajax_request, derive_title_and_preview
 from . import notes_bp
 
 log = logging.getLogger(__name__)
+
+# How long a note sits in Trash before it's gone for good. Matches Gmail's
+# Trash retention (Archive itself, deliberately, never expires — see
+# Note.deleted_at's docstring).
+TRASH_RETENTION_DAYS = 30
 
 # note.color stays a small fixed vocabulary (each value maps to real CSS,
 # not just a label) — enforced here rather than as a DB enum so the set
@@ -39,18 +43,20 @@ def _normalize_tag(raw):
     return tag or None
 
 
-def _user_tags(user_id, archived=None):
+def _user_tags(user_id, archived=None, trashed=None):
     """Tags this user has actually put on a note at least once — drives
     the Notes page's filter chips, which should only ever offer a filter
     that has something behind it, never a dead pill for an unused tag.
-    `archived` scopes to the active or archived set (matching whichever
-    view is asking); left as None (all notes) for callers like
-    _tag_suggestions that want the full breadth regardless of view."""
+    `archived`/`trashed` scope to whichever view is asking; left as None
+    (no filter on that axis) for callers like _tag_suggestions that want
+    the full breadth regardless of view."""
     query = db.session.query(Note.tag).filter(
         Note.user_id == user_id, Note.tag.isnot(None), Note.tag != ""
     )
     if archived is not None:
         query = query.filter(Note.archived == archived)
+    if trashed is not None:
+        query = query.filter(Note.deleted_at.isnot(None) if trashed else Note.deleted_at.is_(None))
     rows = query.distinct().all()
     return sorted({t for (t,) in rows})
 
@@ -72,10 +78,27 @@ def _serialize_note(note):
         "preview": note.preview,
         "pinned": bool(note.pinned),
         "archived": bool(note.archived),
+        "deleted_at": note.deleted_at.isoformat() if note.deleted_at else None,
         "color": note.color,
         "tag": note.tag,
         "due_date": note.due_date.isoformat() if note.due_date else None,
     }
+
+
+def _purge_expired_trash(user_id):
+    """Permanently delete this user's notes that have sat in Trash past
+    TRASH_RETENTION_DAYS. Called on every /notes page load so the 30-day
+    promise holds without requiring a cron to be configured — see
+    cli.purge_expired_trash for the optional, all-users cron version of
+    the same cleanup (belt and suspenders for accounts that never revisit
+    Notes long enough to trigger this)."""
+    cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
+    Note.query.filter(
+        Note.user_id == user_id,
+        Note.deleted_at.isnot(None),
+        Note.deleted_at < cutoff,
+    ).delete(synchronize_session=False)
+    db.session.commit()
 
 
 def _parse_due_date(raw):
@@ -127,39 +150,65 @@ def notes_page():
 
         return redirect(url_for("notes.notes_page"))
 
-    # Archived notes live behind their own view (?view=archived) rather
-    # than a client-side filter — they're excluded at the query level so
-    # they never round-trip to the browser as part of the normal page.
-    show_archived = request.args.get("view") == "archived"
+    _purge_expired_trash(current_user.id)
 
-    notes = (
-        Note.query.filter_by(user_id=current_user.id, archived=show_archived)
-        # Newest first (by creation order) rather than oldest first —
-        # matches Keep/Notes/Notion convention so a just-created note is
-        # immediately visible without scrolling past everything else.
-        .order_by(Note.pinned.desc(), Note.position.desc(), Note.id.desc())
-        .all()
-    )
-    if show_archived:
-        # Pinning only matters for notes still in active rotation — the
-        # archived view is a single flat grid, no Pinned/All split.
+    # Archived/Trash each live behind their own view (?view=archived,
+    # ?view=trash) rather than a client-side filter — excluded at the
+    # query level so they never round-trip to the browser as part of the
+    # normal page. Anything else in the `view` param falls back to the
+    # active view rather than erroring.
+    view = request.args.get("view")
+    if view not in ("archived", "trash"):
+        view = "active"
+    show_archived = view == "archived"
+    show_trash = view == "trash"
+
+    base_query = Note.query.filter_by(user_id=current_user.id)
+    if show_trash:
+        # Newest-trashed first — matches how Gmail/Keep order Trash, and
+        # puts whatever you just deleted right at the top.
+        notes = (
+            base_query.filter(Note.deleted_at.isnot(None))
+            .order_by(Note.deleted_at.desc())
+            .all()
+        )
+    else:
+        notes = (
+            base_query.filter(Note.deleted_at.is_(None), Note.archived == show_archived)
+            # Newest first (by creation order) rather than oldest first —
+            # matches Keep/Notes/Notion convention so a just-created note
+            # is immediately visible without scrolling past everything
+            # else.
+            .order_by(Note.pinned.desc(), Note.position.desc(), Note.id.desc())
+            .all()
+        )
+
+    if show_archived or show_trash:
+        # Pinning only matters for notes still in active rotation — both
+        # of these are single flat grids, no Pinned/All split.
         pinned_notes = []
         other_notes = notes
     else:
         pinned_notes = [n for n in notes if n.pinned]
         other_notes = [n for n in notes if not n.pinned]
 
-    archived_count = Note.query.filter_by(user_id=current_user.id, archived=True).count()
+    not_trashed = Note.deleted_at.is_(None)
+    archived_count = Note.query.filter_by(user_id=current_user.id, archived=True).filter(not_trashed).count()
+    trash_count = Note.query.filter_by(user_id=current_user.id).filter(Note.deleted_at.isnot(None)).count()
 
     return render_template(
         "notes.html",
         pinned_notes=pinned_notes,
         other_notes=other_notes,
-        note_tags=_user_tags(current_user.id, archived=show_archived),
+        note_tags=_user_tags(current_user.id, archived=(None if show_trash else show_archived), trashed=show_trash),
         tag_suggestions=_tag_suggestions(current_user.id),
         note_colors=sorted(NOTE_COLORS),
+        view=view,
         show_archived=show_archived,
+        show_trash=show_trash,
         archived_count=archived_count,
+        trash_count=trash_count,
+        trash_retention_days=TRASH_RETENTION_DAYS,
     )
 
 
@@ -251,6 +300,17 @@ def update_note_fields(note_id):
 
     if "archived" in data:
         note.archived = bool(data.get("archived"))
+
+    # Trash toggle. Moving to trash always leaves the note archived too
+    # (it's set True unconditionally here, not just left alone) so that
+    # restoring it later has exactly one predictable destination —
+    # Archived — regardless of what triggered the trashing.
+    if "deleted" in data:
+        if data.get("deleted"):
+            note.deleted_at = datetime.utcnow()
+            note.archived = True
+        else:
+            note.deleted_at = None
 
     if "color" in data:
         color = data.get("color")
@@ -344,6 +404,11 @@ def reorder_notes():
 @notes_bp.route("/delete_note/<int:note_id>", methods=["POST"])
 @login_required
 def delete_note(note_id):
+    """Permanent, no-undo deletion — only ever reachable from the Trash
+    view (a note has to survive being archived, then trashed, then
+    explicitly deleted-forever to get here) or the purge job. Everything
+    short of that is a reversible `deleted_at`/`archived` toggle via
+    update_note_fields, not a real row deletion."""
     note = db.session.get(Note, note_id)
     if note is None:
         if is_ajax_request():
@@ -357,26 +422,12 @@ def delete_note(note_id):
         flash("Unauthorized action", "error")
         return redirect(url_for("dashboard.index"))
 
-    session["last_deleted_note"] = {
-        "user_id": note.user_id,
-        "title": note.title,
-        "content": note.content,
-        "preview": note.preview,
-        "position": int(note.position or 0),
-        "pinned": bool(note.pinned),
-        "archived": bool(note.archived),
-        "color": note.color,
-        "tag": note.tag,
-        "due_date": note.due_date.isoformat() if note.due_date else None,
-        "deleted_at": time.time(),
-    }
-
     try:
         db.session.delete(note)
         db.session.commit()
         if is_ajax_request():
-            return jsonify({"message": "Note deleted", "can_undo": True})
-        flash("Note deleted.", "success")
+            return jsonify({"message": "Note permanently deleted"})
+        flash("Note permanently deleted.", "success")
         return redirect(url_for("dashboard.index"))
     except Exception as e:
         db.session.rollback()
@@ -385,58 +436,3 @@ def delete_note(note_id):
             return jsonify({"message": "Error deleting note"}), 500
         flash("Error deleting note", "error")
         return redirect(url_for("dashboard.index"))
-
-
-@notes_bp.route("/undo_delete_note", methods=["POST"])
-@login_required
-def undo_delete_note():
-    data = session.get("last_deleted_note")
-
-    if not data or data.get("user_id") != current_user.id:
-        return jsonify({"message": "Nothing to undo."}), 400
-
-    if time.time() - float(data.get("deleted_at", 0)) > 10:
-        session.pop("last_deleted_note", None)
-        return jsonify({"message": "Undo window expired."}), 400
-
-    try:
-        restored_pos = int(data.get("position") or 0)
-        if restored_pos <= 0:
-            max_pos = (
-                db.session.query(func.max(Note.position))
-                .filter_by(user_id=current_user.id)
-                .scalar()
-                or 0
-            )
-            restored_pos = int(max_pos) + 1
-        else:
-            Note.query.filter(
-                Note.user_id == current_user.id,
-                Note.position >= restored_pos,
-            ).update({Note.position: Note.position + 1}, synchronize_session=False)
-
-        restored = Note(
-            title=data.get("title"),
-            content=data["content"],
-            preview=data.get("preview"),
-            user_id=current_user.id,
-            position=restored_pos,
-            pinned=bool(data.get("pinned")),
-            archived=bool(data.get("archived")),
-            color=data.get("color"),
-            tag=data.get("tag"),
-            due_date=_parse_due_date(data.get("due_date")),
-        )
-        db.session.add(restored)
-        db.session.commit()
-        session.pop("last_deleted_note", None)
-
-        return jsonify({
-            "message": "Note restored.",
-            **_serialize_note(restored),
-            "created_at": restored.created_at.strftime("%b %d, %Y") if restored.created_at else None,
-        })
-    except Exception as e:
-        db.session.rollback()
-        log.error("Error undoing note delete: %s", e, exc_info=True)
-        return jsonify({"message": "Error restoring note"}), 500
