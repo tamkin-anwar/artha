@@ -796,6 +796,71 @@
     // -----------------------------------------------------------------
     // Card body (preview text or read-only checklist)
     // -----------------------------------------------------------------
+    // Inline marks worth carrying into the card preview — the same set the
+    // toolbar's bold/italic/underline/strikethrough/code buttons produce
+    // (execCommand's exact tag varies by browser, hence both b/strong,
+    // i/em, s/strike/del). Block-level structure (headings, lists, quotes)
+    // is intentionally flattened, same as the server-side preview — only
+    // inline formatting survives into the excerpt.
+    var INLINE_PREVIEW_TAGS = {
+        B: "b", STRONG: "strong", I: "i", EM: "em", U: "u",
+        S: "s", STRIKE: "s", DEL: "s", CODE: "code",
+    };
+    var BLOCK_PREVIEW_TAGS = /^(P|DIV|LI|UL|OL|H1|H2|H3|BLOCKQUOTE|HR|BR)$/;
+
+    function buildInlinePreviewHtml(root, maxLen) {
+        var out = "";
+        var len = 0;
+        var truncated = false;
+
+        function visit(node) {
+            if (truncated) return;
+            if (node.nodeType === Node.TEXT_NODE) {
+                var text = node.textContent.replace(/​/g, "").replace(/[ \t\r\n]+/g, " ");
+                if (!text) return;
+                var remaining = maxLen - len;
+                if (remaining <= 0) { truncated = true; return; }
+                if (text.length > remaining) {
+                    var cut = text.slice(0, remaining);
+                    var lastSpace = cut.lastIndexOf(" ");
+                    if (lastSpace > 0) cut = cut.slice(0, lastSpace);
+                    out += escapeHtml(cut);
+                    len += cut.length;
+                    truncated = true;
+                    return;
+                }
+                out += escapeHtml(text);
+                len += text.length;
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            var tag = node.tagName;
+            if (tag === "INPUT") return;
+            var mapped = INLINE_PREVIEW_TAGS[tag];
+            var isBlock = BLOCK_PREVIEW_TAGS.test(tag);
+            var i;
+            if (mapped) {
+                out += "<" + mapped + ">";
+                for (i = 0; i < node.childNodes.length; i++) visit(node.childNodes[i]);
+                out += "</" + mapped + ">";
+            } else {
+                for (i = 0; i < node.childNodes.length; i++) visit(node.childNodes[i]);
+                // Block boundaries collapse to a single space, matching the
+                // server-side preview's whitespace flattening, so words from
+                // adjacent blocks (e.g. two paragraphs) don't run together.
+                if (isBlock && !truncated && len < maxLen && out && !/\s$/.test(out)) {
+                    out += " ";
+                    len += 1;
+                }
+            }
+        }
+
+        for (var j = 0; j < root.childNodes.length && !truncated; j++) visit(root.childNodes[j]);
+        var result = out.trim();
+        if (truncated && result) result += "…";
+        return result;
+    }
+
     function buildCardBodyEl(contentHtml, previewText) {
         var body = document.createElement("div");
         body.className = "note-card-body";
@@ -803,6 +868,12 @@
         var container = document.createElement("div");
         container.innerHTML = contentHtml || "";
         var items = container.querySelectorAll(".note-checklist-item");
+
+        // Cached once here so search can match against the *whole* note,
+        // not just the (160-char, or 5-item) excerpt actually shown on the
+        // card — otherwise a match past the visible preview silently never
+        // surfaces. See cardMatches().
+        body.dataset.fullText = (container.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
 
         if (items.length) {
             var list = document.createElement("div");
@@ -835,7 +906,11 @@
         } else {
             var p = document.createElement("p");
             p.className = "note-card-preview";
-            p.textContent = previewText || "";
+            var inlineHtml = buildInlinePreviewHtml(container, 160);
+            // Fall back to the plain-text preview if inline parsing somehow
+            // yields nothing (e.g. content is bare text with no markup at
+            // all still goes through the same path and works identically).
+            p.innerHTML = inlineHtml || escapeHtml(previewText || "");
             body.appendChild(p);
         }
         return body;
@@ -1433,7 +1508,12 @@
     function cardMatches(card) {
         var q = searchInput.value.trim().toLowerCase();
         var title = (card.querySelector(".note-card-title").textContent || "").toLowerCase();
-        var bodyText = (card.querySelector(".note-card-body").textContent || "").toLowerCase();
+        var bodyEl = card.querySelector(".note-card-body");
+        // fullText (the whole note, cached in buildCardBodyEl) is what
+        // powers matching — bodyEl.textContent alone would only be the
+        // visible excerpt (160 chars, or 5 checklist rows), missing a
+        // match further into a longer note.
+        var bodyText = bodyEl ? (bodyEl.dataset.fullText || bodyEl.textContent || "").toLowerCase() : "";
         var matchesSearch = !q || title.indexOf(q) !== -1 || bodyText.indexOf(q) !== -1;
         var matchesTag = !currentFilterTag || card.dataset.tag === currentFilterTag;
         return matchesSearch && matchesTag;
