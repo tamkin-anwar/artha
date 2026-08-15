@@ -70,6 +70,7 @@
         <p style="color:var(--text-secondary); font-size:15px; margin:0;">{{ dashboard_summary }}</p>
     </div>
 
+    <div id="dashboard-budget-banner">
     {% if budget.has_budget and budget.tier != 'ok' %}
         {% set is_over = budget.tier == 'over' %}
         <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ 'var(--red-dim)' if is_over else 'var(--gold-dim)' }}; border:1px solid {{ 'var(--red)' if is_over else 'var(--gold)' }}; color:{{ 'var(--red)' if is_over else 'var(--gold)' }}; font-size:13px;">
@@ -82,6 +83,7 @@
             <a href="{{ url_for('finance.finance_page') }}" style="margin-left:auto; color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
         </div>
     {% endif %}
+    </div>
 
     <!-- Quick add -->
     <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
@@ -164,7 +166,7 @@
                 </span>
                 <span class="eyebrow">Transactions</span>
             </div>
-            <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
+            <div id="dashboard-tx-count" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
         </div>
     </div>
@@ -284,6 +286,7 @@
 
     <script type="module">
         import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+        import { updateChartData } from "{{ url_for('static', filename='js/chart.js') }}";
 
         const tabs = document.querySelectorAll("[data-quick-tab]");
         const forms = {
@@ -396,6 +399,76 @@
                 if (e.key === "Enter") {
                     e.preventDefault();
                     submitQuickEvent();
+                }
+            });
+        }
+
+        // Quick-add transaction posts to the same finance.add_transaction
+        // endpoint the Finance page uses, but transactions.js's own submit
+        // handler never attaches here (it's gated behind #tx-list, which
+        // only exists on /finance) — without this, the browser would fall
+        // back to a plain form submit, working correctly but only via a
+        // full page reload rather than updating in place like every other
+        // add/edit/delete in the app now does.
+        const quickAddTxForm = document.getElementById("quick-add-transaction");
+        if (quickAddTxForm) {
+            quickAddTxForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const submitBtn = quickAddTxForm.querySelector('button[type="submit"]');
+                const formData = new FormData(quickAddTxForm);
+
+                if (submitBtn) submitBtn.disabled = true;
+                try {
+                    const res = await fetch(quickAddTxForm.action, {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": getCsrfToken() },
+                        body: formData,
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        showToast(data.message || "Error adding transaction", "error");
+                        return;
+                    }
+
+                    showToast("Transaction added!", "success", 1500);
+
+                    // Same DOM-diff pattern refreshFinancialSummary() uses
+                    // on the Finance page — re-fetch this same page and
+                    // pull the fresh numbers out of it, rather than a full
+                    // navigation.
+                    const freshRes = await fetch(window.location.pathname + window.location.search, {
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                        cache: "no-store",
+                    });
+                    if (freshRes.ok) {
+                        const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
+                        ["finance-income", "finance-expense", "finance-balance", "dashboard-tx-count", "dashboard-budget-banner"].forEach((id) => {
+                            const freshEl = freshDoc.getElementById(id);
+                            const liveEl = document.getElementById(id);
+                            if (!freshEl || !liveEl) return;
+                            liveEl.innerHTML = freshEl.innerHTML;
+                            if (freshEl.hasAttribute("data-money-value")) {
+                                liveEl.setAttribute("data-money-value", freshEl.getAttribute("data-money-value"));
+                            }
+                        });
+                        if (window.lucide) window.lucide.createIcons();
+                    }
+
+                    await updateChartData();
+
+                    document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
+
+                    const dateInput = quickAddTxForm.querySelector('input[name="date"]');
+                    const todayValue = new Date().toISOString().split("T")[0];
+                    quickAddTxForm.reset();
+                    if (dateInput) dateInput.value = todayValue;
+                } catch (err) {
+                    console.error("Error adding transaction:", err);
+                    showToast("Network error while adding transaction", "error");
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             });
         }
