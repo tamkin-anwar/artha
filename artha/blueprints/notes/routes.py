@@ -24,11 +24,11 @@ NOTE_COLORS = {"sage", "coral", "plum", "slate", "sky", "amber"}
 
 # note.tag used to be one of these four, but a fixed vocabulary chosen up
 # front drifts out of sync with what people actually write about (in
-# practice, real usage skewed almost entirely toward "project idea" and
+# practice, real usage skewed heavily toward "idea", "project idea", and
 # "personal", not "habits" or "reading") — tags are now free text (see
 # _normalize_tag), and this is only the starter suggestion shown to a
 # user with no tags of their own yet, not a validated set.
-SEED_NOTE_TAGS = {"personal", "project"}
+SEED_NOTE_TAGS = {"ideas", "personal", "project"}
 
 
 def _normalize_tag(raw):
