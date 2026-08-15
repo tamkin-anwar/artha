@@ -391,6 +391,14 @@
     }
     .note-tag-opt:hover { background: var(--bg-hover); }
     .note-tag-opt.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+    .note-tag-opt-new { border-style: dashed; color: var(--text-muted); }
+    .note-tag-opt-new:hover { color: var(--gold); border-color: var(--gold); }
+    .note-tag-new-input {
+        font-size: 11.5px; font-weight: 500; padding: 5px 10px; border-radius: 999px;
+        border: 1px solid var(--gold); background: var(--bg-card); color: var(--text-primary);
+        width: 110px; font-family: inherit;
+    }
+    .note-tag-new-input:focus { outline: none; }
 
     .note-due-control { display: flex; align-items: center; gap: 4px; }
     .note-due-control input[type="date"] {
@@ -589,9 +597,11 @@
             <div class="note-control-group" id="note-tag-picker">
                 <span class="note-control-label">Tag</span>
                 <button type="button" class="note-tag-opt" data-tag="">None</button>
-                {% for t in note_tags %}
+                {% for t in tag_suggestions %}
                 <button type="button" class="note-tag-opt" data-tag="{{ t }}">{{ t|title }}</button>
                 {% endfor %}
+                <button type="button" class="note-tag-opt note-tag-opt-new" id="note-tag-new-btn">+ New</button>
+                <input type="text" id="note-tag-new-input" class="note-tag-new-input" placeholder="New tag" maxlength="30" autocomplete="off" hidden>
             </div>
             <div class="note-control-group note-due-control">
                 <span class="note-control-label">Due</span>
@@ -643,7 +653,6 @@
 <script>
 (function () {
     var NOTE_COLORS = {{ note_colors|tojson }};
-    var NOTE_TAGS = {{ note_tags|tojson }};
 
     var notesPageEl = document.getElementById("notes-page");
     var pinnedSection = document.getElementById("pinned-section");
@@ -672,6 +681,8 @@
     var deleteBtn = document.getElementById("notes-delete-btn");
     var colorPicker = document.getElementById("note-color-picker");
     var tagPicker = document.getElementById("note-tag-picker");
+    var newTagBtn = document.getElementById("note-tag-new-btn");
+    var newTagInput = document.getElementById("note-tag-new-input");
     var dueInput = document.getElementById("note-due-input");
     var dueClearBtn = document.getElementById("note-due-clear");
     var modalPinBtn = document.getElementById("note-modal-pin-btn");
@@ -1054,9 +1065,7 @@
         colorPicker.querySelectorAll(".note-color-swatch").forEach(function (btn) {
             btn.classList.toggle("active", (btn.dataset.color || "") === (note.color || ""));
         });
-        tagPicker.querySelectorAll(".note-tag-opt").forEach(function (btn) {
-            btn.classList.toggle("active", (btn.dataset.tag || "") === (note.tag || ""));
-        });
+        activateTagOption(note.tag || "");
         dueInput.value = note.due_date || "";
         modalPinBtn.classList.toggle("active", !!note.pinned);
         modalPinBtn.setAttribute("aria-pressed", note.pinned ? "true" : "false");
@@ -1244,12 +1253,69 @@
         patchField({ color: btn.dataset.color || null });
     });
 
+    // Tags are free text now (see _normalize_tag server-side) rather than
+    // a fixed set of buttons — this finds-or-creates a quick-pick button
+    // for a given tag value, so the same normalized string never ends up
+    // rendered as two separate pills, and activates it. Shared by
+    // hydrateModal() (opening a note whose tag isn't already one of the
+    // rendered suggestions yet) and commitNewTag() (just typed one).
+    function activateTagOption(tag) {
+        var normalized = tag.trim().toLowerCase();
+        tagPicker.querySelectorAll(".note-tag-opt").forEach(function (b) { b.classList.remove("active"); });
+        if (!normalized) {
+            tagPicker.querySelector('.note-tag-opt[data-tag=""]').classList.add("active");
+            return;
+        }
+        var existing = null;
+        tagPicker.querySelectorAll(".note-tag-opt").forEach(function (b) {
+            if ((b.dataset.tag || "").toLowerCase() === normalized) existing = b;
+        });
+        if (existing) {
+            existing.classList.add("active");
+            return;
+        }
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "note-tag-opt active";
+        btn.dataset.tag = normalized;
+        btn.textContent = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        tagPicker.insertBefore(btn, newTagBtn);
+    }
+
     tagPicker.addEventListener("click", function (e) {
         var btn = e.target.closest(".note-tag-opt");
-        if (!btn) return;
+        if (!btn || btn === newTagBtn) return;
         tagPicker.querySelectorAll(".note-tag-opt").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         patchField({ tag: btn.dataset.tag || null });
+    });
+
+    newTagBtn.addEventListener("click", function () {
+        newTagBtn.hidden = true;
+        newTagInput.hidden = false;
+        newTagInput.value = "";
+        newTagInput.focus();
+    });
+
+    function commitNewTag() {
+        var value = newTagInput.value.trim();
+        newTagInput.hidden = true;
+        newTagBtn.hidden = false;
+        if (!value) return;
+        activateTagOption(value);
+        patchField({ tag: value });
+    }
+
+    newTagInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); commitNewTag(); }
+        else if (e.key === "Escape") {
+            e.preventDefault();
+            newTagInput.hidden = true;
+            newTagBtn.hidden = false;
+        }
+    });
+    newTagInput.addEventListener("blur", function () {
+        if (!newTagInput.hidden) commitNewTag();
     });
 
     dueInput.addEventListener("change", function () {

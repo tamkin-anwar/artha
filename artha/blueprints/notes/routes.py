@@ -13,10 +13,52 @@ from . import notes_bp
 
 log = logging.getLogger(__name__)
 
-# Small fixed vocabularies for note.color / note.tag — enforced here rather
-# than as a DB enum so the set can grow without an alter-type migration.
+# note.color stays a small fixed vocabulary (each value maps to real CSS,
+# not just a label) — enforced here rather than as a DB enum so the set
+# can grow without an alter-type migration.
 NOTE_COLORS = {"sage", "coral", "plum", "slate", "sky", "amber"}
-NOTE_TAGS = {"personal", "ideas", "habits", "reading"}
+
+# note.tag used to be one of these four, but a fixed vocabulary chosen up
+# front drifts out of sync with what people actually write about (in
+# practice, real usage skewed almost entirely toward "project idea" and
+# "personal", not "habits" or "reading") — tags are now free text (see
+# _normalize_tag), and this is only the starter suggestion shown to a
+# user with no tags of their own yet, not a validated set.
+SEED_NOTE_TAGS = {"personal", "project"}
+
+
+def _normalize_tag(raw):
+    """The only remaining validation on a tag: trim, collapse internal
+    whitespace, and lowercase it, so "Project" and "project" (or "Project "
+    with a trailing space) land as the exact same tag instead of quietly
+    forking into near-duplicates — the classic failure mode of open
+    tagging. None/blank clears the tag. Capped at the column's length."""
+    if raw is None:
+        return None
+    tag = " ".join(raw.split()).lower()[:30]
+    return tag or None
+
+
+def _user_tags(user_id):
+    """Tags this user has actually put on a note at least once — drives
+    the Notes page's filter chips, which should only ever offer a filter
+    that has something behind it, never a dead pill for an unused tag."""
+    rows = (
+        db.session.query(Note.tag)
+        .filter(Note.user_id == user_id, Note.tag.isnot(None), Note.tag != "")
+        .distinct()
+        .all()
+    )
+    return sorted({t for (t,) in rows})
+
+
+def _tag_suggestions(user_id):
+    """Used tags plus the small seed set, for the tag picker's quick-pick
+    buttons — a first-time user still sees "Personal"/"Project" to start
+    from, while a user with their own established tags sees those too
+    (union, not replacement), so nothing already in use ever disappears
+    from the picker just because it isn't one of the two seeds."""
+    return sorted(set(_user_tags(user_id)) | SEED_NOTE_TAGS)
 
 
 def _serialize_note(note):
@@ -95,7 +137,8 @@ def notes_page():
         "notes.html",
         pinned_notes=pinned_notes,
         other_notes=other_notes,
-        note_tags=sorted(NOTE_TAGS),
+        note_tags=_user_tags(current_user.id),
+        tag_suggestions=_tag_suggestions(current_user.id),
         note_colors=sorted(NOTE_COLORS),
     )
 
@@ -192,9 +235,7 @@ def update_note_fields(note_id):
             note.color = color
 
     if "tag" in data:
-        tag = data.get("tag")
-        if tag is None or tag in NOTE_TAGS:
-            note.tag = tag
+        note.tag = _normalize_tag(data.get("tag"))
 
     if "due_date" in data:
         raw = data.get("due_date")

@@ -18,9 +18,11 @@ class Note(db.Model):
     pinned = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.text("0")
     )
-    # Small fixed vocabularies enforced in artha.blueprints.notes.routes
-    # (NOTE_COLORS / NOTE_TAGS) rather than a DB enum, so the set can change
-    # without an alter-type migration. None means "unset" for both.
+    # color: small fixed vocabulary (NOTE_COLORS in
+    # artha.blueprints.notes.routes) rather than a DB enum, so the set can
+    # change without an alter-type migration. tag: free text, normalized
+    # (trimmed/lowercased) in that same module's _normalize_tag — not
+    # validated against any fixed set. None means "unset" for both.
     color = db.Column(db.String(20), nullable=True)
     tag = db.Column(db.String(30), nullable=True)
     # Date only — the UI only ever shows/edits a date, never a time of day.
