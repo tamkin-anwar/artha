@@ -1007,12 +1007,24 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             method: "POST",
             credentials: "same-origin",
             headers: { "X-CSRFToken": getCsrfToken() }
-        }).then(function () {
+        }).then(function (r) {
+            // fetch() resolves for any HTTP response, including a failed
+            // one — without this check, a 403/500 here would still remove
+            // the event from the client cache and DOM, so the UI would
+            // report success for a delete that never actually happened
+            // server-side (only "coming back" on the next page reload).
+            if (!r.ok) throw new Error("Delete failed: " + r.status);
             var list = window.CALENDAR_EVENTS[dateStr] || [];
             var idx = list.findIndex(function (e) { return e.id === id; });
             if (idx !== -1) list.splice(idx, 1);
             renderSchedule(dateStr);
             updateEventDot(dateStr, list.length > 0);
+        }).catch(function (err) {
+            console.error("Error deleting event:", err);
+            if (currentSelectedDate) renderSchedule(currentSelectedDate);
+            import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                mod.showToast("Couldn't delete the event. Please try again.", "error");
+            });
         });
     }
 

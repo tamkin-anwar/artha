@@ -684,17 +684,17 @@
                 <i data-lucide="arrow-left"></i>Back to notes
             </a>
             {% elif show_archived %}
-            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link" id="notes-trash-link">
                 <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
             </a>
             <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
                 <i data-lucide="arrow-left"></i>Back to notes
             </a>
             {% else %}
-            <a href="{{ url_for('notes.notes_page', view='archived') }}" class="notes-archive-link">
+            <a href="{{ url_for('notes.notes_page', view='archived') }}" class="notes-archive-link" id="notes-archived-link">
                 <i data-lucide="archive"></i>Archived{{ ' (' + archived_count|string + ')' if archived_count }}
             </a>
-            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link">
+            <a href="{{ url_for('notes.notes_page', view='trash') }}" class="notes-archive-link" id="notes-trash-link">
                 <i data-lucide="trash-2"></i>Trash{{ ' (' + trash_count|string + ')' if trash_count }}
             </a>
             <button type="button" id="new-note-btn" class="notes-new-btn">+ New note</button>
@@ -910,6 +910,32 @@
     }
     function refreshIcons() {
         if (window.lucide) window.lucide.createIcons();
+    }
+
+    // Archive/trash toolbar link text ("Archived (N)" / "Trash (N)") is
+    // baked in at page-render time and nothing else patches it — every
+    // archive/trash/restore/permanent-delete action changes one of these
+    // counts, so without this they stay stale until the page is reloaded.
+    // Re-fetches this same page (same DOM-diff approach used on Finance/
+    // Dashboard) rather than hand-tracking increments/decrements across
+    // three views with different visible counts.
+    function refreshNotesToolbarCounts() {
+        fetch(window.location.pathname + window.location.search, {
+            credentials: "same-origin",
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            cache: "no-store",
+        })
+            .then(function (res) { return res.ok ? res.text() : Promise.reject(res); })
+            .then(function (html) {
+                var freshDoc = new DOMParser().parseFromString(html, "text/html");
+                ["notes-archived-link", "notes-trash-link"].forEach(function (id) {
+                    var freshEl = freshDoc.getElementById(id);
+                    var liveEl = document.getElementById(id);
+                    if (freshEl && liveEl) liveEl.innerHTML = freshEl.innerHTML;
+                });
+                refreshIcons();
+            })
+            .catch(function (err) { console.warn("Could not refresh toolbar counts:", err); });
     }
 
     // -----------------------------------------------------------------
@@ -1304,6 +1330,12 @@
 
         applyFilterToCard(card);
         refreshIcons();
+        // An edit can change whether this card matches the active
+        // search/tag filter (e.g. editing the title out of a search
+        // match) — without this, hiding the last visible matching card
+        // wouldn't show "No notes match", and un-hiding one wouldn't
+        // clear it either.
+        updateFilteredEmptyState();
     }
 
     // New/restored notes go right after the ghost "+ New note" card —
@@ -1778,6 +1810,17 @@
             card.remove();
             updatePinnedVisibility();
             pruneFilterChipIfUnused(tag);
+            updateFilteredEmptyState();
+            // If that was the last note left in this view at all (not just
+            // the last one matching the current filter), swap over to the
+            // real empty state — otherwise unarchiving/restoring/deleting
+            // the last note in Archived or Trash (neither of which has a
+            // ghost "+ New note" card to mask it) leaves a blank grid with
+            // no explanation until the page is reloaded.
+            if (!document.querySelector(".note-card[data-id]") && !notesPageEl.hidden) {
+                notesPageEl.hidden = true;
+                emptyStateEl.hidden = false;
+            }
         };
         if (prefersReducedMotion()) {
             remove();
@@ -1810,6 +1853,7 @@
         // Undoing an archive/trash can bring back the only note with a
         // tag that got pruned away when it left — restore its chip too.
         if (note.tag) ensureFilterChip(note.tag);
+        updateFilteredEmptyState();
     }
 
     // -----------------------------------------------------------------
@@ -1831,6 +1875,7 @@
             .then(function (result) {
                 if (!result.ok) { console.warn("Archive toggle failed:", result.data && result.data.message); return; }
                 removeCardWithFade(card);
+                refreshNotesToolbarCounts();
                 import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
                     mod.showToast(archiving ? "Note archived" : "Note restored", "success", 6000, {
                         actionText: "Undo",
@@ -1857,6 +1902,7 @@
                 // note left is the only case that should bring it back.
                 if (Boolean(note.archived) !== (currentView === "archived")) return;
                 reinsertCard(note);
+                refreshNotesToolbarCounts();
             })
             .catch(function (err) { console.error("Error undoing archive toggle:", err); });
     }
@@ -1877,6 +1923,7 @@
             .then(function (result) {
                 if (!result.ok) { console.warn("Trash toggle failed:", result.data && result.data.message); return; }
                 removeCardWithFade(card);
+                refreshNotesToolbarCounts();
                 import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
                     mod.showToast(trashing ? "Note moved to trash" : "Note restored to Archived", "success", 6000, {
                         actionText: "Undo",
@@ -1900,6 +1947,7 @@
                 var note = result.data;
                 if (Boolean(note.deleted_at) !== (currentView === "trash")) return;
                 reinsertCard(note);
+                refreshNotesToolbarCounts();
             })
             .catch(function (err) { console.error("Error undoing trash toggle:", err); });
     }
@@ -1951,6 +1999,7 @@
                 .then(function (result) {
                     if (!result.ok) { console.warn("Delete failed:", result.data && result.data.message); return; }
                     removeCardWithFade(card);
+                    refreshNotesToolbarCounts();
                     import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
                         mod.showToast("Note deleted forever", "success", 4000);
                     });
@@ -2514,9 +2563,14 @@
                 fallbackTolerance: 5,
                 onStart: function () {
                     grid.classList.add("dragging");
+                    grid.dataset.orderBeforeDrag = Array.from(grid.children)
+                        .filter(function (el) { return el.dataset.id; })
+                        .map(function (el) { return el.dataset.id; })
+                        .join(",");
                 },
                 onEnd: function () {
                     grid.classList.remove("dragging");
+                    var previousOrder = (grid.dataset.orderBeforeDrag || "").split(",").filter(Boolean);
                     var ids = Array.from(grid.children)
                         .filter(function (el) { return el.dataset.id; })
                         .map(function (el) { return el.dataset.id; });
@@ -2526,7 +2580,29 @@
                         credentials: "same-origin",
                         headers: Object.assign({ "Content-Type": "application/json" }, csrfHeaders()),
                         body: JSON.stringify({ order: ids }),
-                    }).catch(function (err) { console.error("Error saving note order:", err); });
+                    }).then(function (res) {
+                        if (!res.ok) throw new Error("Reorder failed: " + res.status);
+                    }).catch(function (err) {
+                        console.error("Error saving note order:", err);
+                        // fetch() only rejects on a network error — a 4xx/5xx
+                        // still resolves, so without the res.ok check above
+                        // this would never fire and the drag would look
+                        // successfully persisted when it wasn't. Revert the
+                        // drag back to its pre-drag order so the visible
+                        // state matches what's actually saved server-side.
+                        if (previousOrder.length) {
+                            var byId = {};
+                            Array.from(grid.children).forEach(function (el) {
+                                if (el.dataset.id) byId[el.dataset.id] = el;
+                            });
+                            previousOrder.forEach(function (id) {
+                                if (byId[id]) grid.appendChild(byId[id]);
+                            });
+                        }
+                        import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
+                            mod.showToast("Couldn't save the new order — reverted.", "error");
+                        });
+                    });
                 },
             });
         }
