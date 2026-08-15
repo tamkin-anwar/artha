@@ -62,11 +62,13 @@
             <span class="eyebrow">Income</span>
         </div>
         <div id="fp-stat-income" class="stat-number money-positive fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ income }}">${{ "%.2f"|format(income) }}</div>
+        <div id="fp-income-delta">
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.income.favorable else 'var(--red)' }};">
                 {{ '↑' if comparison.income.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.income.delta }}">${{ '%.2f'|format(comparison.income.delta) }}</span> {{ 'more' if comparison.income.up else 'less' }} than last month
             </p>
         {% endif %}
+        </div>
     </div>
     <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -76,11 +78,13 @@
             <span class="eyebrow">Expenses</span>
         </div>
         <div id="fp-stat-expense" class="stat-number money-negative fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ expense }}">${{ "%.2f"|format(expense) }}</div>
+        <div id="fp-expense-delta">
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.expense.favorable else 'var(--red)' }};">
                 {{ '↑' if comparison.expense.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.expense.delta }}">${{ '%.2f'|format(comparison.expense.delta) }}</span> {{ 'more' if comparison.expense.up else 'less' }} than last month
             </p>
         {% endif %}
+        </div>
     </div>
     <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -90,11 +94,13 @@
             <span class="eyebrow">Net</span>
         </div>
         <div id="fp-stat-net" class="stat-number money-gold fp-money" style="font-size:24px;" data-money-value="{{ balance }}">${{ "%.2f"|format(balance) }}</div>
+        <div id="fp-net-delta">
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.net.favorable else 'var(--red)' }};">
                 {{ '↑' if comparison.net.up else '↓' }} <span class="fp-money" data-money-value="{{ comparison.net.delta }}">${{ '%.2f'|format(comparison.net.delta) }}</span> {{ 'more' if comparison.net.up else 'less' }} than last month
             </p>
         {% endif %}
+        </div>
     </div>
     <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -187,7 +193,9 @@
             </p>
         </div>
     {% else %}
-        <p id="budget-display" style="font-size:13px; color:var(--text-secondary); margin:0;">No budget set yet. You'll get a heads-up here and on the dashboard if spending gets close.</p>
+        <div id="budget-display">
+            <p style="font-size:13px; color:var(--text-secondary); margin:0;">No budget set yet. You'll get a heads-up here and on the dashboard if spending gets close.</p>
+        </div>
     {% endif %}
 
     <form method="POST" action="{{ url_for('finance.set_budget') }}" id="budget-form" style="display:none; gap:8px; align-items:center; margin-top:4px;">
@@ -302,11 +310,13 @@
         </div>
     </form>
 
+    <div id="fp-recurring-count">
     {% if recurring_count > 0 %}
         <p style="font-size:13px; color:var(--gold); margin:0 0 12px;">
             ↻ {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
         </p>
     {% endif %}
+    </div>
 
     <ul id="tx-list" class="space-y-3">
         {% set ns = namespace(last_date=None) %}
@@ -374,9 +384,23 @@ function renderTrendChart() {
     var canvas = document.getElementById("monthlyTrendChart");
     if (!canvas || typeof Chart === "undefined") return;
 
-    var labels = {{ trend_data|map(attribute='label')|list|tojson }};
-    var values = {{ trend_data|map(attribute='net')|list|tojson }};
-    var monthValues = {{ trend_data|map(attribute='value')|list|tojson }};
+    // Read from the canvas's own data-trend attribute rather than baking
+    // {{ trend_data|tojson }} straight into this function — a Jinja value
+    // is fixed at the moment the page was rendered, so any later rebuild
+    // (theme toggle, currency change) would silently revert to whatever
+    // the numbers were at page load instead of whatever transactions.js's
+    // refreshFinancialSummary() has since kept this attribute in sync
+    // with. The attribute is still seeded from trend_data below, so a
+    // plain page load behaves identically to before.
+    var trendData = [];
+    try {
+        trendData = JSON.parse(canvas.dataset.trend || "[]");
+    } catch (e) {
+        trendData = [];
+    }
+    var labels = trendData.map(function (d) { return d.label; });
+    var values = trendData.map(function (d) { return d.net; });
+    var monthValues = trendData.map(function (d) { return d.value; });
     var selectedMonthValue = {{ (selected_month_value if not all_time else None)|tojson }};
 
     // A category-scale bar chart always divides its FULL width evenly

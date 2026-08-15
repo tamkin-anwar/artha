@@ -123,9 +123,13 @@
                     {% if current_user.is_authenticated and current_user.is_admin %}
                         <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
                             <i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin
-                            {% if admin_open_feedback_count %}
-                                <span style="margin-left:auto; background:var(--gold); color:#000; font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; padding:0 4px;">{{ admin_open_feedback_count }}</span>
-                            {% endif %}
+                            <!-- Always rendered (not conditionally omitted) so
+                                 admin.html's JS can find and update it after a
+                                 feedback status change — an inline style's
+                                 display value beats a [hidden] attribute's, so
+                                 toggling visibility has to happen in the style
+                                 itself, both here and from JS. -->
+                            <span id="admin-badge-desktop" style="margin-left:auto; background:var(--gold); color:#000; font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; align-items:center; justify-content:center; padding:0 4px; display:{{ 'inline-flex' if admin_open_feedback_count else 'none' }};">{{ admin_open_feedback_count or '' }}</span>
                         </a>
                     {% endif %}
                 </nav>
@@ -244,7 +248,7 @@
                     <a href="{{ url_for('dashboard.calendar_page') }}" class="nav-link {{ 'nav-active' if is_calendar_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calendar" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calendar</a>
                     <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator</a>
                     {% if current_user.is_authenticated and current_user.is_admin %}
-                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</a>
+                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin<span id="admin-badge-mobile">{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</span></a>
                     {% endif %}
 
                     <div style="margin:10px 0; height:1px; background:var(--border-subtle);"></div>

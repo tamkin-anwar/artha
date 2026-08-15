@@ -98,6 +98,12 @@ async function updateSummaryUI() {
 // values out of the returned HTML rather than doing a full navigation.
 // -----------------------------------------------------------------------
 
+// Swapped via innerHTML (not textContent) so structural children survive
+// the refresh too — the budget card's progress-bar width/color, and each
+// delta/count paragraph's color and up/down arrow, are all real child
+// markup, not plain text. innerHTML also keeps each container's own
+// identity (and any listener holding a reference to it, e.g. the budget
+// edit-toggle below) intact, unlike replacing outerHTML would.
 const FINANCIAL_SUMMARY_IDS = [
     "fp-stat-income",
     "fp-stat-expense",
@@ -106,6 +112,11 @@ const FINANCIAL_SUMMARY_IDS = [
     "fp-savings-rate",
     "fp-biggest-category",
     "fp-biggest-day",
+    "budget-display",
+    "fp-income-delta",
+    "fp-expense-delta",
+    "fp-net-delta",
+    "fp-recurring-count",
 ];
 
 async function refreshFinancialSummary() {
@@ -118,6 +129,12 @@ async function refreshFinancialSummary() {
         const res = await fetch(url, {
             credentials: "same-origin",
             headers: { "X-Requested-With": "XMLHttpRequest" },
+            // Multiple mutations in quick succession (e.g. adding two
+            // transactions back to back) hit this exact same URL each
+            // time — without this, the browser's default heuristic
+            // caching can serve an earlier response instead of the
+            // latest data, one mutation behind.
+            cache: "no-store",
         });
         if (!res.ok) return;
 
@@ -128,12 +145,41 @@ async function refreshFinancialSummary() {
             const freshEl = freshDoc.getElementById(id);
             const liveEl = document.getElementById(id);
             if (freshEl && liveEl) {
-                liveEl.textContent = freshEl.textContent;
+                liveEl.innerHTML = freshEl.innerHTML;
+                // fp-stat-income/expense/net carry data-money-value on
+                // themselves (not a child) for the currency formatter —
+                // innerHTML doesn't touch the element's own attributes, so
+                // without this it'd stay stale and the currency-refresh-ui
+                // dispatch below would immediately overwrite the just-
+                // refreshed text with a reformatted *old* number.
+                if (freshEl.hasAttribute("data-money-value")) {
+                    liveEl.setAttribute("data-money-value", freshEl.getAttribute("data-money-value"));
+                }
             }
+        });
+
+        // Each month-tab pill's small net-amount figure (and whether it
+        // shows at all) is keyed by data-month rather than a per-tab id.
+        freshDoc.querySelectorAll(".month-tab-pill[data-month]").forEach((freshTab) => {
+            const month = freshTab.getAttribute("data-month");
+            const liveTab = document.querySelector(`.month-tab-pill[data-month="${month}"]`);
+            if (liveTab) liveTab.innerHTML = freshTab.innerHTML;
         });
 
         const chart = window.__monthlyTrendChart;
         const freshCanvas = freshDoc.getElementById("monthlyTrendChart");
+        const liveCanvas = document.getElementById("monthlyTrendChart");
+        // finance.html's own currency-refresh-ui listener destroys and
+        // rebuilds this chart from *this attribute* (renderTrendChart()
+        // reads canvas.dataset.trend fresh, not chart.data) — updating
+        // only the live Chart.js instance below and leaving this stale
+        // meant the dispatch a few lines down would immediately undo the
+        // update we just made, reverting to whatever data was here at
+        // page load. Keep it in sync so any future rebuild — from that
+        // listener or anything else — starts from current data too.
+        if (liveCanvas && freshCanvas) {
+            liveCanvas.dataset.trend = freshCanvas.dataset.trend;
+        }
         if (chart && freshCanvas) {
             let trendData = [];
             try {
@@ -156,9 +202,14 @@ async function refreshFinancialSummary() {
             chart.data.labels = labels;
             chart.data.datasets[0].data = values;
             chart.data.datasets[0].backgroundColor = barColors;
-            chart.data.datasets[1].data = values;
             chart.update();
         }
+
+        // The freshly-swapped markup above is server-rendered in USD —
+        // re-run the same client-side currency formatting pass page load
+        // already does, so a non-USD display preference isn't silently
+        // reverted to $ until the user changes something else.
+        document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
     } catch (err) {
         console.warn("Could not refresh financial summary:", err);
     }
@@ -276,7 +327,7 @@ async function undoDeleteTransaction() {
 
         await updateChartData();
         await updateSummaryUI();
-        document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
+        await refreshFinancialSummary();
     } catch (err) {
         console.error("Undo delete transaction error:", err);
         showToast("Network error while undoing delete", "error");
@@ -339,7 +390,6 @@ function attachDeleteListener(row) {
             await updateChartData();
             await updateSummaryUI();
             await refreshFinancialSummary();
-            document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
         } catch (err) {
             console.error("Network error deleting transaction:", err);
 
@@ -399,6 +449,10 @@ async function toggleRecurring(row) {
         }
 
         applyRecurringState(row, !!data.is_recurring);
+        // Only the "N recurring transactions set" count is derived from
+        // this specific toggle — refreshFinancialSummary() covers it
+        // along with everything else, cheap enough to call unconditionally.
+        await refreshFinancialSummary();
     } catch (err) {
         console.error("Network error toggling recurring:", err);
         showToast("Network error while updating recurring status", "error");
@@ -564,7 +618,6 @@ async function saveTransaction(e) {
         await updateChartData();
         await updateSummaryUI();
         await refreshFinancialSummary();
-        document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
     } catch (err) {
         console.error("Network error updating transaction:", err);
 
@@ -645,7 +698,7 @@ function handleAddTransactionForm(form) {
 
             await updateChartData();
             await updateSummaryUI();
-            document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
+            await refreshFinancialSummary();
 
             const dateInput = form.querySelector("#tx-date-input");
             const todayValue = new Date().toISOString().split("T")[0];

@@ -65,7 +65,7 @@
             </span>
             <span class="eyebrow">Open feedback</span>
         </div>
-        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ open_count }}</div>
+        <div id="admin-open-count-tile" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ open_count }}</div>
     </div>
     <div class="glass-card" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -101,7 +101,7 @@
         </div>
 
         {% if feedback_items %}
-            <div id="admin-feedback-list">
+            <div id="admin-feedback-list" data-status-filter="{{ status_filter }}">
                 {% for item in feedback_items %}
                     <div class="admin-feedback-card" data-feedback-id="{{ item.id }}">
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
@@ -161,12 +161,40 @@
         return meta ? meta.content : "";
     }
 
+    // Keeps the sidebar "Admin (N)" badge (both desktop and mobile nav —
+    // visible on every page, not just this one) and this page's own
+    // "Open feedback" tile in sync with a status change, using the count
+    // the PATCH response now returns rather than leaving both frozen at
+    // whatever they were at page load.
+    function applyOpenCount(count) {
+        const tile = document.getElementById("admin-open-count-tile");
+        if (tile) tile.textContent = count;
+
+        const desktopBadge = document.getElementById("admin-badge-desktop");
+        if (desktopBadge) {
+            desktopBadge.textContent = count || "";
+            desktopBadge.style.display = count ? "inline-flex" : "none";
+        }
+
+        const mobileBadge = document.getElementById("admin-badge-mobile");
+        if (mobileBadge) mobileBadge.textContent = count ? ` (${count})` : "";
+    }
+
+    function showEmptyFeedbackState(list) {
+        const empty = document.createElement("p");
+        empty.style.cssText = "font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;";
+        empty.textContent = "No feedback here.";
+        list.replaceWith(empty);
+    }
+
     document.getElementById("admin-feedback-list")?.addEventListener("click", function (e) {
         const btn = e.target.closest("[data-set-status]");
         if (!btn) return;
+        const list = document.getElementById("admin-feedback-list");
         const card = btn.closest(".admin-feedback-card");
         const id = card.dataset.feedbackId;
         const newStatus = btn.dataset.setStatus;
+        const activeFilter = list.dataset.statusFilter;
 
         fetch(`/admin/feedback/${id}/status`, {
             method: "PATCH",
@@ -179,6 +207,18 @@
                     showToast(data.message || "Could not update status.", "error");
                     return;
                 }
+
+                applyOpenCount(data.open_count);
+
+                // A status tab (e.g. "New") only ever shows items matching
+                // it — once this card's status no longer matches, it
+                // belongs on a different tab, not lingering here in place.
+                if (activeFilter && activeFilter !== "all" && activeFilter !== data.status) {
+                    card.remove();
+                    if (!list.querySelector(".admin-feedback-card")) showEmptyFeedbackState(list);
+                    return;
+                }
+
                 const pill = card.querySelector("[data-status-pill]");
                 pill.textContent = data.status;
                 pill.className = "admin-status-pill admin-status-" + data.status;

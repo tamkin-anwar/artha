@@ -121,7 +121,12 @@ def update_feedback_status(item_id):
     item.status = new_status
     try:
         db.session.commit()
-        return jsonify({"status": item.status})
+        # The client uses this to keep the sidebar "Admin (N)" badge and
+        # this page's own "Open feedback" tile in sync — both are computed
+        # server-side at page load and otherwise have no way to know a
+        # status change (here, or on another tab) touched the count.
+        open_count = Feedback.query.filter_by(status="new").count()
+        return jsonify({"status": item.status, "open_count": open_count})
     except Exception as e:
         db.session.rollback()
         log.error("Error updating feedback status: %s", e, exc_info=True)
