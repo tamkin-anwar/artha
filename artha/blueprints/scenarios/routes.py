@@ -333,7 +333,13 @@ def index():
     query = Scenario.query.filter_by(user_id=current_user.id)
     if status_filter in VALID_STATUSES:
         query = query.filter_by(status=status_filter)
+    else:
+        # Default view excludes archived scenarios, same as the Notes
+        # active view — an archived scenario stays reachable via
+        # ?status=archived instead of cluttering the main list forever.
+        query = query.filter(Scenario.status != "archived")
     scenarios = query.order_by(Scenario.created_at.desc()).all()
+    archived_count = Scenario.query.filter_by(user_id=current_user.id, status="archived").count()
 
     verdicts = {s.id: _verdict(s) for s in scenarios}
     compare_data = [_scenario_compare_payload(s, verdicts[s.id]) for s in scenarios]
@@ -345,6 +351,7 @@ def index():
         compare_data=compare_data,
         status_filter=status_filter,
         valid_statuses=VALID_STATUSES,
+        archived_count=archived_count,
     )
 
 
@@ -384,13 +391,20 @@ def add():
 def detail(scenario_id):
     scenario = _get_owned_scenario(scenario_id)
 
+    # Sidebar/rotation list excludes archived scenarios, same as index() —
+    # except the one actually being viewed, so following a link to an
+    # archived scenario doesn't drop it out of its own sidebar.
     scenarios = (
-        Scenario.query.filter_by(user_id=current_user.id)
+        Scenario.query.filter(
+            Scenario.user_id == current_user.id,
+            (Scenario.status != "archived") | (Scenario.id == scenario.id),
+        )
         .order_by(Scenario.created_at.desc())
         .all()
     )
     verdicts = {s.id: _verdict(s) for s in scenarios}
     compare_data = [_scenario_compare_payload(s, verdicts[s.id]) for s in scenarios]
+    archived_count = Scenario.query.filter_by(user_id=current_user.id, status="archived").count()
 
     return render_template(
         "scenario_detail.html",
@@ -398,8 +412,9 @@ def detail(scenario_id):
         scenarios=scenarios,
         verdicts=verdicts,
         compare_data=compare_data,
-        status_filter="",
+        status_filter="archived" if scenario.status == "archived" else "",
         valid_statuses=VALID_STATUSES,
+        archived_count=archived_count,
     )
 
 

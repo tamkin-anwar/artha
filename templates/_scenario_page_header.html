@@ -5,6 +5,15 @@
         <p style="color:var(--text-secondary); font-size:14px; margin-top:4px;">Model any what-if before it touches your real money</p>
     </div>
     <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+        {% if status_filter == "archived" %}
+        <a href="{{ url_for('scenarios.index') }}" class="btn-secondary" style="padding:10px 16px; font-size:14px; text-decoration:none;">
+            &larr; Back to scenarios
+        </a>
+        {% elif archived_count %}
+        <a href="{{ url_for('scenarios.index', status='archived') }}" class="btn-secondary" style="padding:10px 16px; font-size:14px; text-decoration:none;">
+            Archived ({{ archived_count }})
+        </a>
+        {% endif %}
         <button
             type="button"
             id="compare-open-btn"

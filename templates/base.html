@@ -407,6 +407,23 @@
                             }
                             close();
                             showToast(result.data.message || "Thanks, got it.", "success");
+
+                            // Only visible/meaningful for an admin (the
+                            // badges only exist in the DOM for them), but
+                            // harmless to run for everyone — keeps the
+                            // sidebar "Admin (N)" badge from staying
+                            // frozen when an admin submits feedback about
+                            // their own app via this same FAB.
+                            var count = result.data.open_count;
+                            if (typeof count === "number") {
+                                var desktopBadge = document.getElementById("admin-badge-desktop");
+                                if (desktopBadge) {
+                                    desktopBadge.textContent = count || "";
+                                    desktopBadge.style.display = count ? "inline-flex" : "none";
+                                }
+                                var mobileBadge = document.getElementById("admin-badge-mobile");
+                                if (mobileBadge) mobileBadge.textContent = count ? " (" + count + ")" : "";
+                            }
                         })
                         .catch(function () {
                             submitBtn.disabled = false;

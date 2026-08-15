@@ -81,6 +81,22 @@ def test_dashboard_banner_shown_when_over_cap(auth_client, user):
     assert b"over your $2000 monthly budget" in resp.data
 
 
+def test_dashboard_matches_finance_tier_at_exact_boundary(auth_client, user):
+    """Regression guard: the dashboard used to cast expense through float()
+    before re-wrapping it in Decimal() for the budget-tier check, so an
+    exact 90.00% boundary could round down to 89.99999999999999 and show
+    tier "ok" while /finance (which never leaves Decimal) correctly showed
+    "warning" for the identical numbers."""
+    _add_expense(user, "642.06")
+    auth_client.post("/finance/budget", data={"monthly_cap": "713.40"})
+
+    finance_resp = auth_client.get("/finance")
+    dashboard_resp = auth_client.get("/")
+
+    assert b"getting close" in finance_resp.data
+    assert b"spent 90% of your" in dashboard_resp.data
+
+
 # --- Pure unit tests for the shared threshold logic itself ---
 
 def test_budget_status_no_cap_set():

@@ -201,3 +201,85 @@ def test_deleting_recurring_transaction_stops_it_regenerating(auth_client, user)
 
     regenerated = auth_client.post("/finance/generate-recurring").get_json()
     assert regenerated["generated"] == 0
+
+
+def test_generate_recurring_rejects_duplicate_month_at_db_level(auth_client, user):
+    """The uq_transaction_recurring_month constraint is the actual
+    race-safety net behind the idempotency test above — this exercises it
+    directly by trying to insert two rows for the same (user, description,
+    type, recurring_month), simulating two near-simultaneous requests both
+    getting past the in-Python dedup check before either commits."""
+    from sqlalchemy.exc import IntegrityError
+
+    month_start = date.today().replace(day=1)
+    tx1 = Transaction(
+        description="Spotify", amount=Decimal("9.99"), type="expense",
+        user_id=user.id, is_recurring=True,
+        timestamp=datetime(month_start.year, month_start.month, 1, 12, 0, tzinfo=timezone.utc),
+        recurring_month=month_start,
+    )
+    db.session.add(tx1)
+    db.session.commit()
+
+    tx2 = Transaction(
+        description="Spotify", amount=Decimal("9.99"), type="expense",
+        user_id=user.id, is_recurring=True,
+        timestamp=datetime(month_start.year, month_start.month, 1, 12, 0, tzinfo=timezone.utc),
+        recurring_month=month_start,
+    )
+    db.session.add(tx2)
+    try:
+        db.session.commit()
+        assert False, "expected IntegrityError from uq_transaction_recurring_month"
+    except IntegrityError:
+        db.session.rollback()
+
+
+def test_toggle_recurring_off_stops_older_sibling_regenerating(auth_client, user):
+    """Regression guard: turning recurring OFF via the toggle button (not
+    delete) used to leave an older sibling row still flagged
+    is_recurring=True, so the next /finance load silently brought the
+    series back — same bug class as the delete-path fix above."""
+    last_month = date.today().replace(day=1) - timedelta(days=1)
+    old_tx = Transaction(
+        description="Gym", amount=Decimal("40"), type="expense",
+        user_id=user.id, is_recurring=True,
+        timestamp=datetime(last_month.year, last_month.month, min(last_month.day, 28), 12, 0, tzinfo=timezone.utc),
+    )
+    db.session.add(old_tx)
+    db.session.commit()
+
+    generated = auth_client.post("/finance/generate-recurring").get_json()
+    assert generated["generated"] == 1
+
+    this_month_row = Transaction.query.filter_by(
+        user_id=user.id, description="Gym", is_recurring=True
+    ).order_by(Transaction.timestamp.desc()).first()
+
+    resp = auth_client.patch(f"/finance/transaction/{this_month_row.id}/toggle-recurring")
+    assert resp.status_code == 200
+    assert resp.get_json()["is_recurring"] is False
+
+    still_recurring = Transaction.query.filter_by(
+        user_id=user.id, description="Gym", is_recurring=True
+    ).count()
+    assert still_recurring == 0
+
+    regenerated = auth_client.post("/finance/generate-recurring").get_json()
+    assert regenerated["generated"] == 0
+
+
+def test_toggle_recurring_on_does_not_touch_unrelated_siblings(auth_client, user):
+    """Turning recurring ON shouldn't clear anything — the sibling cleanup
+    only applies on the OFF transition."""
+    tx_a = Transaction(description="Netflix", amount=Decimal("15.99"), type="expense", user_id=user.id, is_recurring=True)
+    tx_b = Transaction(description="Netflix", amount=Decimal("15.99"), type="expense", user_id=user.id, is_recurring=False)
+    db.session.add_all([tx_a, tx_b])
+    db.session.commit()
+
+    resp = auth_client.patch(f"/finance/transaction/{tx_b.id}/toggle-recurring")
+    assert resp.status_code == 200
+    assert resp.get_json()["is_recurring"] is True
+
+    db.session.refresh(tx_a)
+    assert tx_a.is_recurring is True

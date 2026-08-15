@@ -39,7 +39,12 @@ def submit():
     try:
         db.session.add(item)
         db.session.commit()
-        return jsonify({"message": "Thanks, got it."}), 201
+        # Included so an admin submitting feedback via the FAB on any
+        # page (including their own /admin overview) sees their sidebar
+        # badge reflect it immediately, instead of staying frozen at
+        # whatever it was at page load until the next navigation.
+        open_count = Feedback.query.filter_by(status="new").count()
+        return jsonify({"message": "Thanks, got it.", "open_count": open_count}), 201
     except Exception as e:
         db.session.rollback()
         log.error("Error saving feedback: %s", e, exc_info=True)

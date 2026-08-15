@@ -140,6 +140,59 @@ def test_lazy_purge_only_affects_requesting_users_notes(app, user):
     assert db.session.get(Note, others_id) is not None
 
 
+def test_stale_note_object_raises_on_commit_after_concurrent_purge(app, user):
+    """Regression guard for the restore-vs-purge race: if a note is
+    already loaded (as it would be mid-request in update_note_fields)
+    when a concurrent purge deletes the same row on a separate connection
+    (exactly what _purge_expired_trash / the cron command do), committing
+    an attribute change on the now-stale object raises — this confirms
+    what update_note_fields's restore path actually needs to catch to
+    return a clean 410 instead of the generic 500 "Database error"."""
+    import sqlalchemy as sa
+    import pytest
+    from sqlalchemy.orm.exc import StaleDataError
+
+    note = _make_note(user, title="Racing restore", archived=True, deleted_at=datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS + 1))
+    note_id = note.id
+
+    # Route-equivalent: the object is already loaded in this session...
+    loaded = db.session.get(Note, note_id)
+    assert loaded is not None
+
+    # ...then a concurrent purge deletes the same row on a separate
+    # connection, entirely outside this session — `loaded` stays exactly
+    # as stale as it would mid-request in production.
+    with db.engine.begin() as conn:
+        conn.execute(sa.text("DELETE FROM note WHERE id = :id"), {"id": note_id})
+
+    loaded.deleted_at = None
+    with pytest.raises(StaleDataError):
+        db.session.commit()
+    db.session.rollback()
+
+
+def test_restore_returns_410_when_note_purged_concurrently(app, auth_client, user):
+    """The actual route-level behavior confirmed by the mechanism test
+    above: restoring a note that a concurrent purge deleted out from
+    under the request returns a clean 410, not a false "Note updated" or
+    a generic 500."""
+    import sqlalchemy as sa
+
+    note = _make_note(user, title="Racing restore", archived=True, deleted_at=datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS + 1))
+    note_id = note.id
+
+    # Load it into this (shared, request-scoped) session first, same as
+    # the route's own db.session.get() would, then delete the row on a
+    # separate connection to simulate the concurrent purge without
+    # expiring this session's already-loaded copy.
+    db.session.get(Note, note_id)
+    with db.engine.begin() as conn:
+        conn.execute(sa.text("DELETE FROM note WHERE id = :id"), {"id": note_id})
+
+    resp = auth_client.patch(f"/notes/{note_id}/update", json={"deleted": False})
+    assert resp.status_code == 410
+
+
 def test_purge_expired_trash_cli_command_purges_across_all_users(app, user):
     from tests.conftest import make_user
 

@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from flask import render_template, redirect, url_for, request, flash, session, jsonify, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from ...extensions import db
 from ...models import Transaction
@@ -55,7 +56,7 @@ def _resolve_transaction_timestamp(date_str: str | None) -> datetime:
         except ValueError:
             parsed = None
     if parsed is None:
-        parsed = datetime.now(timezone.utc).date()
+        parsed = date.today()
     return datetime(parsed.year, parsed.month, parsed.day, 12, 0, 0, tzinfo=timezone.utc)
 
 
@@ -309,7 +310,21 @@ def toggle_recurring(transaction_id):
     if tx.user_id != current_user.id:
         return jsonify({"message": "Unauthorized"}), 403
 
+    turning_off = tx.is_recurring
     tx.is_recurring = not tx.is_recurring
+
+    # Same reasoning as delete_transaction(): generate_recurring() picks
+    # its template from the most recent is_recurring=True row for this
+    # (description, type). If an older sibling row is still flagged
+    # recurring, turning this one off wouldn't actually stop the series —
+    # the next /finance load would just regenerate off that older row.
+    if turning_off:
+        Transaction.query.filter(
+            Transaction.user_id == tx.user_id,
+            Transaction.description == tx.description,
+            Transaction.type == tx.type,
+            Transaction.id != tx.id,
+        ).update({"is_recurring": False})
 
     try:
         db.session.commit()
@@ -396,17 +411,29 @@ def generate_recurring():
             position=int(max_pos),
             is_recurring=True,
             timestamp=_resolve_transaction_timestamp(target_date.strftime("%Y-%m-%d")),
+            recurring_month=month_start,
         )
-        db.session.add(new_tx)
-        generated += 1
 
-    if generated:
+        # Committed one at a time (inside a savepoint) rather than as one
+        # batch: the uq_transaction_recurring_month constraint is what
+        # actually stops two near-simultaneous /finance loads from both
+        # generating the same bill, but that only works if a losing
+        # IntegrityError can be caught and skipped without discarding the
+        # other, unrelated templates already generated in this same pass.
         try:
-            db.session.commit()
-        except Exception as e:
+            with db.session.begin_nested():
+                db.session.add(new_tx)
+            generated += 1
+        except IntegrityError:
             db.session.rollback()
-            log.error("Error generating recurring transactions: %s", e, exc_info=True)
-            return jsonify({"message": "Error generating recurring transactions"}), 500
+            skipped += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error generating recurring transactions: %s", e, exc_info=True)
+        return jsonify({"message": "Error generating recurring transactions"}), 500
 
     return jsonify({"generated": generated, "skipped": skipped})
 

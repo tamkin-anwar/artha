@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func
+from sqlalchemy.orm.exc import StaleDataError
 
 from ...extensions import db
 from ...models import Note
@@ -305,12 +306,14 @@ def update_note_fields(note_id):
     # (it's set True unconditionally here, not just left alone) so that
     # restoring it later has exactly one predictable destination —
     # Archived — regardless of what triggered the trashing.
+    is_restoring = False
     if "deleted" in data:
         if data.get("deleted"):
             note.deleted_at = datetime.utcnow()
             note.archived = True
         else:
             note.deleted_at = None
+            is_restoring = True
 
     if "color" in data:
         color = data.get("color")
@@ -334,6 +337,17 @@ def update_note_fields(note_id):
     try:
         db.session.commit()
         return jsonify({"message": "Note updated", **_serialize_note(note)})
+    except StaleDataError:
+        # The 30-day trash purge (lazy, or the cron CLI command) can
+        # delete this exact row between our load above and this commit —
+        # SQLAlchemy's unit-of-work catches the resulting 0-row UPDATE
+        # and raises this instead of silently reporting success for a
+        # note that's actually gone. Only expected on the restore path;
+        # any other field update racing a delete is the same situation.
+        db.session.rollback()
+        if is_restoring:
+            return jsonify({"message": "This note was already permanently deleted and can't be restored."}), 410
+        return jsonify({"message": "This note no longer exists."}), 404
     except Exception as e:
         db.session.rollback()
         log.error("Error auto-saving note: %s", e, exc_info=True)

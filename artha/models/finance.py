@@ -17,5 +17,20 @@ class Transaction(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     is_recurring = db.Column(db.Boolean, nullable=False, default=False)
 
+    # First-of-month date this row represents, set only on rows created by
+    # generate_recurring() (NULL for everything else). A unique constraint
+    # on (user_id, description, type, recurring_month) stops two
+    # near-simultaneous /finance loads from double-generating the same
+    # recurring bill for the same month — NULL isn't unique-constrained by
+    # either Postgres or SQLite, so ordinary transactions are unaffected.
+    recurring_month = db.Column(db.Date, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id", "description", "type", "recurring_month",
+            name="uq_transaction_recurring_month",
+        ),
+    )
+
     def __repr__(self) -> str:
         return f"<Transaction {self.id} {self.type} {self.amount}>"

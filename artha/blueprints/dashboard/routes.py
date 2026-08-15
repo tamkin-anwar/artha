@@ -102,6 +102,7 @@ def index():
         .scalar()
         or 0
     )
+    expense_decimal = Decimal(expense)
     income = float(income)
     expense = float(expense)
     balance = income - expense
@@ -201,7 +202,7 @@ def index():
     if renewals_this_week:
         summary_parts.append(f"${renewals_total:,.0f} in renewals this week")
     budget_row = Budget.query.filter_by(user_id=uid).first()
-    budget = budget_status(budget_row.monthly_cap if budget_row else None, Decimal(expense))
+    budget = budget_status(budget_row.monthly_cap if budget_row else None, expense_decimal)
 
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
