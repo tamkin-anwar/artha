@@ -1765,6 +1765,11 @@
     // -----------------------------------------------------------------
     function removeCardWithFade(card) {
         if (!card) return;
+        // Captured now, while the card (and its data-tag) still exists —
+        // archiving/trashing/deleting a note is just as capable of being
+        // "the last note with this tag" as clearing the tag field is, so
+        // this needs the same dead-chip cleanup patchField already does.
+        var tag = (card.dataset.tag || "").toLowerCase();
         card.classList.add("removing");
         var removed = false;
         var remove = function () {
@@ -1772,6 +1777,7 @@
             removed = true;
             card.remove();
             updatePinnedVisibility();
+            pruneFilterChipIfUnused(tag);
         };
         if (prefersReducedMotion()) {
             remove();
@@ -1801,6 +1807,9 @@
         refreshIcons();
         updatePinnedVisibility();
         applyFilterToCard(card);
+        // Undoing an archive/trash can bring back the only note with a
+        // tag that got pruned away when it left — restore its chip too.
+        if (note.tag) ensureFilterChip(note.tag);
     }
 
     // -----------------------------------------------------------------
