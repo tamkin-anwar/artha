@@ -54,7 +54,10 @@ def _due_today_items(user_id: int, today: date) -> list[str]:
         if due == today:
             items.append(desc)
 
-    notes_due_today = Note.query.filter_by(user_id=user_id, due_date=today).all()
+    # Archived notes are done/put-away by definition — they shouldn't nag.
+    notes_due_today = Note.query.filter_by(
+        user_id=user_id, due_date=today, archived=False
+    ).all()
     for note in notes_due_today:
         items.append(note.title or (note.preview[:40] if note.preview else "Untitled note"))
 

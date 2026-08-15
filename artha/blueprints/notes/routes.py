@@ -39,16 +39,19 @@ def _normalize_tag(raw):
     return tag or None
 
 
-def _user_tags(user_id):
+def _user_tags(user_id, archived=None):
     """Tags this user has actually put on a note at least once — drives
     the Notes page's filter chips, which should only ever offer a filter
-    that has something behind it, never a dead pill for an unused tag."""
-    rows = (
-        db.session.query(Note.tag)
-        .filter(Note.user_id == user_id, Note.tag.isnot(None), Note.tag != "")
-        .distinct()
-        .all()
+    that has something behind it, never a dead pill for an unused tag.
+    `archived` scopes to the active or archived set (matching whichever
+    view is asking); left as None (all notes) for callers like
+    _tag_suggestions that want the full breadth regardless of view."""
+    query = db.session.query(Note.tag).filter(
+        Note.user_id == user_id, Note.tag.isnot(None), Note.tag != ""
     )
+    if archived is not None:
+        query = query.filter(Note.archived == archived)
+    rows = query.distinct().all()
     return sorted({t for (t,) in rows})
 
 
@@ -68,6 +71,7 @@ def _serialize_note(note):
         "content": note.content,
         "preview": note.preview,
         "pinned": bool(note.pinned),
+        "archived": bool(note.archived),
         "color": note.color,
         "tag": note.tag,
         "due_date": note.due_date.isoformat() if note.due_date else None,
@@ -123,23 +127,39 @@ def notes_page():
 
         return redirect(url_for("notes.notes_page"))
 
+    # Archived notes live behind their own view (?view=archived) rather
+    # than a client-side filter — they're excluded at the query level so
+    # they never round-trip to the browser as part of the normal page.
+    show_archived = request.args.get("view") == "archived"
+
     notes = (
-        Note.query.filter_by(user_id=current_user.id)
+        Note.query.filter_by(user_id=current_user.id, archived=show_archived)
         # Newest first (by creation order) rather than oldest first —
         # matches Keep/Notes/Notion convention so a just-created note is
         # immediately visible without scrolling past everything else.
         .order_by(Note.pinned.desc(), Note.position.desc(), Note.id.desc())
         .all()
     )
-    pinned_notes = [n for n in notes if n.pinned]
-    other_notes = [n for n in notes if not n.pinned]
+    if show_archived:
+        # Pinning only matters for notes still in active rotation — the
+        # archived view is a single flat grid, no Pinned/All split.
+        pinned_notes = []
+        other_notes = notes
+    else:
+        pinned_notes = [n for n in notes if n.pinned]
+        other_notes = [n for n in notes if not n.pinned]
+
+    archived_count = Note.query.filter_by(user_id=current_user.id, archived=True).count()
+
     return render_template(
         "notes.html",
         pinned_notes=pinned_notes,
         other_notes=other_notes,
-        note_tags=_user_tags(current_user.id),
+        note_tags=_user_tags(current_user.id, archived=show_archived),
         tag_suggestions=_tag_suggestions(current_user.id),
         note_colors=sorted(NOTE_COLORS),
+        show_archived=show_archived,
+        archived_count=archived_count,
     )
 
 
@@ -221,13 +241,16 @@ def update_note_fields(note_id):
         note.title = explicit_title or derived_title
         note.preview = preview
 
-    # pinned/color/tag/due_date each commit independently of title/content —
-    # a pin toggle or color pick is very often sent alone, not bundled with
-    # a text edit. Invalid color/tag values and malformed dates are ignored
-    # rather than rejected with a 400, matching this endpoint's existing
-    # "autosave is lenient by design" philosophy.
+    # pinned/archived/color/tag/due_date each commit independently of
+    # title/content — a pin toggle or color pick is very often sent alone,
+    # not bundled with a text edit. Invalid color/tag values and malformed
+    # dates are ignored rather than rejected with a 400, matching this
+    # endpoint's existing "autosave is lenient by design" philosophy.
     if "pinned" in data:
         note.pinned = bool(data.get("pinned"))
+
+    if "archived" in data:
+        note.archived = bool(data.get("archived"))
 
     if "color" in data:
         color = data.get("color")
@@ -341,6 +364,7 @@ def delete_note(note_id):
         "preview": note.preview,
         "position": int(note.position or 0),
         "pinned": bool(note.pinned),
+        "archived": bool(note.archived),
         "color": note.color,
         "tag": note.tag,
         "due_date": note.due_date.isoformat() if note.due_date else None,
@@ -398,6 +422,7 @@ def undo_delete_note():
             user_id=current_user.id,
             position=restored_pos,
             pinned=bool(data.get("pinned")),
+            archived=bool(data.get("archived")),
             color=data.get("color"),
             tag=data.get("tag"),
             due_date=_parse_due_date(data.get("due_date")),

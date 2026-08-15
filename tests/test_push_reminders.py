@@ -72,6 +72,14 @@ def test_due_today_items_ignores_notes_due_other_days(app, user):
     assert _due_today_items(user.id, date.today()) == []
 
 
+def test_due_today_items_ignores_archived_notes(app, user):
+    note = Note(title="Done with this", content="x", user_id=user.id, due_date=date.today(), archived=True)
+    db.session.add(note)
+    db.session.commit()
+
+    assert _due_today_items(user.id, date.today()) == []
+
+
 def test_send_renewal_reminders_combines_bill_and_note_in_one_push(app, user):
     today = date.today()
     year, month = today.year, today.month - 1 or 12

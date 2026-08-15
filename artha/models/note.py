@@ -18,6 +18,13 @@ class Note(db.Model):
     pinned = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.text("0")
     )
+    # Archived notes are excluded from the default /notes query entirely
+    # (not just hidden client-side) — see notes.notes_page's ?view=archived
+    # branch. Distinct from delete: archiving is meant to be reversible
+    # indefinitely, not a 10-second undo window.
+    archived = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.text("0")
+    )
     # color: small fixed vocabulary (NOTE_COLORS in
     # artha.blueprints.notes.routes) rather than a DB enum, so the set can
     # change without an alter-type migration. tag: free text, normalized
