@@ -23,7 +23,7 @@ class Note(db.Model):
     # branch. Distinct from delete: archiving is meant to be reversible
     # indefinitely, not a 10-second undo window.
     archived = db.Column(
-        db.Boolean, nullable=False, default=False, server_default=db.text("0")
+        db.Boolean, nullable=False, default=False, server_default=db.false()
     )
     # color: small fixed vocabulary (NOTE_COLORS in
     # artha.blueprints.notes.routes) rather than a DB enum, so the set can
