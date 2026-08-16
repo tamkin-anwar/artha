@@ -694,6 +694,22 @@ def finance_page():
     )
 
 
+def _csv_formula_safe(value: str) -> str:
+    """
+    Neutralizes CSV/formula injection: a description starting with
+    =, +, -, or @ is interpreted as a formula by Excel/Sheets when the
+    exported file is opened, not as literal text. description is free
+    text the user themselves typed into the amount/description field on
+    /finance, so a value like "=1+1" (or something more deliberately
+    malicious) would silently execute as a formula on open. Prefixing
+    with a single quote is the standard mitigation — spreadsheet apps
+    treat it as forcing plain-text and don't display it.
+    """
+    if value and value[0] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 @finance_bp.route("/finance/export")
 @login_required
 def export_csv():
@@ -747,7 +763,7 @@ def export_csv():
     for t in rows:
         writer.writerow([
             t.timestamp.strftime("%Y-%m-%d") if t.timestamp else "",
-            t.description,
+            _csv_formula_safe(t.description),
             t.type,
             f"{t.amount:.2f}",
             "yes" if t.is_recurring else "no",
