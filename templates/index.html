@@ -67,7 +67,7 @@
         <h1 style="font-family:'Fraunces',serif; font-size:36px; font-weight:300; color:var(--text-primary); margin:0 0 6px;">
             Welcome back, {{ current_user.first_name or current_user.username }}.
         </h1>
-        <p style="color:var(--text-secondary); font-size:15px; margin:0;">{{ dashboard_summary }}</p>
+        <p id="dashboard-summary-line" style="color:var(--text-secondary); font-size:15px; margin:0;">{{ dashboard_summary }}</p>
     </div>
 
     <div id="dashboard-budget-banner">
@@ -105,6 +105,10 @@
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
             </select>
+            <label class="tx-recurring-toggle-label" title="Recurring">
+                <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
+                <span class="tx-recurring-toggle-visual">↻</span>
+            </label>
             <button type="submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px;">Add</button>
         </form>
 
@@ -179,6 +183,7 @@
                 <a href="{{ url_for('dashboard.calendar_page') }}" style="font-size:12px; color:var(--gold); text-decoration:none;">Open calendar →</a>
             </div>
 
+            <div id="dashboard-today-panel">
             {% if todays_events or overdue_notes or due_today_notes or todays_renewals %}
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     {% for ev in todays_events %}
@@ -219,10 +224,12 @@
             {% else %}
                 <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">Nothing on the calendar or due today.</p>
             {% endif %}
+            </div>
         </div>
 
         <div class="glass-card dashboard-card-in" style="padding:20px;">
             <div class="eyebrow" style="margin-bottom:16px;">Renewals This Week</div>
+            <div id="dashboard-renewals-panel">
             {% if renewals_this_week %}
                 <p class="stat-number" style="font-size:26px; margin:0 0 14px;" data-money-value="{{ renewals_total }}">${{ "%.2f"|format(renewals_total) }}</p>
                 <div style="display:flex; flex-direction:column; gap:8px;">
@@ -239,6 +246,7 @@
             {% else %}
                 <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No renewals this week.</p>
             {% endif %}
+            </div>
         </div>
     </div>
 
@@ -444,7 +452,17 @@
                     });
                     if (freshRes.ok) {
                         const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
-                        ["finance-income", "finance-expense", "finance-balance", "dashboard-tx-count", "dashboard-budget-banner"].forEach((id) => {
+                        [
+                            "finance-income", "finance-expense", "finance-balance",
+                            "dashboard-tx-count", "dashboard-budget-banner",
+                            // Marking a transaction recurring here can change
+                            // what Today/Renewals show (a bill due today or
+                            // this week) — without these, checking "recurring"
+                            // would silently need a reload to actually appear
+                            // anywhere, the same staleness bug as the rest of
+                            // this handler exists to avoid.
+                            "dashboard-today-panel", "dashboard-renewals-panel", "dashboard-summary-line",
+                        ].forEach((id) => {
                             const freshEl = freshDoc.getElementById(id);
                             const liveEl = document.getElementById(id);
                             if (!freshEl || !liveEl) return;
