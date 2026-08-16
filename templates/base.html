@@ -424,6 +424,13 @@
                                 var mobileBadge = document.getElementById("admin-badge-mobile");
                                 if (mobileBadge) mobileBadge.textContent = count ? " (" + count + ")" : "";
                             }
+
+                            // Lets admin.html (if that's the page this was
+                            // submitted from) refresh its own stat tiles
+                            // and feedback list too — this handler only
+                            // knows about the sidebar badges shared across
+                            // every page, not that page's own content.
+                            document.dispatchEvent(new CustomEvent("feedback-submitted"));
                         })
                         .catch(function () {
                             submitBtn.disabled = false;
@@ -435,6 +442,7 @@
         </script>
 
         <script type="module">
+            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
             (function () {
                 var toggles = [document.getElementById("toggle-push"), document.getElementById("toggle-push-mobile")].filter(Boolean);
                 if (!toggles.length) return;
@@ -480,6 +488,20 @@
                                 method: "POST",
                                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                                 body: JSON.stringify(sub.toJSON()),
+                            }).then(function (res) {
+                                if (res.ok) return;
+                                // The browser-side subscription succeeded
+                                // but the server never saved it — without
+                                // this, the label below would still flip
+                                // to "Disable renewal reminders" even
+                                // though no reminder will ever actually
+                                // arrive. Undo the browser-side half too,
+                                // so retrying starts from a clean state
+                                // instead of a subscribed-on-device/
+                                // unknown-to-server split.
+                                return sub.unsubscribe().then(function () {
+                                    throw new Error("server_save_failed");
+                                });
                             });
                         })
                         .then(function () { setLabel(true); });
@@ -496,6 +518,8 @@
                                     method: "POST",
                                     headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                                     body: JSON.stringify({ endpoint: endpoint }),
+                                }).then(function (res) {
+                                    if (!res.ok) throw new Error("server_remove_failed");
                                 });
                             });
                         })
@@ -537,7 +561,16 @@
                             : unsubscribe();
 
                         action
-                            .catch(function () { /* permission denied or user cancelled — leave label as-is */ })
+                            .catch(function (err) {
+                                // "denied" (declined the permission prompt) is
+                                // an intentional, silent no-op — anything
+                                // else means the subscribe/unsubscribe call
+                                // itself failed, which the label must not be
+                                // allowed to silently claim succeeded.
+                                if (err && err.message !== "denied") {
+                                    showToast("Couldn't update renewal reminders. Please try again.", "error");
+                                }
+                            })
                             .finally(function () { btn.disabled = false; });
                     });
                 });

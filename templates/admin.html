@@ -74,7 +74,7 @@
             </span>
             <span class="eyebrow">Total feedback</span>
         </div>
-        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_feedback }}</div>
+        <div id="admin-total-count-tile" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_feedback }}</div>
     </div>
     <div class="glass-card" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -186,6 +186,48 @@
         empty.textContent = "No feedback here.";
         list.replaceWith(empty);
     }
+
+    // Fired by base.html's feedback FAB after a successful submit — that
+    // handler only knows about the sidebar badges shared across every
+    // page, not this page's own "Open feedback"/"Total feedback" tiles or
+    // its feedback list, so an admin submitting feedback about the app
+    // while sitting on their own /admin page would otherwise see those
+    // stay frozen until a reload. Re-fetches this same page (same filter
+    // the admin is currently viewing) rather than hand-tracking counts —
+    // if the current filter wouldn't show the new item, the freshly
+    // fetched HTML naturally won't either, no extra logic needed.
+    //
+    // Only swaps admin-feedback-list's own children (not the element
+    // itself) so the click-delegation listener already attached to it
+    // below keeps working — an empty view (no #admin-feedback-list in the
+    // live DOM yet) is left as-is rather than reconstructed, matching
+    // this handler's own "self-correcting on next reload" scope.
+    document.addEventListener("feedback-submitted", () => {
+        fetch(window.location.pathname + window.location.search, {
+            credentials: "same-origin",
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            cache: "no-store",
+        })
+            .then((res) => (res.ok ? res.text() : Promise.reject(res)))
+            .then((html) => {
+                const freshDoc = new DOMParser().parseFromString(html, "text/html");
+
+                const freshTotal = freshDoc.getElementById("admin-total-count-tile");
+                const liveTotal = document.getElementById("admin-total-count-tile");
+                if (freshTotal && liveTotal) liveTotal.textContent = freshTotal.textContent;
+
+                // Also patches admin-open-count-tile plus both sidebar
+                // badges, same as the status-change handler below uses it
+                // for.
+                const freshOpenCount = freshDoc.getElementById("admin-open-count-tile");
+                if (freshOpenCount) applyOpenCount(Number(freshOpenCount.textContent) || 0);
+
+                const liveList = document.getElementById("admin-feedback-list");
+                const freshList = freshDoc.getElementById("admin-feedback-list");
+                if (liveList && freshList) liveList.innerHTML = freshList.innerHTML;
+            })
+            .catch((err) => console.warn("Could not refresh admin feedback panel:", err));
+    });
 
     document.getElementById("admin-feedback-list")?.addEventListener("click", function (e) {
         const btn = e.target.closest("[data-set-status]");
