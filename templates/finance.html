@@ -176,15 +176,15 @@
         {% set bar_color = 'var(--red)' if budget.tier == 'over' else ('var(--gold)' if budget.tier == 'warning' else 'var(--emerald)') %}
         <div id="budget-display">
             <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-size:20px; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">${{ '%.2f'|format(budget.spent) }}</span>
-                <span style="font-size:13px; color:var(--text-secondary);">of ${{ '%.2f'|format(budget.cap) }}</span>
+                <span class="fp-money" style="font-size:20px; font-family:'JetBrains Mono',monospace; color:var(--text-primary);" data-money-value="{{ budget.spent }}">${{ '%.2f'|format(budget.spent) }}</span>
+                <span style="font-size:13px; color:var(--text-secondary);">of <span class="fp-money" data-money-value="{{ budget.cap }}">${{ '%.2f'|format(budget.cap) }}</span></span>
             </div>
             <div style="height:8px; border-radius:999px; background:var(--bg-page); overflow:hidden;">
                 <div style="height:100%; width:{{ budget.pct_clamped }}%; background:{{ bar_color }}; border-radius:999px; transition:width 0.3s ease;"></div>
             </div>
             <p style="font-size:12px; color:{{ bar_color }}; margin:8px 0 0;">
                 {% if budget.tier == 'over' %}
-                    ${{ '%.2f'|format(budget.spent - budget.cap) }} over budget this month.
+                    <span class="fp-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over budget this month.
                 {% elif budget.tier == 'warning' %}
                     {{ '%.0f'|format(budget.pct) }}% spent, getting close.
                 {% else %}

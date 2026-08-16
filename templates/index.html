@@ -76,9 +76,9 @@
         <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ 'var(--red-dim)' if is_over else 'var(--gold-dim)' }}; border:1px solid {{ 'var(--red)' if is_over else 'var(--gold)' }}; color:{{ 'var(--red)' if is_over else 'var(--gold)' }}; font-size:13px;">
             <i data-lucide="{{ 'alert-octagon' if is_over else 'alert-triangle' }}" aria-hidden="true" style="width:16px; height:16px; stroke-width:2; flex-shrink:0;"></i>
             {% if is_over %}
-                You're ${{ '%.2f'|format(budget.spent - budget.cap) }} over your ${{ '%.0f'|format(budget.cap) }} monthly budget.
+                You're <span class="dashboard-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
             {% else %}
-                You've spent {{ '%.0f'|format(budget.pct) }}% of your ${{ '%.0f'|format(budget.cap) }} monthly budget.
+                You've spent {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
             {% endif %}
             <a href="{{ url_for('finance.finance_page') }}" style="margin-left:auto; color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
         </div>
@@ -217,7 +217,7 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
                             </span>
                             <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
-                            <span style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); flex-shrink:0;">${{ '%.2f'|format(r.amount) }}</span>
+                            <span class="dashboard-money" style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); flex-shrink:0;" data-money-value="{{ r.amount }}">${{ '%.2f'|format(r.amount) }}</span>
                         </a>
                     {% endfor %}
                 </div>
@@ -231,7 +231,7 @@
             <div class="eyebrow" style="margin-bottom:16px;">Renewals This Week</div>
             <div id="dashboard-renewals-panel">
             {% if renewals_this_week %}
-                <p class="stat-number" style="font-size:26px; margin:0 0 14px;" data-money-value="{{ renewals_total }}">${{ "%.2f"|format(renewals_total) }}</p>
+                <p class="stat-number dashboard-money" style="font-size:26px; margin:0 0 14px;" data-money-value="{{ renewals_total }}">${{ "%.2f"|format(renewals_total) }}</p>
                 <div style="display:flex; flex-direction:column; gap:8px;">
                     {% for r in renewals_this_week[:4] %}
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
@@ -295,6 +295,27 @@
     <script type="module">
         import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
         import { updateChartData } from "{{ url_for('static', filename='js/chart.js') }}";
+        import { formatMoney } from "{{ url_for('static', filename='js/currency.js') }}";
+
+        // Budget banner / renewals amounts are plain server-rendered "$"
+        // text with no id transactions.js's updateSummaryUI() (which only
+        // covers finance-income/expense/balance) reaches — without this,
+        // switching currency in Settings would correctly reformat the
+        // stat cards but silently leave these showing stale USD figures
+        // forever (a page reload doesn't fix it either, since the
+        // currency preference lives in localStorage, not anything the
+        // server renders from). Same .fp-money pattern finance.html uses
+        // for its own equivalent elements, scoped to this page's own class
+        // so the two never double-process each other's elements.
+        function formatDashboardMoneyElements() {
+            document.querySelectorAll(".dashboard-money[data-money-value]").forEach((el) => {
+                const raw = parseFloat(el.getAttribute("data-money-value"));
+                if (!Number.isFinite(raw)) return;
+                el.textContent = formatMoney(raw);
+            });
+        }
+        formatDashboardMoneyElements();
+        document.addEventListener("currency-refresh-ui", formatDashboardMoneyElements);
 
         const tabs = document.querySelectorAll("[data-quick-tab]");
         const forms = {

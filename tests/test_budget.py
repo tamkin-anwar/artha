@@ -77,8 +77,14 @@ def test_dashboard_banner_shown_when_over_cap(auth_client, user):
     _add_expense(user, "2500")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
-    resp = auth_client.get("/")
-    assert b"over your $2000 monthly budget" in resp.data
+    body = auth_client.get("/").get_data(as_text=True)
+    # The dollar figures are wrapped in spans (client-side reformatted to
+    # the user's chosen currency) rather than plain inline text — assert
+    # on the surrounding copy and the value separately instead of one
+    # exact substring.
+    assert "over your" in body
+    assert "monthly budget" in body
+    assert 'data-money-value="2000.0"' in body
 
 
 def test_dashboard_matches_finance_tier_at_exact_boundary(auth_client, user):
