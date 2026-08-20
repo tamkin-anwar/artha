@@ -51,11 +51,14 @@ const MESSAGE_MAP = {
     "Something went wrong. Try again.": { title: "Error", message: "Could not send. Please try again" },
 };
 
+// Real lucide icon names — same icon set used everywhere else in the app
+// (nav, note cards, budget banners) — rather than Unicode glyphs standing
+// in for icons.
 const TYPE_ICONS = {
-    success: "✓",
-    error: "✕",
-    info: "✦",
-    warning: "⚠",
+    success: "check",
+    error: "x",
+    info: "sparkles",
+    warning: "alert-triangle",
 };
 
 const TYPE_FALLBACK_TITLES = {
@@ -119,7 +122,9 @@ export function showToast(message, type = "info", duration = 3000, options = {})
     const icon = document.createElement("span");
     icon.className = "toast-icon";
     icon.setAttribute("aria-hidden", "true");
-    icon.textContent = TYPE_ICONS[validType];
+    const iconGlyph = document.createElement("i");
+    iconGlyph.setAttribute("data-lucide", TYPE_ICONS[validType]);
+    icon.appendChild(iconGlyph);
     toast.appendChild(icon);
 
     // Title + message
@@ -171,7 +176,9 @@ export function showToast(message, type = "info", duration = 3000, options = {})
     const closeBtn = document.createElement("button");
     closeBtn.className = "close-btn";
     closeBtn.setAttribute("aria-label", "Dismiss message");
-    closeBtn.innerHTML = "&times;";
+    const closeGlyph = document.createElement("i");
+    closeGlyph.setAttribute("data-lucide", "x");
+    closeBtn.appendChild(closeGlyph);
     closeBtn.type = "button";
     closeBtn.addEventListener("click", () => removeToast(toast));
     closeBtn.addEventListener("keydown", (e) => {
@@ -192,6 +199,7 @@ export function showToast(message, type = "info", duration = 3000, options = {})
 
     toastQueue.push(toast);
     container.appendChild(toast);
+    if (window.lucide) window.lucide.createIcons();
 
     // Trigger animation
     void toast.offsetWidth;

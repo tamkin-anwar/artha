@@ -3,10 +3,10 @@
     position: fixed;
     bottom: 24px;
     right: 24px;
-    width: 320px;
+    width: 336px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     z-index: 9999; /* Ensure toasts appear above most content */
 }
 
@@ -20,120 +20,116 @@
     }
 }
 
-/* Individual toast — a fixed dark glass surface regardless of site theme,
-   same treatment as the rest of the app's premium chrome (auth pages,
-   settings dropdown). var(--text-primary)/--text-secondary are theme-
-   conditional and would go low-contrast against this background in light
-   mode, so title/message colors below are intentionally hardcoded to the
-   dark-theme values rather than referencing those variables. */
+/* Individual toast — the same solid-surface card treatment as every other
+   floating overlay in the app (feedback modal, global search palette):
+   var(--bg-surface) + var(--border-subtle) + a two-tier shadow, not a
+   one-off dark-glass surface. That means it now correctly follows the
+   light/dark toggle instead of being frozen to dark-theme colors — this
+   used to be a deliberate exception (see git history) from before the
+   app had a real light theme to stay legible against; now that every
+   other surface in the app themes properly, keeping the toast in its own
+   fixed-dark past made it feel like a leftover from an earlier version. */
 .toast {
     position: relative;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    background: rgba(20, 25, 38, 0.95);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
+    gap: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
     padding: 14px 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 4px 16px rgba(0,0,0,0.16);
     overflow: hidden;
     pointer-events: auto;
 
     opacity: 0;
-    transform: translateX(24px);
-    transition: opacity 300ms ease-out, transform 300ms ease-out;
+    transform: translateX(16px) scale(0.98);
+    transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 260ms cubic-bezier(0.16,1,0.3,1);
 }
+.dark .toast { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
 
 /* Visible state triggered by JS */
 .toast.visible {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
 }
 
 /* Exit animation */
 .toast.exit {
     opacity: 0;
-    transform: translateX(24px);
-    transition: opacity 200ms ease-in, transform 200ms ease-in;
+    transform: translateX(16px) scale(0.98);
+    transition: opacity 180ms ease-in, transform 180ms ease-in;
 }
 
-/* Left accent bar (4px, full height, rounded) — color set per type below */
-.toast::before {
-    content: "";
-    position: absolute;
-    top: 8px;
-    bottom: 8px;
-    left: 6px;
-    width: 4px;
-    border-radius: 999px;
-    background: var(--toast-accent, #d4a843);
-}
+/* Per-type accent — same semantic tokens used everywhere else (budget
+   tiers, note colors, stat cards), not a set of colors invented just for
+   toasts. --toast-accent-dim backs the icon chip below. */
+.toast-success { --toast-accent: var(--emerald); --toast-accent-dim: var(--emerald-dim); }
+.toast-error   { --toast-accent: var(--red);     --toast-accent-dim: var(--red-dim); }
+.toast-info    { --toast-accent: var(--gold);    --toast-accent-dim: var(--gold-dim); }
+.toast-warning { --toast-accent: var(--amber);   --toast-accent-dim: var(--amber-dim); }
 
-.toast-success { --toast-accent: #22c55e; }
-.toast-error   { --toast-accent: #ef4444; }
-.toast-info    { --toast-accent: #d4a843; }
-.toast-warning { --toast-accent: #f59e0b; }
-
+/* Icon chip — the exact treatment used elsewhere for a small circular
+   colored icon badge (see .finance-mini-icon), swapped in for the old
+   bare Unicode glyph (✓ ✕ ✦ ⚠) so a toast's icon reads the same way
+   every other icon in the app does: a real lucide SVG, not a text
+   character standing in for one. */
 .toast-icon {
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    margin-left: 8px; /* clear the accent bar */
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--toast-accent-dim);
+    color: var(--toast-accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
-    line-height: 1;
-    color: var(--toast-accent, #d4a843);
 }
+.toast-icon i { width: 15px; height: 15px; stroke-width: 2; }
 
 .toast-body {
     flex: 1;
     min-width: 0;
+    padding-top: 1px;
 }
 
 .toast-title {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 600;
-    color: #f0ede8;
+    color: var(--text-primary);
     margin: 0;
     line-height: 1.3;
 }
 
 .toast-message {
-    font-size: 12px;
-    color: #8b95a8;
+    font-size: 12.5px;
+    color: var(--text-secondary);
     margin: 2px 0 0;
     line-height: 1.4;
 }
 
-/* Close button styling */
+/* Close button — same small icon-button treatment as note cards'
+   pin/delete controls (no background, muted by default, sharpens on
+   hover) rather than a bespoke &times; glyph. */
 .toast .close-btn {
     flex-shrink: 0;
-    background: transparent;
+    background: none;
     border: none;
-    color: #4a5468;
-    font-size: 16px;
-    line-height: 1;
+    color: var(--text-muted);
+    line-height: 0;
     cursor: pointer;
-    padding: 0;
-    margin-left: 4px;
+    padding: 2px;
+    margin: -2px -2px -2px 0;
+    border-radius: 6px;
     transition: color 0.15s ease;
-    outline-offset: 2px;
 }
+.toast .close-btn i { width: 15px; height: 15px; stroke-width: 1.75; }
 
-/* Show visible outline for keyboard focus */
-.toast .close-btn:focus {
-    outline: 2px solid rgba(212, 168, 67, 0.5);
+.toast .close-btn:hover { color: var(--text-primary); }
+
+.toast .close-btn:focus-visible {
+    outline: 2px solid var(--gold);
     outline-offset: 2px;
-    border-radius: 3px;
-}
-
-/* Hover style for close button */
-.toast .close-btn:hover {
-    color: #8b95a8;
 }
 
 /* Auto-dismiss progress bar — drains right-to-left in the accent color */
@@ -143,8 +139,8 @@
     bottom: 0;
     height: 2px;
     width: 100%;
-    background: var(--toast-accent, #d4a843);
-    opacity: 0.4;
+    background: var(--toast-accent);
+    opacity: 0.35;
     transform-origin: right;
     pointer-events: none;
     animation-name: toast-progress-drain;
@@ -161,25 +157,25 @@
     color: var(--text-primary);
 }
 
-/* Action button inside toast (Undo, Retry, etc.) */
+/* Action button inside toast (Undo, Retry, etc.) — same treatment as
+   .btn-secondary everywhere else, just sized to fit inline. */
 .toast-action-btn {
     flex-shrink: 0;
-    margin-left: 8px;
-    padding: 4px 10px;
+    margin-left: 2px;
+    padding: 5px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.06);
-    color: #f0ede8;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    color: var(--text-primary);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    transition: background 0.15s ease;
 }
 
-.toast-action-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-}
+.toast-action-btn:hover { background: var(--bg-hover); }
 
-.toast-action-btn:focus {
-    outline: 2px solid rgba(212, 168, 67, 0.5);
+.toast-action-btn:focus-visible {
+    outline: 2px solid var(--gold);
     outline-offset: 2px;
 }

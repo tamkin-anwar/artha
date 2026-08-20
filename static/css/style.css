@@ -30,6 +30,7 @@
   --red:            #dc2626;
   --red-dim:        rgba(220,38,38,0.12);
   --amber:          #d97706;
+  --amber-dim:      rgba(217,119,6,0.12);
 
   /* Legacy custom properties — read directly via getComputedStyle() by
      chart.js. Keep the names, point them at the new
@@ -88,6 +89,7 @@
   --red:            #ef4444;
   --red-dim:        rgba(239,68,68,0.12);
   --amber:          #f59e0b;
+  --amber-dim:      rgba(245,158,11,0.12);
 
   --note-sage-bg:     #1f2a1a; --note-sage-border:  #3a4a2c; --note-sage-text:  #a3cf8a;
   --note-coral-bg:    #2c1e19; --note-coral-border: #4a3128; --note-coral-text: #e6a17e;
