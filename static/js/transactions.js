@@ -4,7 +4,6 @@ import { showToast } from "./toast.js";
 import { formatMoney } from "./currency.js";
 
 let ariaLiveRegion = null;
-let saveTimeout = null;
 
 function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -23,9 +22,15 @@ function csrfHeaders() {
     };
 }
 
+// Scoped to the row itself (not a single shared module-level timer) so
+// canceling one row's pending autosave — see attachDeleteListener below —
+// can never accidentally cancel a *different* row's legitimate pending
+// edit just because it happened to be the most recent blur.
 function debounceSaveTransaction(e) {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => saveTransaction(e), 300);
+    const row = e.target.closest("li[data-id]");
+    if (!row) return;
+    clearTimeout(row.__saveTimeout);
+    row.__saveTimeout = setTimeout(() => saveTransaction(e), 300);
 }
 
 function applyAmountTypeDataset(amountEl, type) {
@@ -353,6 +358,14 @@ function attachDeleteListener(row) {
         const rowEl = deleteForm.closest("li[data-id]");
         if (!rowEl) return;
 
+        // Deleting a row the user just edited (blurred a field, then
+        // clicked delete before the 300ms autosave debounce fired) would
+        // otherwise let that stale save go through afterward — hitting a
+        // 404 for a transaction that's already gone and showing a
+        // confusing "Could not save" error toast right after the
+        // (successful) "Deleted" one.
+        clearTimeout(rowEl.__saveTimeout);
+
         rowEl.setAttribute("aria-busy", "true");
         rowEl.classList.add("bg-yellow-100");
 
@@ -504,7 +517,7 @@ function attachRowListeners(row) {
         editForm.dataset.submitBound = "1";
         editForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            clearTimeout(saveTimeout);
+            clearTimeout(row.__saveTimeout);
             saveTransaction(e);
         });
     }
