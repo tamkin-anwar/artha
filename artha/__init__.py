@@ -94,6 +94,7 @@ def create_app(config_name: str = "default") -> Flask:
     from .blueprints.feedback import feedback_bp
     from .blueprints.admin import admin_bp
     from .blueprints.push import push_bp
+    from .blueprints.search import search_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -104,6 +105,7 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(feedback_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(push_bp)
+    app.register_blueprint(search_bp)
 
     # ------------------------------------------------------------------
     # Service worker — served from the site root (not /static/...) so its

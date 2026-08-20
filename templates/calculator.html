@@ -269,6 +269,13 @@
         })
         .catch(function () { /* stays null */ });
 
+    function toTempUnitName(token) {
+        var t = token.toLowerCase();
+        if (t === "c" || t === "celsius") return "celsius";
+        if (t === "f" || t === "fahrenheit") return "fahrenheit";
+        return token;
+    }
+
     // -----------------------------------------------------------------
     // Natural-language preprocessing — order matters.
     // -----------------------------------------------------------------
@@ -298,6 +305,22 @@
         // already parses those natively, see stripMemoWords()/evaluateLine()
         // below for the (different) fixes those needed.
         line = convertCurrencyPhrases(line);
+
+        // Step 3.5 — temperature phrases ("200 c to f", "98.6f to c").
+        // Unlike "5 lbs to kg", math.js does NOT recognize bare "c"/"f" as
+        // celsius/fahrenheit (confirmed: math.evaluate("200 c to f")
+        // throws "Undefined symbol c") — it only accepts the full unit
+        // names ("celsius"/"fahrenheit") or degC/degF. Rewriting to the
+        // full names here lets math.js's own native unit-conversion
+        // grammar handle the rest, same as every other physical unit.
+        // Scoped tightly (both sides must explicitly be a temperature
+        // word) so it can't misfire on an unrelated variable named "c".
+        line = line.replace(
+            /(-?\d+(?:\.\d+)?)\s*°?\s*(celsius|fahrenheit|c|f)\b(\s+(?:to|in)\s+)°?\s*(celsius|fahrenheit|c|f)\b/gi,
+            function (match, amount, fromUnit, connector, toUnit) {
+                return amount + " " + toTempUnitName(fromUnit) + connector + toTempUnitName(toUnit);
+            }
+        );
 
         // Step 4 — variable assignment is handled natively by
         // math.evaluate(line, scope) below, no separate transform needed.

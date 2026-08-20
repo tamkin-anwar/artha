@@ -157,10 +157,14 @@
                     <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap;" id="top-date"></div>
 
                     <div style="flex:1; max-width:360px; margin:0 32px;" class="hidden sm:block">
-                        <div style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:8px; padding:7px 14px; display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:13px;">
+                        <button
+                            type="button"
+                            id="global-search-trigger"
+                            style="width:100%; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:8px; padding:7px 14px; display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:13px; cursor:pointer; text-align:left; font-family:inherit;"
+                        >
                             <i data-lucide="search" aria-hidden="true" style="width:14px; height:14px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Ask Artha or search...
                             <span style="margin-left:auto; font-size:11px; background:var(--bg-card); padding:2px 6px; border-radius:4px; color:var(--text-secondary);">⌘K</span>
-                        </div>
+                        </button>
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px;">
@@ -326,6 +330,26 @@
                 <div class="feedback-modal-actions">
                     <button type="button" id="feedback-cancel" class="feedback-modal-cancel">Cancel</button>
                     <button type="button" id="feedback-submit" class="btn-primary feedback-modal-submit">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GLOBAL SEARCH -->
+        <div id="global-search-backdrop" class="global-search-backdrop" hidden>
+            <div class="global-search-modal" role="dialog" aria-modal="true" aria-label="Search">
+                <div class="global-search-input-row">
+                    <i data-lucide="search" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:var(--text-muted); flex-shrink:0;"></i>
+                    <input
+                        type="text"
+                        id="global-search-input"
+                        placeholder="Search notes, transactions, scenarios, events..."
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                    <span class="global-search-esc-hint">Esc</span>
+                </div>
+                <div id="global-search-results" class="global-search-results">
+                    <p class="global-search-empty">Type to search your notes, transactions, scenarios, and events.</p>
                 </div>
             </div>
         </div>
