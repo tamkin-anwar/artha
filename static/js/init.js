@@ -1,7 +1,6 @@
 // static/js/init.js (module)
 
 import "./flash.js";
-import "./notes.js";
 import "./transactions.js";
 import "./theme.js";
 import "./settings.js";
