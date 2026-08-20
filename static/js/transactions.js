@@ -157,6 +157,11 @@ async function refreshFinancialSummary() {
                 }
             }
         });
+        // fp-recurring-count's "N recurring transactions set" line carries
+        // a lucide icon — innerHTML swaps drop in a bare <i data-lucide>
+        // tag, not the rendered SVG, so without this it'd stay invisible
+        // after a live refresh until the next full page load.
+        if (window.lucide) window.lucide.createIcons();
 
         // Each month-tab pill's small net-amount figure (and whether it
         // shows at all) is keyed by data-month rather than a per-tab id.
@@ -410,7 +415,12 @@ function applyRecurringState(row, isRecurring) {
         btn.classList.toggle("tx-recurring-on", isRecurring);
         btn.setAttribute("aria-pressed", String(isRecurring));
         btn.title = isRecurring ? "Recurring — click to turn off" : "Mark as recurring";
-        btn.textContent = isRecurring ? "↻" : "";
+        btn.innerHTML = "";
+        if (isRecurring) {
+            const icon = document.createElement("i");
+            icon.setAttribute("data-lucide", "repeat");
+            btn.appendChild(icon);
+        }
     }
 
     row.style.borderLeft = isRecurring ? "3px solid var(--gold)" : "";
@@ -421,12 +431,19 @@ function applyRecurringState(row, isRecurring) {
     if (isRecurring && !label && metaRow) {
         label = document.createElement("span");
         label.className = "tx-recurring-label";
-        label.style.color = "var(--gold)";
-        label.textContent = "· ↻ recurring";
+        label.style.cssText = "color:var(--gold); display:inline-flex; align-items:center; gap:3px;";
+        label.append("· ");
+        const icon = document.createElement("i");
+        icon.setAttribute("data-lucide", "repeat");
+        icon.style.cssText = "width:10px; height:10px; stroke-width:2;";
+        label.appendChild(icon);
+        label.append(" recurring");
         metaRow.appendChild(label);
     } else if (!isRecurring && label) {
         label.remove();
     }
+
+    if (window.lucide) window.lucide.createIcons();
 }
 
 async function toggleRecurring(row) {

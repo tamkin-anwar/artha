@@ -39,7 +39,9 @@
     <div class="glass-card" style="width:100%; max-width:760px; max-height:85vh; overflow-y:auto; padding:24px; background:var(--bg-surface);">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
             <h2 style="font-family:'Fraunces',serif; font-size:22px; font-weight:600; color:var(--text-primary); margin:0;">Compare scenarios</h2>
-            <button type="button" id="compare-modal-close" aria-label="Close" style="background:none; border:none; color:var(--text-muted); font-size:22px; line-height:1; cursor:pointer; padding:4px;">&times;</button>
+            <button type="button" id="compare-modal-close" aria-label="Close" style="background:none; border:none; color:var(--text-muted); line-height:0; cursor:pointer; padding:4px; display:flex;">
+                <i data-lucide="x" aria-hidden="true" style="width:18px; height:18px; stroke-width:1.75;"></i>
+            </button>
         </div>
         <div id="compare-modal-body"></div>
     </div>

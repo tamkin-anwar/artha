@@ -118,7 +118,11 @@
         border-radius: 999px;
         cursor: pointer;
         transition: background 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
     }
+    #artha-ai-widget .ai-insights-pill i { width: 12px; height: 12px; stroke-width: 2; }
     #artha-ai-widget .ai-insights-pill:hover { background: var(--gold-dim); }
 
     #artha-ai-widget .ai-widget-input-bar {
@@ -181,7 +185,7 @@
                 type="button"
                 class="ai-insights-pill"
             >
-                ✦ Insights
+                <i data-lucide="sparkles" aria-hidden="true"></i> Insights
             </button>
             <button
                 id="ai-clear-btn"

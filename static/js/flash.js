@@ -15,11 +15,16 @@ document.addEventListener("DOMContentLoaded", () => {
         // Add close button if not already present
         if (!msg.querySelector(".flash-close-btn")) {
             const closeBtn = document.createElement("button");
-            closeBtn.className = "flash-close-btn ml-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-white rounded";
+            closeBtn.className = "flash-close-btn ml-4 text-white focus:outline-none focus:ring-2 focus:ring-white rounded";
             closeBtn.setAttribute("aria-label", "Dismiss message");
-            closeBtn.innerHTML = "&times;";
+            closeBtn.style.cssText = "display:inline-flex; align-items:center; line-height:0;";
+            const closeGlyph = document.createElement("i");
+            closeGlyph.setAttribute("data-lucide", "x");
+            closeGlyph.style.cssText = "width:16px; height:16px; stroke-width:2;";
+            closeBtn.appendChild(closeGlyph);
             closeBtn.type = "button";
             msg.appendChild(closeBtn);
+            if (window.lucide) window.lucide.createIcons();
 
             // Close handler
             closeBtn.addEventListener("click", () => {

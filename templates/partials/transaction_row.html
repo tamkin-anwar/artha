@@ -34,7 +34,7 @@
                 <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
                     <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
                     {% if tx.is_recurring %}
-                        <span class="tx-recurring-label" style="color:var(--gold);">&middot; &#8635; recurring</span>
+                        <span class="tx-recurring-label" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2;"></i> recurring</span>
                     {% endif %}
                 </div>
             </span>
@@ -70,7 +70,7 @@
             data-id="{{ tx.id }}"
             aria-pressed="{{ 'true' if tx.is_recurring else 'false' }}"
             title="{{ 'Recurring, click to turn off' if tx.is_recurring else 'Mark as recurring' }}"
-        >{{ '↻' if tx.is_recurring else '' }}</button>
+        >{% if tx.is_recurring %}<i data-lucide="repeat"></i>{% endif %}</button>
 
         <button type="submit" class="hidden">Save</button>
     </form>
@@ -82,10 +82,10 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <button type="submit"
-                style="background:none; border:none; color:var(--text-muted); font-size:16px; line-height:1; cursor:pointer;"
+                style="background:none; border:none; color:var(--text-muted); line-height:0; cursor:pointer; display:flex;"
                 title="Delete"
                 aria-label="Delete transaction">
-            🗑️
+            <i data-lucide="trash-2" aria-hidden="true" style="width:15px; height:15px; stroke-width:1.75;"></i>
         </button>
     </form>
 </li>

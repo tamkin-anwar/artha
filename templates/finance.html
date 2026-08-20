@@ -37,7 +37,7 @@
                 class="month-tab-pill {{ 'month-tab-active' if (not all_time and m.value == selected_month_value) }}"
                 data-month="{{ m.value }}"
             >
-                {{ m.label }}{% if m.is_current %} <span style="color:var(--gold);">&#9679;</span>{% endif %}
+                {{ m.label }}{% if m.is_current %} <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--gold); vertical-align:middle;" aria-hidden="true"></span>{% endif %}
                 {% if m.net != 0 %}
                     <span class="fp-money" style="display:block; font-size:10px; margin-top:2px; color:{{ 'var(--emerald)' if m.net >= 0 else 'var(--red)' }};" data-money-value="{{ m.net }}" data-money-signed="1">
                         {{ '+' if m.net >= 0 else '-' }}${{ '%.0f'|format(m.net|abs) }}
@@ -297,7 +297,7 @@
 
                 <label class="tx-recurring-toggle-label" title="Recurring">
                     <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
-                    <span class="tx-recurring-toggle-visual">↻</span>
+                    <span class="tx-recurring-toggle-visual"><i data-lucide="repeat" aria-hidden="true"></i></span>
                 </label>
             </div>
 
@@ -312,8 +312,9 @@
 
     <div id="fp-recurring-count">
     {% if recurring_count > 0 %}
-        <p style="font-size:13px; color:var(--gold); margin:0 0 12px;">
-            ↻ {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
+        <p style="font-size:13px; color:var(--gold); margin:0 0 12px; display:flex; align-items:center; gap:5px;">
+            <i data-lucide="repeat" aria-hidden="true" style="width:12px; height:12px; stroke-width:2;"></i>
+            {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
         </p>
     {% endif %}
     </div>

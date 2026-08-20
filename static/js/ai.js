@@ -17,7 +17,7 @@ function initAI() {
             <div class="ai-orb" id="ai-orb"></div>
             <div style="font-family:'Fraunces',serif; font-size:24px; color:var(--text-primary);">Artha AI</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:480px;">
-                <button type="button" class="ai-chip" data-chip="insights">&#10022; Get financial insights</button>
+                <button type="button" class="ai-chip" data-chip="insights">Get financial insights</button>
                 <button type="button" class="ai-chip" data-chip="spend">How much did I spend this month?</button>
                 <button type="button" class="ai-chip" data-chip="savings">What's my savings rate?</button>
             </div>

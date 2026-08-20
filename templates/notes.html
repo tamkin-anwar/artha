@@ -1491,13 +1491,19 @@
         titleInput.focus();
     }
 
-    function closeNoteModal() {
+    function closeNoteModal(options) {
+        options = options || {};
         // The modal's own closing animation is done in ~300ms, so any
         // confirmation shown *inside* it (like the header indicator used
         // during active typing) is gone before most people register it.
         // A toast lives outside the card, in a fixed corner, for ~2s —
-        // long enough to actually notice once the note is gone.
-        if (currentNoteId) {
+        // long enough to actually notice once the note is gone. Skipped
+        // when this close is itself a prelude to archive/trash/delete/
+        // restore (see the two callers below that pass skipSavedToast) —
+        // those already show their own, more specific toast a moment
+        // later, and a generic "Saved" stacked underneath "Note archived"
+        // just doubles up on the same one action.
+        if (currentNoteId && !options.skipSavedToast) {
             import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
                 mod.showToast("Note updated", "success", 2200);
             });
@@ -1575,14 +1581,14 @@
             .then(function (result) {
                 if (!result.ok) {
                     // On a silent (close-triggered) save the indicator already
-                    // flashed an optimistic "Saved ✓" and the modal is gone by
+                    // flashed an optimistic "Saved" and the modal is gone by
                     // the time this response lands — a toast is the only way
                     // left to surface a real failure.
                     if (options.silent) { notifyBackgroundSaveFailed(); } else { showIndicator("Could not save"); hideIndicatorSoon(); }
                     return;
                 }
                 updateNoteCard(result.data.id, result.data);
-                if (!options.silent) { showIndicator("Saved ✓"); hideIndicatorSoon(); }
+                if (!options.silent) { showIndicator("Saved"); hideIndicatorSoon(); }
             })
             .catch(function () {
                 if (options.silent) { notifyBackgroundSaveFailed(); } else { showIndicator("Could not save"); hideIndicatorSoon(); }
@@ -2014,7 +2020,7 @@
         if (!currentNoteId) return;
         var id = currentNoteId;
         var card = document.querySelector('.note-card[data-id="' + id + '"]');
-        closeNoteModal();
+        closeNoteModal({ skipSavedToast: true });
         if (currentView === "trash") {
             permanentlyDeleteNoteById(id, card);
         } else if (currentView === "archived") {
@@ -2031,7 +2037,7 @@
             if (!currentNoteId) return;
             var id = currentNoteId;
             var card = document.querySelector('.note-card[data-id="' + id + '"]');
-            closeNoteModal();
+            closeNoteModal({ skipSavedToast: true });
             if (currentView === "trash") {
                 trashNoteById(id, card, false);
             } else {

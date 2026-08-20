@@ -175,7 +175,11 @@
         cursor: pointer;
         transition: background 0.15s ease;
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
     }
+    .ai-insights-pill i { width: 13px; height: 13px; stroke-width: 2; }
     .ai-insights-pill:hover { background: var(--gold-dim); }
 
     .ai-send-btn {
@@ -230,7 +234,7 @@
             <div class="ai-orb" id="ai-orb"></div>
             <div style="font-family:'Fraunces',serif; font-size:24px; color:var(--text-primary);">Artha AI</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:480px;">
-                <button type="button" class="ai-chip" data-chip="insights">&#10022; Get financial insights</button>
+                <button type="button" class="ai-chip" data-chip="insights">Get financial insights</button>
                 <button type="button" class="ai-chip" data-chip="spend">How much did I spend this month?</button>
                 <button type="button" class="ai-chip" data-chip="savings">What's my savings rate?</button>
             </div>
@@ -244,7 +248,7 @@
             type="button"
             class="ai-insights-pill"
         >
-            &#10022; Insights
+            <i data-lucide="sparkles" aria-hidden="true"></i> Insights
         </button>
         <textarea
             id="ai-input"

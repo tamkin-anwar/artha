@@ -359,9 +359,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             var isToday = dateStr === correctedToday;
             if (isDueDay || isToday) {
                 var whenText = isDueDay ? "today" : escapeHtml(recurringBanner.dataset.dateLabel);
-                recurringBanner.innerHTML = "&#8635; " + escapeHtml(recurringBanner.dataset.description) +
-                    " due " + whenText + " &middot; $" + escapeHtml(recurringBanner.dataset.amount);
-                recurringBanner.style.display = "";
+                recurringBanner.style.display = "flex";
+                recurringBanner.style.alignItems = "center";
+                recurringBanner.style.gap = "8px";
+                recurringBanner.innerHTML = '<i data-lucide="repeat" aria-hidden="true" style="width:14px; height:14px; stroke-width:2; flex-shrink:0;"></i><span>' +
+                    escapeHtml(recurringBanner.dataset.description) +
+                    " due " + whenText + " &middot; $" + escapeHtml(recurringBanner.dataset.amount) + "</span>";
             } else {
                 recurringBanner.style.display = "none";
             }
@@ -383,7 +386,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
 
         if (!txs.length && !notesDue.length) {
             html += '<div style="text-align:center; padding:40px 12px; color:var(--text-muted);">';
-            html += '<div style="font-size:28px; margin-bottom:10px;" aria-hidden="true">&#128197;</div>';
+            html += '<i data-lucide="calendar" aria-hidden="true" style="width:28px; height:28px; stroke-width:1.5; margin-bottom:10px; display:inline-block;"></i>';
             html += '<div style="font-size:13px;">Nothing scheduled this day</div>';
             html += '</div>';
         } else {
@@ -396,7 +399,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                     var color = t.type === "income" ? "var(--emerald)" : "var(--red)";
                     html += '<div class="cal-tx-row">';
                     html += '<div style="min-width:0;">';
-                    html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + (t.is_recurring ? ' <span style="color:var(--gold); font-size:11px;">&#8635;</span>' : '') + '</div>';
+                    html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:4px;">' + '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + '</span>' + (t.is_recurring ? '<i data-lucide="repeat" aria-hidden="true" style="width:11px; height:11px; stroke-width:2; color:var(--gold); flex-shrink:0;"></i>' : '') + '</div>';
                     html += '<span class="cal-type-badge ' + t.type + '">' + t.type + '</span>';
                     html += '</div>';
                     html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + "$" + Math.abs(t.amount).toFixed(2) + '</div>';
@@ -427,6 +430,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         }
 
         container.innerHTML = html;
+        if (window.lucide) window.lucide.createIcons();
         renderSchedule(dateStr);
         // Wired exactly once per fresh #schedule-grid element (this is the
         // only place that creates one) — renderSchedule() itself runs on
