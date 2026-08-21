@@ -394,7 +394,7 @@ h1, h2, h3, .stat-number {
   color: var(--gold);
   border-color: var(--gold);
 }
-.tx-recurring-toggle i { width: 14px; height: 14px; stroke-width: 2; }
+.tx-recurring-toggle svg, .tx-recurring-toggle i { width: 14px; height: 14px; stroke-width: 2; }
 
 /* Same pill, as a native checkbox+label for the new-transaction form
    (a plain POST, unlike the per-row toggle's AJAX button above) — the
@@ -436,7 +436,7 @@ h1, h2, h3, .stat-number {
   color: var(--gold);
   border-color: var(--gold);
 }
-.tx-recurring-toggle-visual i { width: 14px; height: 14px; stroke-width: 2; }
+.tx-recurring-toggle-visual svg, .tx-recurring-toggle-visual i { width: 14px; height: 14px; stroke-width: 2; }
 .tx-recurring-checkbox:focus-visible + .tx-recurring-toggle-visual {
   outline: 2px solid var(--gold);
   outline-offset: 2px;

@@ -85,7 +85,7 @@
     align-items: center;
     justify-content: center;
 }
-.toast-icon i { width: 15px; height: 15px; stroke-width: 2; }
+.toast-icon svg, .toast-icon i { width: 15px; height: 15px; stroke-width: 2; }
 
 .toast-body {
     flex: 1;
@@ -123,7 +123,7 @@
     border-radius: 6px;
     transition: color 0.15s ease;
 }
-.toast .close-btn i { width: 15px; height: 15px; stroke-width: 1.75; }
+.toast .close-btn svg, .toast .close-btn i { width: 15px; height: 15px; stroke-width: 1.75; }
 
 .toast .close-btn:hover { color: var(--text-primary); }
 

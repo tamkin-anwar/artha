@@ -185,7 +185,7 @@
         color: var(--text-muted);
         margin-bottom: 10px;
     }
-    .notes-section-label i { width: 13px; height: 13px; }
+    .notes-section-label svg, .notes-section-label i { width: 13px; height: 13px; }
     .notes-section-label[hidden] { display: none; }
 
     .notes-grid {
@@ -269,7 +269,7 @@
         cursor: pointer; line-height: 0; flex-shrink: 0;
         transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
     }
-    .note-pin-btn i { width: 15px; height: 15px; }
+    .note-pin-btn svg, .note-pin-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-pin-btn { opacity: 0.85; }
     .note-pin-btn:hover { opacity: 1 !important; }
     .note-pin-btn.active { opacity: 1; color: var(--gold); }
@@ -280,7 +280,7 @@
         cursor: pointer; line-height: 0; flex-shrink: 0;
         transition: opacity 0.15s ease, color 0.15s ease;
     }
-    .note-delete-btn i { width: 15px; height: 15px; }
+    .note-delete-btn svg, .note-delete-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-delete-btn { opacity: 0.85; }
     .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
     /* In the active view this same trash icon archives rather than
@@ -294,7 +294,7 @@
         cursor: pointer; line-height: 0; flex-shrink: 0;
         transition: opacity 0.15s ease, color 0.15s ease;
     }
-    .note-archive-btn i { width: 15px; height: 15px; }
+    .note-archive-btn svg, .note-archive-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-archive-btn { opacity: 0.85; }
     .note-archive-btn:hover { opacity: 1 !important; color: var(--gold); }
 
@@ -332,7 +332,7 @@
         padding: 3px 8px; border-radius: 999px;
     }
     .dark .note-due-pill { background: rgba(255, 255, 255, 0.07); }
-    .note-due-pill i { width: 11px; height: 11px; }
+    .note-due-pill svg, .note-due-pill i { width: 11px; height: 11px; }
     .note-due-pill.overdue { color: var(--red); background: var(--red-dim); }
     .note-due-pill[hidden] { display: none; }
 
@@ -344,7 +344,7 @@
         padding: 3px 8px; border-radius: 999px;
     }
     .dark .note-purge-pill { background: rgba(255, 255, 255, 0.07); }
-    .note-purge-pill i { width: 11px; height: 11px; }
+    .note-purge-pill svg, .note-purge-pill i { width: 11px; height: 11px; }
     /* Same soon-to-happen visual cue the overdue due-pill uses, past the
        halfway point of the retention window rather than only right at 0. */
     .note-purge-pill.soon { color: var(--red); background: var(--red-dim); }
@@ -359,7 +359,7 @@
         gap: 6px;
     }
     .note-card-add:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); transform: translateY(-3px); }
-    .note-card-add i { width: 20px; height: 20px; }
+    .note-card-add svg, .note-card-add i { width: 20px; height: 20px; }
 
     /* ---------------------------------------------------------------
        Empty states
@@ -379,7 +379,7 @@
         display: flex; align-items: center; justify-content: center;
         color: var(--gold); margin-bottom: 6px;
     }
-    .notes-empty-icon i { width: 22px; height: 22px; }
+    .notes-empty-icon svg, .notes-empty-icon i { width: 22px; height: 22px; }
     .notes-empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-primary); }
     .notes-empty-sub { font-size: 13px; max-width: 320px; }
     .notes-empty-cta, .notes-clear-filters-btn {
@@ -431,7 +431,7 @@
         border-radius: 50%;
         background: var(--red-dim); color: var(--red);
     }
-    .confirm-modal-icon i { width: 20px; height: 20px; }
+    .confirm-modal-icon svg, .confirm-modal-icon i { width: 20px; height: 20px; }
     .confirm-modal-title {
         font-family: 'Fraunces', serif; font-size: 19px; font-weight: 500;
         color: var(--text-primary); margin-bottom: 6px;
@@ -482,7 +482,7 @@
         flex-shrink: 0;
     }
     .note-modal-close:hover, .note-modal-pin-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .note-modal-close i, .note-modal-pin-btn i { width: 18px; height: 18px; display: block; }
+    .note-modal-close svg, .note-modal-close i, .note-modal-pin-btn svg, .note-modal-pin-btn i { width: 18px; height: 18px; display: block; }
     .note-modal-close { margin-right: -6px; }
     .note-modal-pin-btn.active { color: var(--gold); }
     .note-modal-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
@@ -541,7 +541,7 @@
         padding: 4px; line-height: 0; border-radius: 6px;
     }
     .note-due-clear-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .note-due-clear-btn i { width: 14px; height: 14px; }
+    .note-due-clear-btn svg, .note-due-clear-btn i { width: 14px; height: 14px; }
 
     /* Toolbar (unchanged visual language from the previous editor) */
     .notes-toolbar {
