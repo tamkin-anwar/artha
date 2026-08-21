@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 # Same closed 6-color set as Notes' NOTE_COLORS (artha/blueprints/notes/routes.py)
 # — reused rather than importing across blueprints for one small constant.
 EVENT_COLORS = {"sage", "coral", "plum", "slate", "sky", "amber"}
+EVENT_RECURRENCES = {"daily", "weekly", "monthly"}
 
 
 @dashboard_bp.get("/healthz")
@@ -255,6 +256,93 @@ def _next_due_date(template_tx: Transaction, from_date: date) -> date | None:
     return None
 
 
+def _advance_recurrence(dt: datetime, cadence: str) -> datetime:
+    """Next occurrence of `dt` under the given cadence, preserving time of
+    day. Monthly clamps to the shorter month's last day, same clamping
+    _next_due_date() above uses for recurring transactions."""
+    if cadence == "daily":
+        return dt + timedelta(days=1)
+    if cadence == "weekly":
+        return dt + timedelta(weeks=1)
+    if cadence == "monthly":
+        year, month = dt.year, dt.month + 1
+        if month == 13:
+            month = 1
+            year += 1
+        days_this_month = cal.monthrange(year, month)[1]
+        return dt.replace(year=year, month=month, day=min(dt.day, days_this_month))
+    raise ValueError(f"Unknown recurrence cadence: {cadence!r}")
+
+
+def _generate_recurring_events(uid: int, window_start: datetime, window_end: datetime) -> None:
+    """
+    Lazily materializes real Event rows for every recurring series whose
+    occurrences land inside [window_start, window_end) — the calendar's
+    padded fetch window for whatever month is being viewed. Mirrors
+    generate_recurring() in finance/routes.py: real rows generated on page
+    load rather than a virtual RRULE expansion, so every occurrence stays a
+    fully normal, independently editable/deletable Event and nothing else
+    in the drag/edit/delete code needs to know recurrence exists.
+
+    Capped at MAX_GENERATED per call as a defensive guard against a
+    pathological cadence/window combination — a single month's padded
+    window never comes close to this in normal use.
+    """
+    MAX_GENERATED = 60
+
+    anchors = Event.query.filter(
+        Event.user_id == uid,
+        Event.recurrence.isnot(None),
+        Event.recurrence_parent_id.is_(None),
+    ).all()
+    if not anchors:
+        return
+
+    generated = 0
+    for anchor in anchors:
+        if generated >= MAX_GENERATED:
+            break
+        cadence = anchor.recurrence
+        duration = anchor.end - anchor.start
+
+        existing_starts = {
+            e.start
+            for e in Event.query.filter(
+                Event.user_id == uid,
+                Event.recurrence_parent_id == anchor.id,
+                Event.start >= window_start,
+                Event.start < window_end,
+            ).all()
+        }
+
+        # Fast-forward the cursor to roughly window_start before walking
+        # occurrence-by-occurrence — otherwise a daily series created a
+        # year ago would replay ~365 steps on every single page load.
+        cursor = anchor.start
+        if cadence == "daily" and cursor < window_start:
+            cursor += timedelta(days=(window_start - cursor).days)
+        elif cadence == "weekly" and cursor < window_start:
+            cursor += timedelta(weeks=(window_start - cursor).days // 7)
+        while cursor < window_start:
+            cursor = _advance_recurrence(cursor, cadence)
+
+        while cursor < window_end and generated < MAX_GENERATED:
+            if cursor != anchor.start and cursor not in existing_starts:
+                db.session.add(Event(
+                    user_id=uid,
+                    title=anchor.title,
+                    start=cursor,
+                    end=cursor + duration,
+                    color=anchor.color,
+                    recurrence_parent_id=anchor.id,
+                ))
+                generated += 1
+            cursor = _advance_recurrence(cursor, cadence)
+
+    if generated:
+        db.session.commit()
+
+
 @dashboard_bp.route("/calendar")
 @login_required
 def calendar_page():
@@ -362,6 +450,12 @@ def calendar_page():
     for n in notes_due:
         notes_by_date[n.due_date.strftime("%Y-%m-%d")].append(n)
 
+    # Materialize this window's occurrences of any recurring event series
+    # before querying — must run first so a freshly-due occurrence is
+    # present in the `events` query right below instead of one page load
+    # behind.
+    _generate_recurring_events(uid, fetch_start_dt, fetch_end_dt)
+
     # Time-blocked events within the visible window — grouped by the date
     # of their start time, same as Transaction's by_date above (an event
     # spanning midnight isn't split across two days, matches how a
@@ -446,16 +540,7 @@ def calendar_page():
     }
 
     calendar_events = {
-        key: [
-            {
-                "id": e.id,
-                "title": e.title,
-                "start": e.start.isoformat(),
-                "end": e.end.isoformat(),
-                "color": e.color,
-            }
-            for e in day_events
-        ]
+        key: [_serialize_event(e) for e in day_events]
         for key, day_events in events_by_date.items()
     }
 
@@ -495,6 +580,8 @@ def _serialize_event(event: Event) -> dict:
         "start": event.start.isoformat(),
         "end": event.end.isoformat(),
         "color": event.color,
+        "recurrence": event.recurrence,
+        "recurrence_parent_id": event.recurrence_parent_id,
     }
 
 
@@ -523,6 +610,7 @@ def create_event():
     start = _parse_local_datetime(data.get("start"))
     end = _parse_local_datetime(data.get("end"))
     color = data.get("color")
+    recurrence = data.get("recurrence") or None
 
     if not title:
         return jsonify({"message": "Title is required"}), 400
@@ -532,8 +620,10 @@ def create_event():
         return jsonify({"message": "End must be after start"}), 400
     if color not in EVENT_COLORS:
         color = "sky"
+    if recurrence is not None and recurrence not in EVENT_RECURRENCES:
+        recurrence = None
 
-    event = Event(user_id=current_user.id, title=title, start=start, end=end, color=color)
+    event = Event(user_id=current_user.id, title=title, start=start, end=end, color=color, recurrence=recurrence)
     try:
         db.session.add(event)
         db.session.commit()
@@ -582,6 +672,16 @@ def update_event(event_id):
         color = data.get("color")
         if color in EVENT_COLORS:
             event.color = color
+
+    # Only meaningful on an anchor (a generated occurrence's own
+    # recurrence_parent_id is set, and _generate_recurring_events() only
+    # ever scans rows where that's None) — silently ignored on a child so
+    # the modal can't create a confusing dead "recurrence" value that
+    # never actually generates anything.
+    if "recurrence" in data and event.recurrence_parent_id is None:
+        recurrence = data.get("recurrence") or None
+        if recurrence is None or recurrence in EVENT_RECURRENCES:
+            event.recurrence = recurrence
 
     try:
         db.session.commit()

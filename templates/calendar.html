@@ -160,6 +160,13 @@
         min-width: 0;
     }
     .cal-event-modal-row input[type="time"] { min-width: 112px; }
+    .cal-event-modal-row select {
+        border: none; background: none; color: var(--text-primary);
+        font-size: 14px; font-family: inherit; text-align: right; padding: 0;
+        min-width: 0; cursor: pointer;
+    }
+    .cal-event-modal-row select:focus { outline: none; color: var(--gold); }
+    .cal-event-modal-row-note { font-size: 13px; color: var(--text-muted); }
     .cal-event-modal-error { color: var(--red); font-size: 12px; margin: -10px 0 16px; }
     .cal-event-modal-colors { display: flex; gap: 10px; margin-bottom: 24px; }
     .cal-event-modal-color {
@@ -812,6 +819,36 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         endRow.appendChild(endInput);
         fieldGroup.appendChild(endRow);
 
+        // A generated occurrence of a recurring series (recurrence_parent_id
+        // set) can't itself become a new anchor — see the guard in
+        // update_event() — so its row is read-only instead of a live
+        // control that would silently do nothing.
+        var isRecurringInstance = !!eventOrDraft.recurrence_parent_id;
+        var repeatRow = document.createElement("div");
+        repeatRow.className = "cal-event-modal-row";
+        var repeatLabel = document.createElement("span");
+        repeatLabel.className = "cal-event-modal-row-label";
+        repeatLabel.textContent = "Repeats";
+        repeatRow.appendChild(repeatLabel);
+        var repeatSelect = null;
+        if (isRecurringInstance) {
+            var repeatNote = document.createElement("span");
+            repeatNote.className = "cal-event-modal-row-note";
+            repeatNote.textContent = "Part of a series";
+            repeatRow.appendChild(repeatNote);
+        } else {
+            repeatSelect = document.createElement("select");
+            [["", "Doesn't repeat"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].forEach(function (opt) {
+                var option = document.createElement("option");
+                option.value = opt[0];
+                option.textContent = opt[1];
+                if ((eventOrDraft.recurrence || "") === opt[0]) option.selected = true;
+                repeatSelect.appendChild(option);
+            });
+            repeatRow.appendChild(repeatSelect);
+        }
+        fieldGroup.appendChild(repeatRow);
+
         pop.appendChild(fieldGroup);
 
         var errorEl = document.createElement("p");
@@ -902,11 +939,14 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             // event's date actually files it under the right day.
             var newDateStr = toDateInputValue(newStart);
 
+            var payload = { title: title, start: toLocalIso(newStart), end: toLocalIso(newEnd), color: selectedColor };
+            if (repeatSelect) payload.recurrence = repeatSelect.value || null;
+
             if (isNew) {
-                createEvent({ title: title, start: toLocalIso(newStart), end: toLocalIso(newEnd), color: selectedColor }, newDateStr);
+                createEvent(payload, newDateStr);
                 if (onCancelDraft) onCancelDraft();
             } else {
-                patchEvent(eventOrDraft.id, { title: title, start: toLocalIso(newStart), end: toLocalIso(newEnd), color: selectedColor }, dateStr, newDateStr);
+                patchEvent(eventOrDraft.id, payload, dateStr, newDateStr);
             }
             teardown();
         }
@@ -987,6 +1027,14 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 window.CALENDAR_EVENTS[dateStr].push(data);
                 updateEventDot(dateStr);
                 if (currentSelectedDate) renderSchedule(currentSelectedDate);
+                // A brand-new recurring series only has this one anchor row
+                // so far — the rest of its occurrences across the visible
+                // month are generated server-side on page load (see
+                // _generate_recurring_events()), so reload once to bring
+                // the whole series into view immediately instead of
+                // leaving the other dots looking like recurrence silently
+                // didn't work until the next unrelated reload.
+                if (data.recurrence) window.location.reload();
             })
             .catch(function () { if (currentSelectedDate) renderSchedule(currentSelectedDate); });
     }
@@ -1019,6 +1067,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 }
 
                 if (currentSelectedDate) renderSchedule(currentSelectedDate);
+
+                // Same reasoning as createEvent(): turning recurrence on
+                // (or changing its cadence) only takes effect for future
+                // occurrences on the next page load, so reload now instead
+                // of leaving the rest of the month looking unaffected.
+                if (payload.recurrence) window.location.reload();
             })
             .catch(function () { if (currentSelectedDate) renderSchedule(currentSelectedDate); });
     }
@@ -1083,7 +1137,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         }
 
         var rawEvents = (window.CALENDAR_EVENTS[dateStr] || []).map(function (e) {
-            return { id: e.id, title: e.title, color: e.color, start: new Date(e.start), end: new Date(e.end) };
+            return {
+                id: e.id, title: e.title, color: e.color,
+                start: new Date(e.start), end: new Date(e.end),
+                recurrence: e.recurrence, recurrence_parent_id: e.recurrence_parent_id
+            };
         }).sort(function (a, b) { return a.start - b.start; });
 
         layoutDayEvents(rawEvents).forEach(function (item) {
