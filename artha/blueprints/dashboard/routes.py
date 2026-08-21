@@ -386,6 +386,15 @@ def calendar_page():
         day_txs = by_date.get(key, [])
         net = sum((t.amount if t.type == "income" else -t.amount for t in day_txs), Decimal("0"))
 
+        # Each event's own chosen color (same NOTE_COLORS palette as the
+        # Add Event modal's swatches), deduped and capped at 3 so a day
+        # with many events still reads as a handful of dots, not a smear.
+        day_event_colors = []
+        for e in events_by_date.get(key, []):
+            if e.color not in day_event_colors:
+                day_event_colors.append(e.color)
+        day_event_colors = day_event_colors[:3]
+
         grid_days.append({
             "date": key,
             "day": cursor.day,
@@ -396,7 +405,7 @@ def calendar_page():
             "expense_dot": any(t.type == "expense" for t in day_txs),
             "recurring_dot": key in recurring_due_by_date,
             "note_dot": key in notes_by_date,
-            "event_dot": key in events_by_date,
+            "event_colors": day_event_colors,
             "net": float(net),
         })
         cursor += timedelta(days=1)

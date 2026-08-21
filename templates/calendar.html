@@ -253,7 +253,7 @@
                         {% if d.income_dot %}<span class="cal-dot" style="background:var(--emerald);"></span>{% endif %}
                         {% if d.expense_dot %}<span class="cal-dot" style="background:var(--red);"></span>{% endif %}
                         {% if d.recurring_dot %}<span class="cal-dot" style="background:var(--gold);"></span>{% endif %}
-                        {% if d.event_dot %}<span class="cal-dot" data-event-dot style="background:var(--sky);"></span>{% endif %}
+                        {% for c in d.event_colors %}<span class="cal-dot" data-event-dot style="background:var(--note-{{ c }}-text);"></span>{% endfor %}
                     </div>
                     {% if d.net != 0 %}
                         <span class="cal-day-net" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--red)' }}; background:{{ 'var(--emerald-dim)' if d.net > 0 else 'var(--red-dim)' }};">{{ '+' if d.net > 0 else '-' }}${{ '%.0f'|format(d.net|abs) }}</span>
@@ -943,25 +943,30 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         activePopoverCleanup = cancel;
     }
 
-    // Toggles the sky "has time blocks" dot on a month-grid cell without a
-    // full page reload — mirrors the server-rendered dot exactly (same
-    // .cal-dot class/color) so a freshly created event's dot looks
-    // identical to one that came from the initial page load.
-    function updateEventDot(dateStr, hasEvents) {
+    // Rebuilds a month-grid cell's event dots from window.CALENDAR_EVENTS
+    // without a full page reload — mirrors the server-rendered dots exactly
+    // (same per-event color, deduped, capped at 3) so a freshly
+    // created/edited/moved/deleted event's dots look identical to what a
+    // full page load would have rendered.
+    function updateEventDot(dateStr) {
         var cell = document.querySelector('.cal-day-cell[data-date="' + dateStr + '"]');
         if (!cell) return;
         var dotsRow = cell.querySelector(".cal-dots");
         if (!dotsRow) return;
-        var existing = dotsRow.querySelector("[data-event-dot]");
-        if (hasEvents && !existing) {
+
+        dotsRow.querySelectorAll("[data-event-dot]").forEach(function (el) { el.remove(); });
+
+        var colors = [];
+        (window.CALENDAR_EVENTS[dateStr] || []).forEach(function (e) {
+            if (colors.indexOf(e.color) === -1) colors.push(e.color);
+        });
+        colors.slice(0, 3).forEach(function (color) {
             var dot = document.createElement("span");
             dot.className = "cal-dot";
             dot.setAttribute("data-event-dot", "");
-            dot.style.background = "var(--sky)";
+            dot.style.background = "var(--note-" + color + "-text)";
             dotsRow.appendChild(dot);
-        } else if (!hasEvents && existing) {
-            existing.remove();
-        }
+        });
     }
 
     // dateStr is whichever day the popover's date field ended up set to,
@@ -980,7 +985,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             .then(function (data) {
                 if (!window.CALENDAR_EVENTS[dateStr]) window.CALENDAR_EVENTS[dateStr] = [];
                 window.CALENDAR_EVENTS[dateStr].push(data);
-                updateEventDot(dateStr, true);
+                updateEventDot(dateStr);
                 if (currentSelectedDate) renderSchedule(currentSelectedDate);
             })
             .catch(function () { if (currentSelectedDate) renderSchedule(currentSelectedDate); });
@@ -1006,10 +1011,11 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                     if (idx !== -1) oldList.splice(idx, 1);
                     if (!window.CALENDAR_EVENTS[newDateStr]) window.CALENDAR_EVENTS[newDateStr] = [];
                     window.CALENDAR_EVENTS[newDateStr].push(data);
-                    updateEventDot(dateStr, oldList.length > 0);
-                    updateEventDot(newDateStr, true);
+                    updateEventDot(dateStr);
+                    updateEventDot(newDateStr);
                 } else if (idx !== -1) {
                     oldList[idx] = data;
+                    updateEventDot(dateStr);
                 }
 
                 if (currentSelectedDate) renderSchedule(currentSelectedDate);
@@ -1033,7 +1039,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
             var idx = list.findIndex(function (e) { return e.id === id; });
             if (idx !== -1) list.splice(idx, 1);
             renderSchedule(dateStr);
-            updateEventDot(dateStr, list.length > 0);
+            updateEventDot(dateStr);
         }).catch(function (err) {
             console.error("Error deleting event:", err);
             if (currentSelectedDate) renderSchedule(currentSelectedDate);
