@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from ...extensions import db
-from ...models import Note, Transaction, Event
+from ...models import Note, Transaction, Event, EventException
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates
 from ...utils import current_month_bounds, derive_title_and_preview, budget_status
@@ -312,6 +312,17 @@ def _generate_recurring_events(uid: int, window_start: datetime, window_end: dat
                 Event.recurrence_parent_id == anchor.id,
                 Event.start >= window_start,
                 Event.start < window_end,
+            ).all()
+        }
+        # Slots the user deliberately deleted — treated exactly like an
+        # "already exists" slot below, so a cancelled occurrence stays
+        # gone instead of being refilled the next time this range loads.
+        existing_starts |= {
+            e.occurrence_start
+            for e in EventException.query.filter(
+                EventException.anchor_id == anchor.id,
+                EventException.occurrence_start >= window_start,
+                EventException.occurrence_start < window_end,
             ).all()
         }
 
@@ -702,6 +713,23 @@ def delete_event(event_id):
         return jsonify({"message": "Unauthorized"}), 403
 
     try:
+        if event.recurrence_parent_id is not None:
+            # One occurrence of a series — record an exception so
+            # _generate_recurring_events() never refills this exact slot
+            # again (see EventException's docstring for why that's needed).
+            db.session.add(EventException(
+                anchor_id=event.recurrence_parent_id,
+                occurrence_start=event.start,
+            ))
+        else:
+            # Deleting the anchor takes the whole series with it: no more
+            # occurrences will ever be generated once the row carrying the
+            # recurrence rule is gone, and leftover children would just be
+            # orphaned (their recurrence_parent_id points nowhere) — plus
+            # any exceptions recorded against this anchor are now moot.
+            Event.query.filter_by(recurrence_parent_id=event.id).delete()
+            EventException.query.filter_by(anchor_id=event.id).delete()
+
         db.session.delete(event)
         db.session.commit()
         return jsonify({"message": "Event deleted"})

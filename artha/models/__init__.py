@@ -5,10 +5,11 @@ from .note import Note
 from .finance import Transaction
 from .exchange_rate import ExchangeRate
 from .event import Event
+from .event_exception import EventException
 from .feedback import Feedback
 from .budget import Budget
 from .push_subscription import PushSubscription
 
 __all__ = [
-    "User", "Note", "Transaction", "ExchangeRate", "Event", "Feedback", "Budget", "PushSubscription",
+    "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "PushSubscription",
 ]
