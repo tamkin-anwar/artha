@@ -151,14 +151,25 @@
             <div class="app-main" style="margin-left:220px; flex:1; min-height:100vh; min-width:0;">
 
                 <!-- TOP BAR -->
-                <div style="padding:16px 32px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:space-between; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
-                    <button id="menu-btn" type="button" class="md:hidden" aria-expanded="false" aria-controls="mobile-menu" style="background:none; border:none; color:var(--text-primary); line-height:0;">
-                        <i data-lucide="menu" aria-hidden="true" style="width:22px; height:22px; stroke-width:1.5;"></i>
-                    </button>
+                <!-- A 3-column grid with two equal-width (1fr) outer tracks
+                     centers the search bar based on the TOTAL bar width,
+                     not on how wide its neighbors happen to be. The
+                     previous flex + justify-content:space-between only
+                     equalized the *gaps* around the search box, not its
+                     own position — the date text (left) and settings
+                     button (right) are very different widths, so the
+                     search box always sat off-center, closer to whichever
+                     side had the narrower neighbor. -->
+                <div style="padding:16px 32px; border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
+                    <div style="display:flex; align-items:center; gap:16px; min-width:0;">
+                        <button id="menu-btn" type="button" class="md:hidden" aria-expanded="false" aria-controls="mobile-menu" style="background:none; border:none; color:var(--text-primary); line-height:0; flex-shrink:0;">
+                            <i data-lucide="menu" aria-hidden="true" style="width:22px; height:22px; stroke-width:1.5;"></i>
+                        </button>
 
-                    <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap;" id="top-date"></div>
+                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap;" id="top-date"></div>
+                    </div>
 
-                    <div style="flex:1; max-width:360px; margin:0 32px;" class="hidden sm:block">
+                    <div style="width:360px; max-width:100%;" class="hidden sm:block">
                         <button
                             type="button"
                             id="global-search-trigger"
@@ -169,7 +180,7 @@
                         </button>
                     </div>
 
-                    <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:12px; justify-self:end;">
                         {% block topbar_action %}{% endblock %}
 
                         <div style="position:relative;" class="hidden md:block">
