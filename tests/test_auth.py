@@ -131,3 +131,76 @@ def test_login_page_views_are_never_rate_limited(rate_limited_client):
     for _ in range(10):
         resp = rate_limited_client.get("/login")
         assert resp.status_code == 200
+
+
+def test_register_rejects_malformed_email(client):
+    resp = client.post(
+        "/register",
+        data={"username": "bob", "password": "password123", "email": "not-an-email"},
+        follow_redirects=True,
+    )
+    assert User.query.filter_by(username="bob").first() is None
+    assert b"look like a valid email" in resp.data
+
+
+def test_edit_profile_requires_login(client):
+    resp = client.get("/profile", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_edit_profile_updates_email_and_name(auth_client, user):
+    resp = auth_client.post(
+        "/profile",
+        data={"first_name": "Tamkin", "last_name": "Anwar", "email": "tamkinanwar7@gmail.com"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    refreshed = User.query.filter_by(username=user.username).first()
+    assert refreshed.email == "tamkinanwar7@gmail.com"
+    assert refreshed.first_name == "Tamkin"
+    assert refreshed.last_name == "Anwar"
+
+
+def test_edit_profile_keeps_username_unchanged(auth_client, user):
+    original_username = user.username
+    auth_client.post(
+        "/profile",
+        data={"first_name": "New", "email": "new@example.com"},
+        follow_redirects=True,
+    )
+    refreshed = User.query.filter_by(username=original_username).first()
+    assert refreshed is not None
+    assert refreshed.username == original_username
+
+
+def test_edit_profile_rejects_malformed_email(auth_client, user):
+    resp = auth_client.post(
+        "/profile",
+        data={"first_name": "Bob", "email": "not-an-email"},
+        follow_redirects=True,
+    )
+    refreshed = User.query.filter_by(username=user.username).first()
+    assert refreshed.email != "not-an-email"
+    assert b"look like a valid email" in resp.data
+
+
+def test_edit_profile_rejects_email_already_used_by_another_account(auth_client, user, app):
+    other = make_user(username="other-user", email="taken@example.com")
+    resp = auth_client.post(
+        "/profile",
+        data={"first_name": "Bob", "email": "taken@example.com"},
+        follow_redirects=True,
+    )
+    refreshed = User.query.filter_by(username=user.username).first()
+    assert refreshed.email != "taken@example.com"
+    assert b"already in use" in resp.data
+
+
+def test_edit_profile_allows_keeping_own_current_email(auth_client, user):
+    resp = auth_client.post(
+        "/profile",
+        data={"first_name": "Bob", "email": user.email},
+        follow_redirects=True,
+    )
+    assert b"Profile updated" in resp.data

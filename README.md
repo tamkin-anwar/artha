@@ -1,41 +1,51 @@
 # Artha
 
-A personal finance and productivity dashboard built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps.
+A personal finance and productivity "Personal OS," built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps.
 
-It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API.
+It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API. Runs as a real multi-user app today — friends and family log in with their own accounts, not just a single-owner tool.
 
 [Live app →](https://artha-dashboard.onrender.com)
 
 ## Features
-- Income and expense tracking with live Chart.js visualizations
-- Inline transaction editing, no page reloads
-- Recurring transactions with automatic monthly regeneration
-- Undo delete with toast notifications
-- CSV export of transactions, respecting whichever month filter is active
+
+**Finance**
+- Five views on one page: Transactions, Spending, Income, Cash Flow, and Recurring
+- Spending/Income/Cash Flow/Recurring all share the same flexible period picker — This Month (down to a specific past month), Last 3/6/12 Months, or a specific Year (year-to-date for the current year, full calendar year for past ones)
+- Spending and Income break down by category in a live Chart.js doughnut; Cash Flow shows income vs. spending as a bar chart per period
+- Recurring lists every recurring bill/income with a projected total scaled to the selected period
+- Inline transaction editing, no page reloads; undo delete with toast notifications
+- Bank statement import from CSV or PDF, with a preview-and-edit step and auto-categorization before anything is committed
+- CSV export respecting whichever month filter is active
 - Monthly spending budgets with a progress card and an over/near-limit alert
-- Notes with pinning, colors, tags, due dates, and checklists
-- Calendar with due-date notes and recurring bill reminders
-- Web Push notifications for bills due today (opt-in, from Settings)
-- A Numi-style smart calculator with variables, a running total, unit conversion (lbs to kg, cm to m, ...), and currency conversion via live exchange rates
-- Scenarios: model a "what if" financial decision (a new apartment, a career change) and get a payback period and a rule-based recommendation, no AI call needed
+- Recurring transactions with automatic monthly regeneration
+
+**Elsewhere**
+- Notes with pinning, colors, tags, due dates, and a 30-day trash
+- Calendar with due-date notes, recurring bill reminders, and time-blocked events
+- Web Push notifications for bills and notes due today (opt-in, from Settings)
+- A Numi-style smart calculator with variables, a running total, unit conversion, currency conversion via live exchange rates, and flexible natural-language input ("10k x 9%," "Rent 1800") — state persists across navigation
+- Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
 - An AI Assistant with your financial data as context, powered by Anthropic's API
 - In-app feedback (floating button, any page) and an admin panel to triage it and see who's actually using the app
-- Rate-limited login and a small pytest suite covering auth and the money-handling paths
-- Dark and light theme with persistence
+- An Account menu (your name/avatar) for identity actions — change password, sign out — separate from a Preferences menu (theme, currency, notifications)
+- Dark and light theme with persistence, multi-currency display
+- Mobile-first responsive design, tuned against real iOS and Android widths, not just "technically doesn't overflow"
 - Offline support via Service Worker (PWA-ready)
+- Rate-limited login and a pytest suite covering auth and the money-handling paths
 
 ## Tech stack
 - Flask + SQLAlchemy
 - Flask-Login + Flask-WTF (CSRF protection) + Flask-Limiter (login rate limiting)
+- pdfplumber (bank statement PDF parsing)
 - pywebpush (Web Push notifications)
-- Vanilla JavaScript (ES modules)
+- Vanilla JavaScript (ES modules), no frontend framework
 - Chart.js
-- Utility-first CSS (Tailwind-style)
+- Utility-first CSS (Tailwind) plus a small hand-written component layer
 - Service Worker (offline caching, fallback, and push)
 - pytest
 
 ## Why Artha
-No SaaS lock-in, full control over data, and a real production-minded Flask app rather than a weekend prototype. Built incrementally with clean Git history and feature isolation.
+No SaaS lock-in, full control over data, and a real production-minded Flask app rather than a weekend prototype — built incrementally, for a real household of users, with clean Git history and feature isolation.
 
 ## Running locally
 ```bash

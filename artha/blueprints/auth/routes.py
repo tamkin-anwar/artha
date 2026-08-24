@@ -24,6 +24,14 @@ def register():
             flash("Email, username, and password are required.", "error")
             return redirect(url_for("auth.register"))
 
+        # Same minimal check as edit_profile() — not a full RFC 5322
+        # parser, just enough to catch "forgot the @"/"forgot the domain"
+        # typos before they land in the database.
+        local_part, _, domain_part = email.partition("@")
+        if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
+            flash("That doesn't look like a valid email address.", "error")
+            return redirect(url_for("auth.register"))
+
         if len(password) < 8:
             flash("Password must be at least 8 characters.", "error")
             return redirect(url_for("auth.register"))
@@ -85,6 +93,53 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/profile", methods=["GET", "POST"])
+@login_required
+def edit_profile():
+    """Lets a logged-in user set/update their own name and email — the one
+    gap register() left: it requires an email up front for every new
+    signup, but nothing before this let an existing account (including
+    ones seeded or created before that requirement existed) add or fix
+    one afterward.
+    """
+    if request.method == "POST":
+        first_name = request.form.get("first_name", "").strip()
+        last_name = request.form.get("last_name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+
+        if not email:
+            flash("Email is required.", "error")
+            return redirect(url_for("auth.edit_profile"))
+
+        # Deliberately minimal — not a full RFC 5322 parser, just enough to
+        # catch "forgot the @" / "forgot the domain" typos before they land
+        # in the database, same spirit as the password-length check below.
+        local_part, _, domain_part = email.partition("@")
+        if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
+            flash("That doesn't look like a valid email address.", "error")
+            return redirect(url_for("auth.edit_profile"))
+
+        existing = User.query.filter_by(email=email).first()
+        if existing and existing.id != current_user.id:
+            flash("That email is already in use by another account.", "error")
+            return redirect(url_for("auth.edit_profile"))
+
+        try:
+            current_user.first_name = first_name or None
+            current_user.last_name = last_name or None
+            current_user.email = email
+            db.session.commit()
+            flash("Profile updated.", "success")
+            return redirect(url_for("dashboard.index"))
+        except Exception as e:
+            db.session.rollback()
+            log.error("Error updating profile: %s", e, exc_info=True)
+            flash("Error updating profile.", "error")
+            return redirect(url_for("auth.edit_profile"))
+
+    return render_template("edit_profile.html")
 
 
 @auth_bp.route("/change_password", methods=["GET", "POST"])
