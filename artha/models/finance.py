@@ -23,9 +23,13 @@ class Transaction(db.Model):
     # existed before this column shipped stays valid without a backfill.
     category = db.Column(db.String(20), nullable=True)
 
-    # "manual" | "csv" | None (legacy rows predating this column). Not used
-    # for any behavior yet — just provenance, so the UI can show "Imported"
-    # and a re-import of an overlapping statement can be reasoned about.
+    # "manual" | "csv" | None (legacy rows predating this column). "csv"
+    # covers any uploaded-statement import regardless of the original file
+    # type (CSV or PDF) — by the time a row reaches import_commit() it's
+    # already normalized to the same shape, so the source document format
+    # isn't worth a separate value. Not used for any behavior yet — just
+    # provenance, so the UI can show "Imported" and a re-import of an
+    # overlapping statement can be reasoned about.
     import_source = db.Column(db.String(10), nullable=True)
 
     # First-of-month date this row represents, set only on rows created by

@@ -2,6 +2,7 @@ import calendar
 import csv
 import io
 import math
+import re
 import time
 import logging
 from collections import defaultdict
@@ -900,7 +901,6 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
     rather than silently dropped or defaulted. Returns (rows, warnings);
     nothing is written to the database here.
     """
-    warnings: list[str] = []
     try:
         text = file_stream.read().decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -925,6 +925,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
     if "amount" not in roles and "debit" not in roles and "credit" not in roles:
         return [], ["Couldn't find an amount column (\"Amount\", or \"Debit\"/\"Credit\")."]
 
+    warnings: list[str] = []
     rows: list[dict] = []
     for line_num, raw_row in enumerate(reader, start=2):
         if not raw_row or all(not cell.strip() for cell in raw_row):
@@ -967,6 +968,189 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
         })
 
     return rows, warnings
+
+
+_MONEY = r"-?\$?[\d,]+\.\d{2}"
+# Tried first: some banks (Chase among them) print a running balance right
+# after the amount on every line — "... -21.30 15,937.21" — so the
+# amount/balance pair has to be matched together, or a naive "last number
+# on the line" match grabs the balance instead of the actual amount.
+_PDF_TX_LINE_WITH_BALANCE_RE = re.compile(
+    rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_MONEY})\s+{_MONEY}$"
+)
+_PDF_TX_LINE_RE = re.compile(
+    rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_MONEY})$"
+)
+
+# "June 24, 2026 through July 22, 2026" (pdfplumber often extracts this with
+# no whitespace around "through"/"to") — the statement-period line several
+# banks (Chase among them) print, used to resolve a bare "MM/DD" transaction
+# date (no year at all) that some statements use throughout.
+_PDF_STATEMENT_PERIOD_RE = re.compile(
+    r"([A-Z][a-z]+)\s+\d{1,2},\s*(\d{4})\s*(?:through|to|-)\s*"
+    r"([A-Z][a-z]+)\s+\d{1,2},\s*(\d{4})"
+)
+_MONTH_NAME_TO_NUM = {name: i for i, name in enumerate(calendar.month_name) if name}
+
+
+def _resolve_pdf_statement_years(full_text: str) -> tuple[int, int, int, int] | None:
+    """(start_month, start_year, end_month, end_year) from a statement-period
+    line, or None if the document doesn't have one in a recognized shape."""
+    m = _PDF_STATEMENT_PERIOD_RE.search(full_text)
+    if not m:
+        return None
+    start_month_name, start_year, end_month_name, end_year = m.groups()
+    start_month = _MONTH_NAME_TO_NUM.get(start_month_name)
+    end_month = _MONTH_NAME_TO_NUM.get(end_month_name)
+    if start_month is None or end_month is None:
+        return None
+    return start_month, int(start_year), end_month, int(end_year)
+
+
+def _resolve_pdf_date(date_str: str, year_context: tuple[int, int, int, int] | None) -> date | None:
+    """
+    Most banks print a full date on every transaction line, which
+    _parse_import_date handles directly. Some (Chase among them) print
+    only "MM/DD" with no year anywhere on the line — the year has to come
+    from the statement-period text (year_context, from
+    _resolve_pdf_statement_years), using the end year unless the
+    transaction's month is past the period's end month, which means it
+    belongs to the start year (a December/January-spanning statement).
+    Falls back to the current year if the document had no resolvable
+    period at all, rather than failing every bare-MM/DD date outright.
+    """
+    if date_str.count("/") >= 2:
+        return _parse_import_date(date_str)
+
+    try:
+        month_str, day_str = date_str.split("/")
+        month, day = int(month_str), int(day_str)
+    except ValueError:
+        return None
+
+    if year_context is not None:
+        start_month, start_year, end_month, end_year = year_context
+        year = start_year if (start_year != end_year and month > end_month) else end_year
+    else:
+        year = date.today().year
+
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
+    """
+    Parses an uploaded bank-statement PDF by reading each page's plain
+    text and matching transaction lines with a regex, rather than
+    pdfplumber's table-extraction — real bank statements tested against
+    this (not just clean generated fixtures) turned out to almost never
+    draw actual table gridlines pdfplumber can detect, and lay text out
+    in a way that fragments badly under its "text" table strategy too
+    (a header cell like "Description" splitting into "Descr"/"iption").
+    A statement line, across every real sample seen, does reliably start
+    with a date and end with a dollar amount — "MM/DD[/YY[YY]] ... amount"
+    — which is what this matches instead. Continuation lines (an
+    "ID:...PPD" trace line under a transaction, wrapped city/state text)
+    don't fit that shape and are simply not matched, which is fine — the
+    transaction line itself already has a usable description.
+
+    Two format quirks handled explicitly because real statements hit
+    them: some banks (Chase) print a running balance right after the
+    amount on every line, so the amount+balance pair is tried before the
+    amount-only pattern (see _PDF_TX_LINE_WITH_BALANCE_RE); and some print
+    the date as bare "MM/DD" with no year anywhere on the line, resolved
+    via the statement-period text instead (_resolve_pdf_date).
+
+    Income vs. expense comes from the amount's own sign — negative (or a
+    leading "-") is an expense, unsigned is income. An earlier version
+    tried to fall back to the nearest "Deposits"/"Withdrawals"-shaped
+    section header when the sign was absent, but real statements broke
+    that: a summary block near the top of the document (e.g. "Electronic
+    Withdrawals -18,910.00") would set the section once, and on a bank
+    that never repeats a "Deposits" header inside the actual transaction
+    list, every unsigned deposit that followed silently inherited the
+    stale "expense" context. Every real statement tested prints a sign
+    directly, so it alone is now the source of truth — no section
+    tracking to go stale.
+
+    Only works on text-based PDFs (the normal case for a downloaded/
+    emailed e-statement); a scanned or photographed page has no
+    extractable text layer and isn't supported — flagged clearly rather
+    than silently returning nothing.
+    """
+    # Imported lazily: pdfplumber pulls in Pillow/pypdfium2, real import
+    # weight that only this one path needs — no reason to pay it on every
+    # app boot for a feature most requests never touch.
+    import pdfplumber
+    from pdfplumber.utils.exceptions import PdfminerException
+
+    try:
+        pdf = pdfplumber.open(file_stream)
+    except PdfminerException:
+        return [], ["Could not read that PDF — it may be encrypted or corrupted."]
+    except Exception:
+        return [], ["Could not read that PDF."]
+
+    rows: list[dict] = []
+    any_text_found = False
+    year_context: tuple[int, int, int, int] | None = None
+
+    with pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            if text.strip():
+                any_text_found = True
+            if year_context is None:
+                year_context = _resolve_pdf_statement_years(text)
+
+            for raw_line in text.split("\n"):
+                line = raw_line.strip()
+                if not line:
+                    continue
+
+                m = _PDF_TX_LINE_WITH_BALANCE_RE.match(line) or _PDF_TX_LINE_RE.match(line)
+                if m:
+                    date_str, description, amount_str = m.groups()
+                    parsed_date = _resolve_pdf_date(date_str, year_context)
+                    if parsed_date is None:
+                        continue
+
+                    amount = _parse_import_amount(amount_str.lstrip("$"))
+                    if amount is None:
+                        continue
+
+                    t_type = "expense" if amount < 0 or amount_str.lstrip("$").startswith("-") else "income"
+                    amount = abs(amount)
+
+                    description = description.strip()
+                    if not description:
+                        continue
+
+                    rows.append({
+                        "date": parsed_date.strftime("%Y-%m-%d"),
+                        "description": description,
+                        "amount": float(amount),
+                        "type": t_type,
+                        "category": _guess_category(description, t_type),
+                    })
+                    continue
+
+    if not any_text_found:
+        return [], [
+            "Couldn't read any text from that PDF. This works on text-based statements "
+            "(the normal kind a bank emails or lets you download) — a scanned or "
+            "photographed page has no extractable text and isn't supported."
+        ]
+    if not rows:
+        return [], [
+            "Found text in that PDF, but nothing that looked like a transaction line "
+            "(a date, description, and amount together). A CSV export, if your bank "
+            "offers one, will work more reliably than a PDF."
+        ]
+
+    return rows, []
 
 
 def _csv_formula_safe(value: str) -> str:
@@ -1054,16 +1238,21 @@ def export_csv():
 @login_required
 def import_preview():
     """
-    Parses an uploaded statement CSV and returns what WOULD be imported —
-    nothing is saved here. The client renders this as an editable table
-    (date/description/amount/type/category per row, duplicates pre-
-    unchecked); only import_commit() below actually writes anything.
+    Parses an uploaded statement (CSV or PDF) and returns what WOULD be
+    imported — nothing is saved here. The client renders this as an
+    editable table (date/description/amount/type/category per row,
+    duplicates pre-unchecked); only import_commit() below actually writes
+    anything.
     """
     file = request.files.get("statement")
     if file is None or not file.filename:
         return jsonify({"message": "No file uploaded"}), 400
 
-    rows, warnings = _parse_statement_csv(file.stream)
+    is_pdf = file.filename.lower().endswith(".pdf") or file.mimetype == "application/pdf"
+    if is_pdf:
+        rows, warnings = _parse_statement_pdf(file.stream)
+    else:
+        rows, warnings = _parse_statement_csv(file.stream)
     if not rows:
         return jsonify({"message": warnings[0] if warnings else "No transactions found in file."}), 400
 

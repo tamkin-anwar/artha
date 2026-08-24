@@ -120,7 +120,7 @@
         <div style="display:flex; align-items:center; gap:16px;">
             <button type="button" id="csv-import-btn" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); background:none; border:none; padding:0; cursor:pointer; font-family:inherit;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M4 4h16"/></svg>
-                Import CSV
+                Import statement
             </button>
             <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); text-decoration:none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
@@ -416,12 +416,15 @@
 
         <div id="csv-import-step-upload">
             <p class="csv-import-hint">
-                Upload a CSV export from your bank. Every transaction keeps the date it happened on the
-                statement — importing a March statement in July still files those transactions under March.
+                Upload a CSV or PDF statement from your bank. Every transaction keeps the date it happened on
+                the statement — importing a March statement in July still files those transactions under March.
+                PDF works on text-based statements (the kind a bank emails or lets you download) — a scanned or
+                photographed page won't have extractable text. A CSV export, if your bank offers one, is more
+                reliable than a PDF.
             </p>
             <p id="csv-import-error" class="csv-import-error"></p>
             <div class="csv-import-file-row">
-                <input type="file" id="csv-import-file" accept=".csv,text/csv">
+                <input type="file" id="csv-import-file" accept=".csv,text/csv,.pdf,application/pdf">
                 <button type="button" id="csv-import-preview-btn" class="btn-primary" style="padding:8px 18px; font-size:13px;">Preview</button>
             </div>
         </div>
