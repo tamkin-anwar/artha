@@ -229,6 +229,36 @@ def test_preview_parses_euro_amounts_with_balance_column(auth_client):
     assert rows[0]["amount"] == 67.10  # not the 1,200.00 balance
 
 
+def test_preview_resolves_ambiguous_pdf_dates_day_first_with_a_day_first_currency(auth_client):
+    """'05/06/2026' is ambiguous (5 June vs. May 6th) with nothing in the
+    text to settle it on its own — the € elsewhere in the document is
+    what tips it day-first instead of the US-first default."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 CARREFOUR PARIS €67.10",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["date"] == "2026-06-05"
+
+
+def test_preview_keeps_us_first_pdf_dates_without_a_day_first_currency(auth_client):
+    pdf = _make_statement_pdf([
+        "05/06/2026 COFFEE SHOP -4.50",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["date"] == "2026-05-06"
+
+
+# No PDF-side ৳ (Taka) test: reportlab's default test-fixture font has no
+# Bengali glyph coverage and silently mangles the character when drawn,
+# which is a limitation of the test harness, not the parser — the
+# symbol-stripping logic it would exercise is identical code to
+# test_preview_parses_taka_amounts in test_csv_import.py, which does cover it.
+
+
 def test_preview_parses_space_separated_day_month_year_dates(auth_client):
     """Common on UK statements: '19 Sep 2024' or the full month name
     '19 September 2024', rather than BRAC's hyphenated '19-Sep-2024'."""

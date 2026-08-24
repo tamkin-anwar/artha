@@ -1106,6 +1106,24 @@ _IMPORT_DATE_FORMATS = [
     "%m/%d/%y",
     "%d/%m/%y",
 ]
+# Same formats, slash/dash ones reordered day-first. A bare "03/04" is
+# genuinely ambiguous (March 4 or April 3?) with nothing in the text to
+# settle it — used instead of _IMPORT_DATE_FORMATS, whole-document, when
+# _detect_day_first finds a currency symbol whose country overwhelmingly
+# writes dates day-first (see that function).
+_IMPORT_DATE_FORMATS_DAY_FIRST = [
+    "%Y-%m-%d",
+    "%d/%m/%Y",
+    "%m/%d/%Y",
+    "%d-%m-%Y",
+    "%m-%d-%Y",
+    "%b %d, %Y",
+    "%d %b %Y",
+    "%d %B %Y",
+    "%d-%b-%Y",
+    "%d/%m/%y",
+    "%m/%d/%y",
+]
 
 _DATE_HEADER_ALIASES = {"date", "transaction date", "posted date", "trans date", "post date", "value date"}
 _DESC_HEADER_ALIASES = {"description", "memo", "narrative", "details", "payee", "merchant", "particulars"}
@@ -1113,22 +1131,42 @@ _AMOUNT_HEADER_ALIASES = {"amount", "transaction amount", "amt"}
 _DEBIT_HEADER_ALIASES = {"debit", "withdrawal", "withdrawals", "money out", "dr"}
 _CREDIT_HEADER_ALIASES = {"credit", "deposit", "deposits", "money in", "cr"}
 
+# £ (UK), € (most of the Eurozone) and ৳ (Bangladesh) all overwhelmingly
+# write dates day-first. Deliberately NOT keying off a bare "$" — that
+# currency spans the US, Canada, Australia and others with no single
+# dominant order, so a $-only statement keeps the existing US-first
+# default rather than risk flipping it wrong for the far more common USD
+# case.
+_DAY_FIRST_CURRENCY_SYMBOLS = ("£", "€", "৳")
 
-def _parse_import_date(raw: str) -> date | None:
+
+def _detect_day_first(text: str) -> bool:
+    """Whole-document hint for which way to resolve an ambiguous slash
+    date, based on which currency symbol the statement actually prints —
+    the address/letterhead is not used for this because a statement can
+    legitimately show two countries (e.g. a Bangladeshi bank statement
+    mailed to a customer's US address), and the currency the transactions
+    are actually denominated in is the reliable signal."""
+    return any(sym in text for sym in _DAY_FIRST_CURRENCY_SYMBOLS)
+
+
+def _parse_import_date(raw: str, day_first: bool = False) -> date | None:
     """
     Tries each statement date format banks commonly export in, in order.
-    Ambiguous day/month ordering (e.g. "03/04") is resolved US-first —
-    the preview step (every parsed date is shown before anything is
-    saved) is what catches a wrong guess, not this function. Critically,
-    this NEVER falls back to today: a row whose date can't be parsed is
-    skipped (see _parse_statement_csv), not silently dated to the day of
-    the upload — a March statement imported in July must file under
-    March, or the whole point of importing history is defeated.
+    Ambiguous day/month ordering (e.g. "03/04") is resolved US-first by
+    default, day-first when `day_first` is set (see _detect_day_first) —
+    and the preview step (every parsed date is shown before anything is
+    saved) is what catches anything still wrong, not this function.
+    Critically, this NEVER falls back to today: a row whose date can't be
+    parsed is skipped (see _parse_statement_csv), not silently dated to
+    the day of the upload — a March statement imported in July must file
+    under March, or the whole point of importing history is defeated.
     """
     raw = (raw or "").strip()
     if not raw:
         return None
-    for fmt in _IMPORT_DATE_FORMATS:
+    formats = _IMPORT_DATE_FORMATS_DAY_FIRST if day_first else _IMPORT_DATE_FORMATS
+    for fmt in formats:
         try:
             return datetime.strptime(raw, fmt).date()
         except ValueError:
@@ -1164,7 +1202,7 @@ def _parse_import_amount(raw: str) -> Decimal | None:
         return None
     negative = raw.startswith("(") and raw.endswith(")")
     cleaned = raw.strip("()")
-    for symbol in ("$", "£", "€", ","):
+    for symbol in ("$", "£", "€", "৳", ","):
         cleaned = cleaned.replace(symbol, "")
     cleaned = cleaned.strip()
     if not cleaned:
@@ -1194,6 +1232,8 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
         except Exception:
             return [], ["Could not read file — please export as CSV (UTF-8 or Latin-1)."]
 
+    day_first = _detect_day_first(text)
+
     reader = csv.reader(io.StringIO(text))
     try:
         header = next(reader)
@@ -1219,7 +1259,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
             idx = roles.get(role)
             return raw_row[idx].strip() if idx is not None and idx < len(raw_row) else ""
 
-        parsed_date = _parse_import_date(cell("date"))
+        parsed_date = _parse_import_date(cell("date"), day_first=day_first)
         description = cell("description")
         if parsed_date is None or not description:
             warnings.append(f"Row {line_num}: skipped — missing/unparseable date or description.")
@@ -1254,7 +1294,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
     return rows, warnings
 
 
-_MONEY = r"-?[$£€]?[\d,]+\.\d{2}"
+_MONEY = r"-?[$£€৳]?[\d,]+\.\d{2}"
 # "9/19" (US-style, resolved against the statement period in
 # _resolve_pdf_date), "19-Sep-2024" (day-month-year with no separator space,
 # common outside the US — BRAC Bank among others prints exactly this), or
@@ -1307,7 +1347,9 @@ def _resolve_pdf_statement_years(full_text: str) -> tuple[int, int, int, int] | 
     return start_month, int(start_year), end_month, int(end_year)
 
 
-def _resolve_pdf_date(date_str: str, year_context: tuple[int, int, int, int] | None) -> date | None:
+def _resolve_pdf_date(
+    date_str: str, year_context: tuple[int, int, int, int] | None, day_first: bool = False
+) -> date | None:
     """
     Most banks print a full date on every transaction line, which
     _parse_import_date handles directly. Some (Chase among them) print
@@ -1319,15 +1361,16 @@ def _resolve_pdf_date(date_str: str, year_context: tuple[int, int, int, int] | N
     Falls back to the current year if the document had no resolvable
     period at all, rather than failing every bare-MM/DD date outright.
     """
-    parsed = _parse_import_date(date_str)
+    parsed = _parse_import_date(date_str, day_first=day_first)
     if parsed is not None:
         return parsed
 
     try:
-        month_str, day_str = date_str.split("/")
-        month, day = int(month_str), int(day_str)
+        first_str, second_str = date_str.split("/")
+        first, second = int(first_str), int(second_str)
     except ValueError:
         return None
+    day, month = (first, second) if day_first else (second, first)
 
     if year_context is not None:
         start_month, start_year, end_month, end_year = year_context
@@ -1404,97 +1447,96 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
     except Exception:
         return [], ["Could not read that PDF."]
 
+    with pdf:
+        pages_text = [page.extract_text() or "" for page in pdf.pages]
+
+    full_text = "\n".join(pages_text)
+    any_text_found = any(text.strip() for text in pages_text)
+    year_context = _resolve_pdf_statement_years(full_text)
+    day_first = _detect_day_first(full_text)
+
     rows: list[dict] = []
     warnings: list[str] = []
-    any_text_found = False
-    year_context: tuple[int, int, int, int] | None = None
 
-    with pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            if text.strip():
-                any_text_found = True
-            if year_context is None:
-                year_context = _resolve_pdf_statement_years(text)
+    for text in pages_text:
+        for raw_line in text.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
 
-            for raw_line in text.split("\n"):
-                line = raw_line.strip()
-                if not line:
+            wd_m = _PDF_TX_LINE_WITHDRAW_DEPOSIT_RE.match(line)
+            if wd_m:
+                date_str, description, withdraw_str, deposit_str = wd_m.groups()
+                parsed_date = _resolve_pdf_date(date_str, year_context, day_first)
+                if parsed_date is None:
                     continue
 
-                wd_m = _PDF_TX_LINE_WITHDRAW_DEPOSIT_RE.match(line)
-                if wd_m:
-                    date_str, description, withdraw_str, deposit_str = wd_m.groups()
-                    parsed_date = _resolve_pdf_date(date_str, year_context)
-                    if parsed_date is None:
-                        continue
-
-                    withdraw = _parse_import_amount(withdraw_str.lstrip("$£€"))
-                    deposit = _parse_import_amount(deposit_str.lstrip("$£€"))
-                    if withdraw is None or deposit is None:
-                        continue
-
-                    if withdraw != 0:
-                        t_type, amount = "expense", abs(withdraw)
-                    elif deposit != 0:
-                        t_type, amount = "income", abs(deposit)
-                    else:
-                        continue
-
-                    # A statement whose description wraps onto the line before
-                    # or after can leave a transaction line that's nothing but
-                    # date + numbers — the regex still "matches" by taking a
-                    # leading digit-string as the description (e.g. "500.00"
-                    # split into desc="5", amount="00.00"). No real merchant
-                    # name is ever pure digits/punctuation, so reject that
-                    # rather than import a transaction with a garbage label.
-                    description = description.strip()
-                    if not description or not any(ch.isalpha() for ch in description):
-                        warnings.append(
-                            f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
-                            "its description wrapped onto another line and couldn't be matched."
-                        )
-                        continue
-
-                    rows.append({
-                        "date": parsed_date.strftime("%Y-%m-%d"),
-                        "description": description,
-                        "amount": float(amount),
-                        "type": t_type,
-                        "category": _guess_category(description, t_type),
-                    })
+                withdraw = _parse_import_amount(withdraw_str.lstrip("$£€৳"))
+                deposit = _parse_import_amount(deposit_str.lstrip("$£€৳"))
+                if withdraw is None or deposit is None:
                     continue
 
-                m = _PDF_TX_LINE_WITH_BALANCE_RE.match(line) or _PDF_TX_LINE_RE.match(line)
-                if m:
-                    date_str, description, amount_str = m.groups()
-                    parsed_date = _resolve_pdf_date(date_str, year_context)
-                    if parsed_date is None:
-                        continue
-
-                    amount = _parse_import_amount(amount_str.lstrip("$£€"))
-                    if amount is None:
-                        continue
-
-                    t_type = "expense" if amount < 0 or amount_str.lstrip("$£€").startswith("-") else "income"
-                    amount = abs(amount)
-
-                    description = description.strip()
-                    if not description or not any(ch.isalpha() for ch in description):
-                        warnings.append(
-                            f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
-                            "its description wrapped onto another line and couldn't be matched."
-                        )
-                        continue
-
-                    rows.append({
-                        "date": parsed_date.strftime("%Y-%m-%d"),
-                        "description": description,
-                        "amount": float(amount),
-                        "type": t_type,
-                        "category": _guess_category(description, t_type),
-                    })
+                if withdraw != 0:
+                    t_type, amount = "expense", abs(withdraw)
+                elif deposit != 0:
+                    t_type, amount = "income", abs(deposit)
+                else:
                     continue
+
+                # A statement whose description wraps onto the line before
+                # or after can leave a transaction line that's nothing but
+                # date + numbers — the regex still "matches" by taking a
+                # leading digit-string as the description (e.g. "500.00"
+                # split into desc="5", amount="00.00"). No real merchant
+                # name is ever pure digits/punctuation, so reject that
+                # rather than import a transaction with a garbage label.
+                description = description.strip()
+                if not description or not any(ch.isalpha() for ch in description):
+                    warnings.append(
+                        f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
+                        "its description wrapped onto another line and couldn't be matched."
+                    )
+                    continue
+
+                rows.append({
+                    "date": parsed_date.strftime("%Y-%m-%d"),
+                    "description": description,
+                    "amount": float(amount),
+                    "type": t_type,
+                    "category": _guess_category(description, t_type),
+                })
+                continue
+
+            m = _PDF_TX_LINE_WITH_BALANCE_RE.match(line) or _PDF_TX_LINE_RE.match(line)
+            if m:
+                date_str, description, amount_str = m.groups()
+                parsed_date = _resolve_pdf_date(date_str, year_context, day_first)
+                if parsed_date is None:
+                    continue
+
+                amount = _parse_import_amount(amount_str.lstrip("$£€৳"))
+                if amount is None:
+                    continue
+
+                t_type = "expense" if amount < 0 or amount_str.lstrip("$£€৳").startswith("-") else "income"
+                amount = abs(amount)
+
+                description = description.strip()
+                if not description or not any(ch.isalpha() for ch in description):
+                    warnings.append(
+                        f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
+                        "its description wrapped onto another line and couldn't be matched."
+                    )
+                    continue
+
+                rows.append({
+                    "date": parsed_date.strftime("%Y-%m-%d"),
+                    "description": description,
+                    "amount": float(amount),
+                    "type": t_type,
+                    "category": _guess_category(description, t_type),
+                })
+                continue
 
     if not any_text_found:
         return [], [

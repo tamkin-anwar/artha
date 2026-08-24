@@ -77,6 +77,28 @@ def test_preview_parses_sterling_amounts_with_uk_date_format(auth_client):
     salary = next(r for r in rows if "Salary" in r["description"])
     assert salary["type"] == "income"
     assert salary["amount"] == 1500.00
+    # 05/06 is genuinely ambiguous (5 June vs. May 6th) — the £ elsewhere
+    # in the file is what resolves it day-first instead of the US-first
+    # default.
+    assert salary["date"] == "2026-06-05"
+
+
+def test_preview_resolves_ambiguous_dates_us_first_without_a_day_first_currency(auth_client):
+    """Same ambiguous 05/06 date, but no £/€/৳ anywhere in the file — stays
+    resolved the existing US-first way rather than flipping the default
+    for the far more common plain-$ statement."""
+    csv_text = "Date,Description,Amount\n05/06/2026,Coffee Shop,-4.50\n"
+    resp = _upload(auth_client, csv_text)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["date"] == "2026-05-06"  # May 6th, not June 5th
+
+
+def test_preview_parses_taka_amounts(auth_client):
+    resp = _upload(auth_client, "Date,Description,Amount\n19-Sep-2024,Card Payment,৳600.00\n")
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["amount"] == 600.00
 
 
 def test_preview_auto_suggests_category_from_merchant_name(auth_client):
