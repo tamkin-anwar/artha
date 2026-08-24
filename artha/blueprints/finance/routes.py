@@ -33,19 +33,24 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TRANSACTION_CATEGORIES = {
-    "income":        {"label": "Income",             "icon": "trending-up"},
-    "housing":       {"label": "Housing",             "icon": "home"},
-    "utilities":     {"label": "Utilities",           "icon": "zap"},
-    "groceries":     {"label": "Groceries",           "icon": "shopping-cart"},
-    "dining":        {"label": "Dining",              "icon": "utensils"},
-    "transport":     {"label": "Transport",           "icon": "car"},
-    "subscriptions": {"label": "Subscriptions",       "icon": "repeat"},
-    "shopping":      {"label": "Shopping",            "icon": "shopping-bag"},
-    "health":        {"label": "Health",              "icon": "heart-pulse"},
-    "entertainment": {"label": "Entertainment",       "icon": "clapperboard"},
-    "debt":          {"label": "Debt & loans",        "icon": "credit-card"},
-    "other":         {"label": "Other",               "icon": "more-horizontal"},
+    "income":        {"label": "Income",             "icon": "trending-up",     "color": "#10b981"},
+    "housing":       {"label": "Housing",             "icon": "home",            "color": "#6366f1"},
+    "utilities":     {"label": "Utilities",           "icon": "zap",             "color": "#f59e0b"},
+    "groceries":     {"label": "Groceries",           "icon": "shopping-cart",   "color": "#22c55e"},
+    "dining":        {"label": "Dining",              "icon": "utensils",        "color": "#f97316"},
+    "transport":     {"label": "Transport",           "icon": "car",             "color": "#0ea5e9"},
+    "subscriptions": {"label": "Subscriptions",       "icon": "repeat",          "color": "#a855f7"},
+    "shopping":      {"label": "Shopping",            "icon": "shopping-bag",    "color": "#ec4899"},
+    "health":        {"label": "Health",              "icon": "heart-pulse",     "color": "#14b8a6"},
+    "entertainment": {"label": "Entertainment",       "icon": "clapperboard",    "color": "#eab308"},
+    "debt":          {"label": "Debt & loans",        "icon": "credit-card",     "color": "#ef4444"},
+    "other":         {"label": "Other",               "icon": "more-horizontal", "color": "#64748b"},
 }
+
+# Not a real category — the bucket for expense/income rows with no category
+# set at all, kept visually distinct (lighter gray) from the "Other" category
+# above so users can tell "I chose Other" apart from "I never categorized this".
+_UNCATEGORIZED = {"label": "Uncategorized", "icon": "help-circle", "color": "#94a3b8"}
 
 # Keyword -> category, checked against a lowercased transaction description.
 # Deliberately simple substring matching, not an ML/LLM call: it's free,
@@ -819,6 +824,14 @@ def finance_page():
     current_month_expense = bucket_for(_month_start(today.year, today.month))["expense"]
     budget = budget_status(budget_row.monthly_cap if budget_row else None, current_month_expense)
 
+    # Every calendar year that has at least one transaction, newest first —
+    # populates the year picker on the Cash Flow/Spending/Income tabs so
+    # users can look back at last year's (or any past year's) totals, not
+    # just rolling trailing windows anchored to today.
+    available_years = sorted({t.timestamp.year for t in all_tx if t.timestamp}, reverse=True)
+    if today.year not in available_years:
+        available_years.insert(0, today.year)
+
     return render_template(
         "finance.html",
         transactions=transactions,
@@ -841,7 +854,155 @@ def finance_page():
         budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
         today_date=today.strftime("%Y-%m-%d"),
         categories=TRANSACTION_CATEGORIES,
+        available_years=available_years,
     )
+
+
+# ---------------------------------------------------------------------------
+# Cash Flow / Spending / Income tabs — period-flexible aggregation, fetched
+# on demand (JSON) so switching tabs or periods never reloads the page.
+# Three "views" share one endpoint since they all start from the same
+# date-bounded transaction query:
+#   - cashflow: income vs. expense per month bucket within the period
+#   - spending: expense total broken down by category
+#   - income:   income total broken down by category
+# ---------------------------------------------------------------------------
+
+def _period_bounds(period: str, year: int, today: date) -> tuple[date, date, str]:
+    """(start, end_exclusive, label) for a period key.
+
+    "month"/"3m"/"6m"/"12m" are trailing windows anchored to today (matches
+    how banking apps show "Last 3 Months" — always relative to now, not to
+    whatever year is selected). "year" is the one period that actually reads
+    the `year` param, since that's what lets a user look back at 2025's
+    totals vs. 2026's — the whole point of the year picker.
+    """
+    if period == "month":
+        start = _month_start(today.year, today.month)
+        end = _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
+        return start, end, f"{calendar.month_name[today.month]} {today.year}"
+
+    if period in ("3m", "6m", "12m"):
+        n = {"3m": 3, "6m": 6, "12m": 12}[period]
+        end = _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
+        cursor_year, cursor_month = today.year, today.month
+        for _ in range(n - 1):
+            cursor_month -= 1
+            if cursor_month == 0:
+                cursor_month = 12
+                cursor_year -= 1
+        start = _month_start(cursor_year, cursor_month)
+        return start, end, f"Last {n} Months"
+
+    # "year" (and any unrecognized value, so the route never 500s on a bad param)
+    start = date(year, 1, 1)
+    end = date(year + 1, 1, 1)
+    return start, end, str(year)
+
+
+@finance_bp.route("/finance/breakdown")
+@login_required
+def finance_breakdown():
+    uid = current_user.id
+    view = (request.args.get("view") or "spending").strip().lower()
+    period = (request.args.get("period") or "month").strip().lower()
+    today = date.today()
+    try:
+        year = int(request.args.get("year") or today.year)
+    except (TypeError, ValueError):
+        year = today.year
+
+    if view not in ("spending", "income", "cashflow"):
+        view = "spending"
+    if period not in ("month", "3m", "6m", "12m", "year"):
+        period = "month"
+
+    start, end, period_label = _period_bounds(period, year, today)
+    start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+    end_dt = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
+
+    txs = Transaction.query.filter(
+        Transaction.user_id == uid,
+        Transaction.timestamp >= start_dt,
+        Transaction.timestamp < end_dt,
+    ).all()
+
+    if view == "cashflow":
+        month_keys = []
+        cursor_year, cursor_month = start.year, start.month
+        while _month_start(cursor_year, cursor_month) < end:
+            month_keys.append(_month_start(cursor_year, cursor_month))
+            cursor_month += 1
+            if cursor_month == 13:
+                cursor_month = 1
+                cursor_year += 1
+
+        bucket_totals = {d.strftime("%Y-%m"): {"income": Decimal("0"), "expense": Decimal("0")} for d in month_keys}
+        for t in txs:
+            if not t.timestamp:
+                continue
+            b = bucket_totals.get(t.timestamp.strftime("%Y-%m"))
+            if b is None:
+                continue
+            if t.type == "income":
+                b["income"] += t.amount
+            elif t.type == "expense":
+                b["expense"] += t.amount
+
+        buckets = []
+        income_total = Decimal("0")
+        expense_total = Decimal("0")
+        for d in month_keys:
+            b = bucket_totals[d.strftime("%Y-%m")]
+            income_total += b["income"]
+            expense_total += b["expense"]
+            buckets.append({
+                "label": f"{calendar.month_abbr[d.month]} {d.year}" if len(month_keys) > 12 else calendar.month_abbr[d.month],
+                "income": float(b["income"]),
+                "expense": float(b["expense"]),
+                "net": float(b["income"] - b["expense"]),
+            })
+
+        return jsonify({
+            "view": view,
+            "period": period,
+            "period_label": period_label,
+            "buckets": buckets,
+            "income_total": float(income_total),
+            "expense_total": float(expense_total),
+            "net": float(income_total - expense_total),
+        })
+
+    # spending / income — same shape, just filtered to the opposite tx type.
+    want_type = "expense" if view == "spending" else "income"
+    totals: dict[str, Decimal] = defaultdict(Decimal)
+    for t in txs:
+        if t.type != want_type:
+            continue
+        key = t.category if (t.category and t.category in TRANSACTION_CATEGORIES) else "_uncategorized"
+        totals[key] += t.amount
+
+    total = sum(totals.values(), Decimal("0"))
+    categories = []
+    for key, amount in sorted(totals.items(), key=lambda kv: kv[1], reverse=True):
+        meta = _UNCATEGORIZED if key == "_uncategorized" else TRANSACTION_CATEGORIES[key]
+        pct = float((amount / total) * 100) if total > 0 else 0.0
+        categories.append({
+            "key": key,
+            "label": meta["label"],
+            "icon": meta["icon"],
+            "color": meta["color"],
+            "amount": float(amount),
+            "pct": pct,
+        })
+
+    return jsonify({
+        "view": view,
+        "period": period,
+        "period_label": period_label,
+        "total": float(total),
+        "categories": categories,
+    })
 
 
 # ---------------------------------------------------------------------------

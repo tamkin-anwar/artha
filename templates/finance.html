@@ -18,6 +18,14 @@
 <div class="eyebrow" style="margin-bottom:8px;">FINANCE</div>
 <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
 
+<div class="fp-toptabs" role="tablist" aria-label="Finance views">
+    <button type="button" class="fp-toptab fp-toptab-active" data-fp-tab="transactions" role="tab" aria-selected="true">Transactions</button>
+    <button type="button" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false">Spending</button>
+    <button type="button" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false">Income</button>
+    <button type="button" class="fp-toptab" data-fp-tab="cashflow" role="tab" aria-selected="false">Cash Flow</button>
+</div>
+
+<div id="fp-pane-transactions" class="fp-tabpane">
 <!-- Month selector -->
 <div class="glass-card" style="padding:12px 14px; margin-bottom:24px; display:flex; align-items:center; gap:8px;">
     <button type="button" id="month-scroll-left" aria-label="Scroll months left" style="background:none; border:none; color:var(--text-secondary); font-size:16px; cursor:pointer; flex-shrink:0; padding:4px;">
@@ -364,6 +372,79 @@
         {% endfor %}
     </ul>
 </div>
+</div>
+<!-- /fp-pane-transactions -->
+
+{% macro period_selector(view) %}
+<div class="fp-period-row">
+    <div class="fp-period-chips" role="group" aria-label="Period">
+        <button type="button" class="fp-period-chip fp-period-chip-active" data-period="month">This Month</button>
+        <button type="button" class="fp-period-chip" data-period="3m">Last 3M</button>
+        <button type="button" class="fp-period-chip" data-period="6m">Last 6M</button>
+        <button type="button" class="fp-period-chip" data-period="12m">Last 12M</button>
+        <button type="button" class="fp-period-chip" data-period="year">Year</button>
+    </div>
+    <select class="fp-year-select" hidden aria-label="Year">
+        {% for y in available_years %}
+            <option value="{{ y }}">{{ y }}</option>
+        {% endfor %}
+    </select>
+</div>
+{% endmacro %}
+
+<!-- Spending -->
+<div id="fp-pane-spending" class="fp-tabpane" data-fp-view="spending" hidden>
+    <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+        {{ period_selector("spending") }}
+        <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
+        <div class="fp-money" style="font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--red);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-donut-row">
+            <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
+            <ul class="fp-category-list" data-fp-category-list></ul>
+        </div>
+    </div>
+</div>
+
+<!-- Income -->
+<div id="fp-pane-income" class="fp-tabpane" data-fp-view="income" hidden>
+    <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+        {{ period_selector("income") }}
+        <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
+        <div class="fp-money" style="font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--emerald);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-donut-row">
+            <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
+            <ul class="fp-category-list" data-fp-category-list></ul>
+        </div>
+    </div>
+</div>
+
+<!-- Cash Flow -->
+<div id="fp-pane-cashflow" class="fp-tabpane" data-fp-view="cashflow" hidden>
+    <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+        {{ period_selector("cashflow") }}
+        <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
+
+        <div class="fp-cashflow-summary">
+            <div>
+                <div class="eyebrow">Income</div>
+                <div class="fp-money" data-fp-cf-income data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--emerald);">$0.00</div>
+            </div>
+            <div>
+                <div class="eyebrow">Spending</div>
+                <div class="fp-money" data-fp-cf-expense data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--red);">$0.00</div>
+            </div>
+            <div>
+                <div class="eyebrow" data-fp-cf-net-label>Net</div>
+                <div class="fp-money" data-fp-cf-net data-money-signed="1" data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px;">+$0.00</div>
+            </div>
+        </div>
+
+        <div id="fpCashflowChartWrap" style="position:relative; height:220px; margin-top:18px;">
+            <canvas data-fp-cashflow-chart></canvas>
+        </div>
+        <p class="fp-empty-msg" data-fp-empty-msg hidden>No transactions in this period.</p>
+    </div>
+</div>
 
 <style>
     /* An author-stylesheet display rule on this selector always beats the
@@ -452,6 +533,54 @@
         background:var(--bg-page); color:var(--text-secondary);
     }
     .recurring-due-badge.recurring-due-soon { background:var(--gold-dim); color:var(--gold); }
+
+    /* Top-level Finance tabs (Transactions / Spending / Income / Cash Flow).
+       No unconditional display rule on .fp-tabpane — same [hidden]-vs-author-
+       -stylesheet trap as the CSV modal and recurring panel above; a plain
+       block div's natural display is exactly what's wanted once unhidden. */
+    .fp-toptabs { display:flex; gap:6px; margin-bottom:20px; overflow-x:auto; }
+    .fp-toptab {
+        padding:8px 16px; border:1px solid transparent; border-radius:9px;
+        font-size:13.5px; font-weight:500; color:var(--text-secondary);
+        background:none; cursor:pointer; font-family:inherit; white-space:nowrap;
+        transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .fp-toptab:hover { background:var(--bg-hover); }
+    .fp-toptab.fp-toptab-active { background:var(--gold-dim); color:var(--gold); border-color:var(--gold); }
+
+    .fp-period-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .fp-period-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .fp-period-chip {
+        padding:5px 12px; border:1px solid var(--border-subtle); border-radius:999px;
+        font-size:12px; font-weight:500; color:var(--text-secondary);
+        background:none; cursor:pointer; font-family:inherit; white-space:nowrap;
+        transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .fp-period-chip:hover { background:var(--bg-hover); }
+    .fp-period-chip.fp-period-chip-active { background:var(--gold-dim); color:var(--gold); border-color:var(--gold); }
+    .fp-year-select {
+        font-size:12px; background:var(--bg-page); border:1px solid var(--border-subtle);
+        border-radius:8px; padding:5px 10px; color:var(--text-primary); font-family:inherit;
+    }
+
+    .fp-donut-row { display:flex; gap:28px; align-items:center; flex-wrap:wrap; margin-top:20px; }
+    .fp-donut-wrap { position:relative; width:180px; height:180px; flex-shrink:0; }
+    .fp-category-list { flex:1; min-width:220px; list-style:none; margin:0; padding:0; }
+    .fp-category-row {
+        display:flex; align-items:center; gap:10px; padding:8px 0;
+        border-bottom:1px solid var(--border-subtle); font-size:13px;
+    }
+    .fp-category-row:last-child { border-bottom:none; }
+    .fp-category-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .fp-category-label { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .fp-category-pct { color:var(--text-muted); font-size:11.5px; flex-shrink:0; }
+    .fp-category-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; color:var(--text-primary); }
+
+    .fp-cashflow-summary {
+        display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
+        gap:14px; margin-top:18px;
+    }
+    .fp-empty-msg { text-align:center; padding:24px 0; font-size:14px; color:var(--text-secondary); }
 </style>
 
 <div id="csv-import-backdrop" class="csv-import-backdrop" hidden>
@@ -721,6 +850,292 @@ function renderTrendChart() {
 renderTrendChart();
 onThemeChange(renderTrendChart);
 document.addEventListener("currency-refresh-ui", renderTrendChart);
+
+// ---------------------------------------------------------------------
+// Spending / Income / Cash Flow tabs — fetched on demand from
+// /finance/breakdown so switching tabs or periods never reloads the
+// page. Each of the 3 panes shares the same period-chip + year-select
+// markup (period_selector() macro above) and the same fp-money/
+// data-money-value convention as the rest of the page, so currency
+// changes re-render these numbers via the existing
+// formatFinanceMoneyElements() listener with no extra wiring here.
+// ---------------------------------------------------------------------
+var fpCharts = {};
+var fpLoadedViews = {};
+
+function fpPane(view) {
+    return document.querySelector('.fp-tabpane[data-fp-view="' + view + '"]');
+}
+
+function fpActivePeriod(pane) {
+    var chip = pane.querySelector(".fp-period-chip-active");
+    return chip ? chip.dataset.period : "month";
+}
+
+function fpActiveYear(pane) {
+    var sel = pane.querySelector(".fp-year-select");
+    return sel && sel.value ? sel.value : String(new Date().getFullYear());
+}
+
+function fpSetMoney(el, value, signed) {
+    if (!el) return;
+    el.setAttribute("data-money-value", value);
+    el.textContent = signed ? signedMoney(value) : formatMoney(value);
+}
+
+function fpRenderDonut(pane, data) {
+    var periodLabelEl = pane.querySelector("[data-fp-period-label]");
+    if (periodLabelEl) periodLabelEl.textContent = data.period_label;
+    fpSetMoney(pane.querySelector("[data-fp-total]"), data.total, false);
+
+    var listEl = pane.querySelector("[data-fp-category-list]");
+    var wrapEl = pane.querySelector(".fp-donut-wrap");
+    var canvas = pane.querySelector("[data-fp-donut]");
+    var view = pane.dataset.fpView;
+
+    if (fpCharts[view]) {
+        fpCharts[view].destroy();
+        fpCharts[view] = null;
+    }
+
+    if (!data.categories.length) {
+        if (listEl) listEl.innerHTML = '<li class="fp-empty-msg">No ' + view + ' recorded for ' + data.period_label + '.</li>';
+        if (wrapEl) wrapEl.style.display = "none";
+        return;
+    }
+    if (wrapEl) wrapEl.style.display = "";
+
+    if (listEl) {
+        listEl.innerHTML = data.categories.map(function (c) {
+            return (
+                '<li class="fp-category-row">' +
+                    '<span class="fp-category-dot" style="background:' + c.color + ';"></span>' +
+                    '<span class="fp-category-label">' + c.label + '</span>' +
+                    '<span class="fp-category-pct">' + c.pct.toFixed(0) + '%</span>' +
+                    '<span class="fp-category-amount fp-money" data-money-value="' + c.amount + '">' + formatMoney(c.amount) + '</span>' +
+                '</li>'
+            );
+        }).join("");
+    }
+
+    if (canvas && typeof Chart !== "undefined") {
+        var borderCard = getVar("--border-card", "rgba(255,255,255,0.08)");
+        var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
+        var mutedColor = getVar("--text-muted", "#4a5468");
+        var textPrimary = getVar("--text-primary", "#f0ede8");
+        fpCharts[view] = new Chart(canvas, {
+            type: "doughnut",
+            data: {
+                labels: data.categories.map(function (c) { return c.label; }),
+                datasets: [{
+                    data: data.categories.map(function (c) { return c.amount; }),
+                    backgroundColor: data.categories.map(function (c) { return c.color; }),
+                    borderColor: getVar("--bg-surface", "#1a1e2e"),
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "68%",
+                animation: { duration: 500, easing: "easeOutQuart" },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: glassBg,
+                        borderColor: borderCard,
+                        borderWidth: 1,
+                        cornerRadius: 10,
+                        padding: 10,
+                        titleColor: mutedColor,
+                        titleFont: { size: 11, weight: "600" },
+                        bodyColor: textPrimary,
+                        bodyFont: { size: 13, weight: "700", family: "'JetBrains Mono', monospace" },
+                        callbacks: {
+                            label: function (ctx) { return " " + ctx.label + ": " + formatMoney(ctx.parsed); },
+                        },
+                    },
+                },
+            },
+        });
+    }
+}
+
+function fpRenderCashflow(pane, data) {
+    var periodLabelEl = pane.querySelector("[data-fp-period-label]");
+    if (periodLabelEl) periodLabelEl.textContent = data.period_label;
+
+    fpSetMoney(pane.querySelector("[data-fp-cf-income]"), data.income_total, false);
+    fpSetMoney(pane.querySelector("[data-fp-cf-expense]"), data.expense_total, false);
+
+    var netEl = pane.querySelector("[data-fp-cf-net]");
+    fpSetMoney(netEl, data.net, true);
+    if (netEl) netEl.style.color = data.net >= 0 ? getVar("--emerald", "#22c55e") : getVar("--red", "#ef4444");
+    var netLabelEl = pane.querySelector("[data-fp-cf-net-label]");
+    if (netLabelEl) netLabelEl.textContent = data.net >= 0 ? "Surplus" : "Shortfall";
+
+    var canvas = pane.querySelector("[data-fp-cashflow-chart]");
+    var emptyMsg = pane.querySelector("[data-fp-empty-msg]");
+    var hasData = data.buckets.some(function (b) { return b.income !== 0 || b.expense !== 0; });
+
+    if (fpCharts.cashflow) {
+        fpCharts.cashflow.destroy();
+        fpCharts.cashflow = null;
+    }
+
+    if (!hasData) {
+        if (emptyMsg) emptyMsg.hidden = false;
+        if (canvas) canvas.style.display = "none";
+        return;
+    }
+    if (emptyMsg) emptyMsg.hidden = true;
+    if (canvas) canvas.style.display = "";
+
+    if (canvas && typeof Chart !== "undefined") {
+        var emerald = getVar("--emerald", "#22c55e");
+        var red = getVar("--red", "#ef4444");
+        var mutedColor = getVar("--text-muted", "#4a5468");
+        var textPrimary = getVar("--text-primary", "#f0ede8");
+        var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
+        var borderCard = getVar("--border-card", "rgba(255,255,255,0.08)");
+        var hasDatalabels = typeof ChartDataLabels !== "undefined";
+
+        fpCharts.cashflow = new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: data.buckets.map(function (b) { return b.label; }),
+                datasets: [
+                    {
+                        label: "Income",
+                        data: data.buckets.map(function (b) { return b.income; }),
+                        backgroundColor: emerald,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        maxBarThickness: 28,
+                    },
+                    {
+                        label: "Spending",
+                        data: data.buckets.map(function (b) { return b.expense; }),
+                        backgroundColor: red,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        maxBarThickness: 28,
+                    },
+                ],
+            },
+            plugins: hasDatalabels ? [ChartDataLabels] : [],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 500, easing: "easeOutQuart" },
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: { color: mutedColor, boxWidth: 10, boxHeight: 10, font: { size: 11 }, usePointStyle: true, pointStyle: "circle" },
+                    },
+                    tooltip: {
+                        backgroundColor: glassBg,
+                        borderColor: borderCard,
+                        borderWidth: 1,
+                        cornerRadius: 10,
+                        padding: 10,
+                        titleColor: mutedColor,
+                        titleFont: { size: 11, weight: "600" },
+                        bodyColor: textPrimary,
+                        bodyFont: { size: 13, weight: "700", family: "'JetBrains Mono', monospace" },
+                        callbacks: {
+                            label: function (ctx) { return " " + ctx.dataset.label + ": " + formatMoney(ctx.parsed.y); },
+                        },
+                    },
+                    datalabels: false,
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { color: mutedColor, font: { size: 11 } },
+                    },
+                    y: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { display: false },
+                    },
+                },
+            },
+        });
+    }
+}
+
+function fpLoadBreakdown(view) {
+    var pane = fpPane(view);
+    if (!pane) return;
+    var period = fpActivePeriod(pane);
+    var year = fpActiveYear(pane);
+    var url = "/finance/breakdown?view=" + view + "&period=" + period;
+    if (period === "year") url += "&year=" + year;
+
+    fetch(url, { credentials: "same-origin", headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+            if (!data) return;
+            if (view === "cashflow") fpRenderCashflow(pane, data);
+            else fpRenderDonut(pane, data);
+            formatFinanceMoneyElements();
+        })
+        .catch(function (err) { console.warn("Could not load " + view + " breakdown:", err); });
+}
+
+// Top-level tab switching (Transactions / Spending / Income / Cash Flow).
+var fpTopTabs = document.querySelectorAll(".fp-toptab");
+var fpTabPanes = {
+    transactions: document.getElementById("fp-pane-transactions"),
+    spending: fpPane("spending"),
+    income: fpPane("income"),
+    cashflow: fpPane("cashflow"),
+};
+fpTopTabs.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+        var target = btn.dataset.fpTab;
+        fpTopTabs.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle("fp-toptab-active", active);
+            b.setAttribute("aria-selected", String(active));
+        });
+        Object.keys(fpTabPanes).forEach(function (key) {
+            if (fpTabPanes[key]) fpTabPanes[key].hidden = key !== target;
+        });
+        if (target !== "transactions" && !fpLoadedViews[target]) {
+            fpLoadedViews[target] = true;
+            fpLoadBreakdown(target);
+        }
+    });
+});
+
+// Period chips and year picker are identical markup across all 3 breakdown
+// panes, so one delegated listener handles all of them rather than binding
+// per-pane (matches the recurring-toggle-btn delegation pattern above).
+document.addEventListener("click", function (e) {
+    var chip = e.target.closest(".fp-period-chip");
+    if (!chip) return;
+    var pane = chip.closest(".fp-tabpane");
+    if (!pane) return;
+    pane.querySelectorAll(".fp-period-chip").forEach(function (c) {
+        c.classList.toggle("fp-period-chip-active", c === chip);
+    });
+    var yearSelect = pane.querySelector(".fp-year-select");
+    if (yearSelect) yearSelect.hidden = chip.dataset.period !== "year";
+    fpLoadBreakdown(pane.dataset.fpView);
+});
+
+document.addEventListener("change", function (e) {
+    if (!e.target.classList.contains("fp-year-select")) return;
+    var pane = e.target.closest(".fp-tabpane");
+    if (!pane) return;
+    fpLoadBreakdown(pane.dataset.fpView);
+});
 
 var scrollRow = document.getElementById("month-tab-row");
 var leftBtn = document.getElementById("month-scroll-left");
