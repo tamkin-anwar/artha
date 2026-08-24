@@ -211,17 +211,21 @@ h1, h2, h3, .stat-number {
   outline-offset: 1px;
 }
 
-/* iOS Safari paints its own solid-black chrome behind a date input's
-   value text regardless of the background we set on the element, which
-   reads as a mismatched black pill next to the other form fields.
-   -webkit-appearance:none stops it from doing that; left-aligning the
-   value keeps it consistent with the text inputs beside it. */
-input[type="date"] {
+/* iOS Safari paints its own solid-black chrome behind a date/time
+   input's value text regardless of the background we set on the
+   element, which reads as a mismatched black pill next to the other
+   form fields. -webkit-appearance:none stops it from doing that.
+   text-align:inherit makes the value follow whatever alignment the
+   input itself already has (left by default, or right/center where a
+   specific form explicitly sets it) instead of Safari's forced center. */
+input[type="date"],
+input[type="time"] {
   -webkit-appearance: none;
   appearance: none;
 }
-input[type="date"]::-webkit-date-and-time-value {
-  text-align: left;
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: inherit;
 }
 
 /* Scenario list cards (sidebar) */

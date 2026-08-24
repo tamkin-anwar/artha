@@ -63,31 +63,40 @@
     </ul>
 
     <div class="text-legend" style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border-subtle); font-size:14px; display:flex; flex-direction:column; gap:6px;">
-        <p style="display:flex; align-items:center; gap:6px; margin:0;"><i data-lucide="arrow-up" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--emerald);"></i> Income:
-            <strong
-                id="finance-income"
-                class="finance-income"
-                data-money-value="{{ income }}"
-            >${{ "%.2f"|format(income) }}</strong>
-            <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+        <p style="display:flex; align-items:center; gap:6px; margin:0;">
+            <i data-lucide="arrow-up" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--emerald); flex-shrink:0;"></i>
+            <span style="flex:1; min-width:0;">Income:
+                <strong
+                    id="finance-income"
+                    class="finance-income"
+                    data-money-value="{{ income }}"
+                >${{ "%.2f"|format(income) }}</strong>
+                <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+            </span>
         </p>
 
-        <p style="display:flex; align-items:center; gap:6px; margin:0;"><i data-lucide="arrow-down" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--red);"></i> Expense:
-            <strong
-                id="finance-expense"
-                class="finance-expense"
-                data-money-value="{{ expense }}"
-            >${{ "%.2f"|format(expense) }}</strong>
-            <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+        <p style="display:flex; align-items:center; gap:6px; margin:0;">
+            <i data-lucide="arrow-down" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--red); flex-shrink:0;"></i>
+            <span style="flex:1; min-width:0;">Expense:
+                <strong
+                    id="finance-expense"
+                    class="finance-expense"
+                    data-money-value="{{ expense }}"
+                >${{ "%.2f"|format(expense) }}</strong>
+                <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+            </span>
         </p>
 
-        <p style="display:flex; align-items:center; gap:6px; margin:0;"><i data-lucide="trending-up" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--gold);"></i> Balance:
-            <strong
-                id="finance-balance"
-                class="finance-balance"
-                data-money-value="{{ balance }}"
-            >${{ "%.2f"|format(balance) }}</strong>
-            <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+        <p style="display:flex; align-items:center; gap:6px; margin:0;">
+            <i data-lucide="trending-up" aria-hidden="true" style="width:13px; height:13px; stroke-width:2; color:var(--gold); flex-shrink:0;"></i>
+            <span style="flex:1; min-width:0;">Balance:
+                <strong
+                    id="finance-balance"
+                    class="finance-balance"
+                    data-money-value="{{ balance }}"
+                >${{ "%.2f"|format(balance) }}</strong>
+                <span style="font-size:11px; color:var(--text-muted);">· This month</span>
+            </span>
         </p>
     </div>
 </div>

@@ -199,6 +199,16 @@
     }
     .ai-send-btn:hover { transform: scale(1.05); }
     .ai-send-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+    /* The widget fills the viewport by height (not document flow), so the
+       global <main> bottom-padding clearance for .feedback-fab never
+       applies here — without this the fixed feedback bubble sits directly
+       on top of the send button. */
+    @media (max-width: 767px) {
+        #artha-ai-widget {
+            height: calc(100vh - 190px - 76px) !important;
+        }
+    }
 </style>
 
 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
