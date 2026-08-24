@@ -282,6 +282,32 @@
     function preprocess(rawLine) {
         var line = rawLine;
 
+        // Step 0 — surface-level cleanup: things that are unambiguous
+        // regardless of what the rest of the expression looks like, so
+        // they run before anything that might get confused by them.
+        //
+        // Thousands separators ("10,000 x 9%") — real amounts get typed
+        // with commas constantly, especially in a finance app, and
+        // math.js's parser treats a bare "," as a syntax error (confirmed:
+        // math.evaluate("10,000") throws "Unexpected operator ,"), not as
+        // digit grouping. Only fires digit-comma-digit, so it can't eat a
+        // comma anyone might type as an actual list/argument separator
+        // elsewhere.
+        line = line.replace(/(\d),(\d)/g, "$1$2");
+        // A trailing "=" ("10000 x 9% =") — muscle memory from a physical
+        // calculator's equals button. Only strips one hanging off the very
+        // end with nothing after it; "x = 5" (a real assignment) always
+        // has content *after* the "=", so this can't misfire on that.
+        line = line.replace(/\s*=\s*$/, "");
+        // Non-ASCII look-alikes people paste in or type via autocorrect/
+        // international keyboards: real minus sign (U+2212, distinct from
+        // the ASCII hyphen-minus math.js expects), and a middot as a
+        // multiplication dot (common in scientific notation/typesetting).
+        line = line.replace(/−/g, "-");
+        line = line.replace(/·/g, "*");
+        // "**" (Python/JS-style exponent) — math.js uses "^" for power.
+        line = line.replace(/\*\*/g, "^");
+
         // Step 1 — word operators
         line = line.replace(/\badd\b/gi, "+");
         line = line.replace(/\bplus\b/gi, "+");
@@ -291,7 +317,30 @@
         line = line.replace(/\bmultiplied by\b/gi, "*");
         line = line.replace(/\bdivided by\b/gi, "/");
         line = line.replace(/\bover\b/gi, "/");
+        line = line.replace(/\bpercent\b/gi, "%");
         line = line.replace(/×/g, "*");
+        line = line.replace(/÷/g, "/");
+
+        // A bare "x" as multiplication ("10000 x 9%", "5x3") — math.js has
+        // no notion of this (confirmed: math.evaluate("10000 x 9%") throws
+        // "Undefined symbol x", the exact failure this fixes), and it's
+        // common enough shorthand that every other "type naturally"
+        // calculator (Numi, Soulver, iOS/Windows Calculator) accepts it.
+        // Scoped to only fire between a digit and a digit/opening-paren/
+        // tightly-glued signed number ("10 x -5") — "x" alone (as in
+        // "x = 5" or "2x + 1", algebra-style) is a legitimate math.js
+        // variable name and must never be rewritten, which is exactly why
+        // this doesn't just blanket-replace /x/gi. A *loosely* spaced
+        // "5 x - 3" is left alone on purpose: that shape is also how
+        // someone would type "5 times variable-x, minus 3", and there's
+        // no way to tell those two intents apart from the text alone —
+        // unlike "5 x -3", where the sign is glued to the digit and
+        // there's no ambiguity left to preserve. (Left un-widened, this
+        // case was actually worse than just unsupported: stripMemoWords()
+        // below silently deletes any bare "x" it doesn't recognize as a
+        // variable, so "10 x -5" was quietly miscomputing to "10 -5" = 5
+        // instead of failing loudly or computing the intended -50.)
+        line = line.replace(/(\d)\s*[xX]\s*(?=[\d(]|[+-]\d)/g, "$1*");
 
         // Step 2 — percentage patterns (order matters: of / off / on)
         line = line.replace(/(\d+(?:\.\d+)?)\s*%\s+of\s+/gi, "($1/100)*");
