@@ -318,10 +318,27 @@
 
     <div id="fp-recurring-count">
     {% if recurring_count > 0 %}
-        <p style="font-size:13px; color:var(--gold); margin:0 0 12px; display:flex; align-items:center; gap:5px;">
-            <i data-lucide="repeat" aria-hidden="true" style="width:12px; height:12px; stroke-width:2;"></i>
+        <button type="button" class="recurring-toggle-btn" aria-expanded="false" aria-controls="recurring-panel">
+            <i data-lucide="repeat" aria-hidden="true"></i>
             {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
-        </p>
+            <i data-lucide="chevron-down" class="recurring-toggle-chevron" aria-hidden="true"></i>
+        </button>
+        <div id="recurring-panel" class="recurring-panel" hidden>
+            {% for bill in recurring_bills %}
+                <div class="recurring-row">
+                    <span class="recurring-row-desc">{{ bill.description }}</span>
+                    {% if bill.category and bill.category in categories %}
+                        <span class="recurring-row-category">{{ categories[bill.category].label }}</span>
+                    {% endif %}
+                    <span class="recurring-row-amount" style="color:{{ 'var(--emerald)' if bill.type == 'income' else 'var(--red)' }};">
+                        {{ '+' if bill.type == 'income' else '-' }}${{ '%.2f'|format(bill.amount) }}
+                    </span>
+                    {% if bill.due_label %}
+                        <span class="recurring-due-badge {{ 'recurring-due-soon' if bill.due_soon }}">{{ bill.due_label }}</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
     {% endif %}
     </div>
 
@@ -403,6 +420,38 @@
     .csv-import-badge { font-size:10px; text-transform:uppercase; letter-spacing:0.03em; padding:1px 6px; border-radius:999px; background:var(--amber-dim); color:var(--amber); }
 
     .csv-import-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-shrink:0; }
+
+    .recurring-toggle-btn {
+        font-size:13px; color:var(--gold); margin:0 0 12px;
+        display:inline-flex; align-items:center; gap:5px;
+        background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
+    }
+    .recurring-toggle-btn svg, .recurring-toggle-btn i { width:12px; height:12px; stroke-width:2; }
+    .recurring-toggle-chevron { transition:transform 0.15s ease; margin-left:1px; }
+    .recurring-toggle-btn[aria-expanded="true"] .recurring-toggle-chevron { transform:rotate(180deg); }
+
+    /* No explicit display rule here — relies on the browser's own
+       [hidden] default (block's natural display once unhidden) rather
+       than fighting it with an author display:flex/block override, the
+       exact mistake fixed earlier on the CSV-import modal's own panels. */
+    .recurring-panel {
+        border:1px solid var(--border-subtle); border-radius:10px;
+        margin:0 0 16px; overflow:hidden;
+    }
+    .recurring-row {
+        display:flex; align-items:center; gap:10px; padding:9px 12px;
+        border-bottom:1px solid var(--border-subtle); font-size:13px;
+    }
+    .recurring-row:last-child { border-bottom:none; }
+    .recurring-row-desc { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .recurring-row-category { font-size:11px; color:var(--text-muted); flex-shrink:0; }
+    .recurring-row-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+    .recurring-due-badge {
+        font-family:'JetBrains Mono',monospace; font-size:10.5px;
+        padding:2px 8px; border-radius:999px; flex-shrink:0;
+        background:var(--bg-page); color:var(--text-secondary);
+    }
+    .recurring-due-badge.recurring-due-soon { background:var(--gold-dim); color:var(--gold); }
 </style>
 
 <div id="csv-import-backdrop" class="csv-import-backdrop" hidden>
@@ -689,6 +738,21 @@ if (scrollRow && leftBtn && rightBtn) {
         activeTab.scrollIntoView({ inline: "center", block: "nearest" });
     }
 }
+
+// Delegated on document (not bound to the button directly) because
+// #fp-recurring-count's whole subtree — button and panel both — gets
+// replaced via innerHTML by refreshFinancialSummary() in transactions.js
+// on every add/edit/delete, which would silently drop a directly-bound
+// listener the next time a transaction changes.
+document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".recurring-toggle-btn");
+    if (!btn) return;
+    var panel = document.getElementById("recurring-panel");
+    if (!panel) return;
+    var wasExpanded = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", String(!wasExpanded));
+    panel.hidden = wasExpanded;
+});
 
 // Silently generate this month's recurring transactions on page load. If
 // anything new was created, reload once (preserving the current URL/month)

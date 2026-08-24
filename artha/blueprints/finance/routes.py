@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from ...extensions import db
 from ...models import Transaction
 from ...models.budget import Budget
-from ...utils import is_ajax_request, current_month_bounds, budget_status
+from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date
 from . import finance_bp
 
 log = logging.getLogger(__name__)
@@ -501,7 +501,7 @@ def generate_recurring():
         # whatever day the user happens to next load /finance, instead of
         # landing on the day it's actually due. Same clamping already used
         # by the calendar's upcoming-recurring reminder (see
-        # _next_due_date() in artha/blueprints/dashboard/routes.py).
+        # next_due_date() in artha/utils.py).
         days_this_month = calendar.monthrange(today.year, today.month)[1]
         target_day = min(template_tx.timestamp.day, days_this_month)
         target_date = date(today.year, today.month, target_day)
@@ -773,8 +773,44 @@ def finance_page():
     # Distinct recurring "rules" (by description + type), not a raw row
     # count — each rule accumulates one generated row per month, so a raw
     # count would grow every month even though nothing new was configured.
+    # The most recent row per rule is the template used both for its
+    # displayed amount/category and for next_due_date()'s day-of-month
+    # signal — same dedup-then-next_due_date() pattern the dashboard's
+    # "renewals this week" and the calendar's upcoming-recurring banner
+    # already use, so all three agree on the same due date for the same
+    # bill.
     recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
-    recurring_count = len({(t.description, t.type) for t in recurring_rows})
+    recurring_templates: dict[tuple[str, str], Transaction] = {}
+    for t in recurring_rows:
+        key = (t.description, t.type)
+        current = recurring_templates.get(key)
+        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
+            recurring_templates[key] = t
+    recurring_count = len(recurring_templates)
+
+    recurring_bills = []
+    for (desc, ttype), tx in recurring_templates.items():
+        due = next_due_date(tx, today)
+        recurring_bills.append({
+            "description": desc,
+            "type": ttype,
+            "amount": float(tx.amount),
+            "category": tx.category,
+            "due_date": due,
+            "due_label": (
+                "Today" if due == today
+                else f"{calendar.month_abbr[due.month]} {due.day}" if due
+                else None
+            ),
+            # Matches the dashboard's "renewals this week" and the
+            # calendar's upcoming-recurring banner — same 7-day window
+            # counts as "soon" everywhere it's shown in the app.
+            "due_soon": due is not None and 0 <= (due - today).days <= 7,
+        })
+    # Soonest due first; a rule with no resolvable due date (shouldn't
+    # happen in practice — next_due_date always finds one within a year)
+    # sorts last rather than crashing the comparison.
+    recurring_bills.sort(key=lambda b: b["due_date"] or date.max)
 
     # Always the real current month's spend, independent of whatever month
     # is being browsed above — "my budget" means this calendar month, not
@@ -800,6 +836,7 @@ def finance_page():
         biggest_day_label=biggest_day_label,
         trend_data=trend_data,
         recurring_count=recurring_count,
+        recurring_bills=recurring_bills,
         budget=budget,
         budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
         today_date=today.strftime("%Y-%m-%d"),

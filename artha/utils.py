@@ -1,3 +1,4 @@
+import calendar
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -11,6 +12,36 @@ def is_ajax_request() -> bool:
     xrw = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     accept_json = "application/json" in (request.headers.get("Accept") or "")
     return xrw or accept_json or request.path.startswith("/api/")
+
+
+def next_due_date(template_tx, from_date: date) -> date | None:
+    """
+    This app has no explicit "day of month" field for recurring rules —
+    a recurring transaction is just a row with is_recurring=True that gets
+    a fresh copy generated on whatever date the user next loads /finance
+    (see generate_recurring() in finance/routes.py). So the day-of-month
+    of the most recent occurrence is the best available signal for when
+    it "usually" lands. Clamped to the last day of shorter months (e.g.
+    day 31 in February -> the 28th/29th).
+
+    Shared by the dashboard's calendar page (upcoming-recurring banner)
+    and the Finance page (the Recurring bills list) so both agree on the
+    same due date for the same transaction — moved here rather than kept
+    blueprint-local specifically so finance/routes.py can use it too
+    without dashboard and finance importing from each other.
+    """
+    day_of_month = template_tx.timestamp.day
+    year, month = from_date.year, from_date.month
+    for _ in range(13):  # defensive cap: at most one year of scanning
+        days_this_month = calendar.monthrange(year, month)[1]
+        candidate = date(year, month, min(day_of_month, days_this_month))
+        if candidate >= from_date:
+            return candidate
+        month += 1
+        if month == 13:
+            month = 1
+            year += 1
+    return None
 
 
 # ---------------------------------------------------------------------------

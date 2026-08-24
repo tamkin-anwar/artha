@@ -24,11 +24,11 @@ from datetime import date, datetime, timedelta
 import click
 from flask import current_app
 
-from .blueprints.dashboard.routes import _next_due_date
 from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
 from .models import Note, PushSubscription, Transaction
 from .services.push_service import send_push
+from .utils import next_due_date
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 def _due_today_items(user_id: int, today: date) -> list[str]:
     """Everything worth a daily nudge for this user, as one flat list of
     display strings: recurring bills whose next occurrence lands today
-    (same dedup-by-(description,type)-then-_next_due_date() approach the
+    (same dedup-by-(description,type)-then-next_due_date() approach the
     dashboard's own "renewals this week" callout uses), plus Notes due
     today. The notification doesn't need to distinguish *why* something's
     due, just *what* is, so both feed the same list rather than being
@@ -51,7 +51,7 @@ def _due_today_items(user_id: int, today: date) -> list[str]:
 
     items = []
     for (desc, _ttype), tx in templates_by_key.items():
-        due = _next_due_date(tx, today)
+        due = next_due_date(tx, today)
         if due == today:
             items.append(desc)
 

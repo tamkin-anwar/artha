@@ -12,7 +12,7 @@ from ...extensions import db
 from ...models import Note, Transaction, Event, EventException
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates
-from ...utils import current_month_bounds, derive_title_and_preview, budget_status
+from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date
 from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
 
@@ -153,7 +153,7 @@ def index():
 
     # ------------------------------------------------------------------
     # Recurring renewals landing within the next 7 days — same
-    # dedup-by-(description,type)-then-_next_due_date() approach as the
+    # dedup-by-(description,type)-then-next_due_date() approach as the
     # calendar page's "upcoming recurring" banner, just widened from one
     # nearest hit to the whole week for a dashboard callout.
     # ------------------------------------------------------------------
@@ -167,7 +167,7 @@ def index():
 
     renewals_this_week = []
     for (desc, ttype), tx in templates_by_key.items():
-        due = _next_due_date(tx, today)
+        due = next_due_date(tx, today)
         if due is not None and 0 <= (due - today).days <= 7:
             renewals_this_week.append({
                 "description": desc,
@@ -234,34 +234,11 @@ def index():
 # Calendar — full page (Fantastical-style month grid + day detail panel)
 # ---------------------------------------------------------------------------
 
-def _next_due_date(template_tx: Transaction, from_date: date) -> date | None:
-    """
-    This app has no explicit "day of month" field for recurring rules —
-    a recurring transaction is just a row with is_recurring=True that gets
-    a fresh copy generated on whatever date the user next loads /finance
-    (see generate_recurring() in finance/routes.py). So the day-of-month
-    of the most recent occurrence is the best available signal for when
-    it "usually" lands. Clamped to the last day of shorter months (e.g.
-    day 31 in February -> the 28th/29th).
-    """
-    day_of_month = template_tx.timestamp.day
-    year, month = from_date.year, from_date.month
-    for _ in range(13):  # defensive cap: at most one year of scanning
-        days_this_month = cal.monthrange(year, month)[1]
-        candidate = date(year, month, min(day_of_month, days_this_month))
-        if candidate >= from_date:
-            return candidate
-        month += 1
-        if month == 13:
-            month = 1
-            year += 1
-    return None
-
 
 def _advance_recurrence(dt: datetime, cadence: str) -> datetime:
     """Next occurrence of `dt` under the given cadence, preserving time of
     day. Monthly clamps to the shorter month's last day, same clamping
-    _next_due_date() above uses for recurring transactions."""
+    utils.next_due_date() uses for recurring transactions."""
     if cadence == "daily":
         return dt + timedelta(days=1)
     if cadence == "weekly":
@@ -419,7 +396,7 @@ def calendar_page():
     recurring_due_by_date = defaultdict(list)
     all_due = []
     for (desc, ttype), tx in templates_by_key.items():
-        due = _next_due_date(tx, today)
+        due = next_due_date(tx, today)
         if due is None:
             continue
         entry = {
