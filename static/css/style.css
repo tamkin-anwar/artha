@@ -135,6 +135,13 @@ h1, h2, h3, .stat-number {
 /* Money figures */
 .scenario-money {
   font-family: 'JetBrains Mono', monospace;
+  /* A leading "-" on a negative value ("-$3,000.00") is a recognized
+     soft break point in standard text line-breaking (the ASCII hyphen
+     is a break-after character even without any whitespace around it),
+     so on a narrow enough column the browser can legally wrap right
+     after the sign, splitting it onto its own line above the amount.
+     These are short, atomic values, never meant to wrap. */
+  white-space: nowrap;
 }
 
 .money-positive { color: var(--emerald); }
@@ -153,6 +160,11 @@ h1, h2, h3, .stat-number {
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.1;
+  /* Same fix as .scenario-money above: a leading "-" on a negative
+     stat (Net Balance going negative, etc.) is a legal line-break
+     point on its own, so a narrow enough card can wrap right after
+     the sign without this. */
+  white-space: nowrap;
 }
 
 /* Buttons */

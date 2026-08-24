@@ -75,12 +75,14 @@
         {% set is_over = budget.tier == 'over' %}
         <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ 'var(--red-dim)' if is_over else 'var(--gold-dim)' }}; border:1px solid {{ 'var(--red)' if is_over else 'var(--gold)' }}; color:{{ 'var(--red)' if is_over else 'var(--gold)' }}; font-size:13px;">
             <i data-lucide="{{ 'alert-octagon' if is_over else 'alert-triangle' }}" aria-hidden="true" style="width:16px; height:16px; stroke-width:2; flex-shrink:0;"></i>
-            {% if is_over %}
-                You're <span class="dashboard-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
-            {% else %}
-                You've spent {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
-            {% endif %}
-            <a href="{{ url_for('finance.finance_page') }}" style="margin-left:auto; color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
+            <span style="flex:1; min-width:0;">
+                {% if is_over %}
+                    You're <span class="dashboard-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
+                {% else %}
+                    You've spent {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
+                {% endif %}
+            </span>
+            <a href="{{ url_for('finance.finance_page') }}" style="color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
         </div>
     {% endif %}
     </div>

@@ -555,6 +555,15 @@
     .recurring-jump-link svg, .recurring-jump-link i { width:12px; height:12px; stroke-width:2; }
     .recurring-jump-link:hover { text-decoration:underline; }
 
+    /* Base rule for every reactive money element on this page (Cash Flow's
+       Income/Spending/Surplus, Recurring's totals, category amounts, ...).
+       A signed value like "-$3,000.00" has a legal line-break point right
+       after the "-" on its own (ASCII hyphen is a recognized soft break
+       character even with no surrounding whitespace) — on a narrow enough
+       column that silently splits the sign onto its own line above the
+       amount. These are short, atomic values, never meant to wrap. */
+    .fp-money { white-space: nowrap; }
+
     /* Reused by the Recurring tab's own item list below. No explicit
        display rule on .recurring-panel — relies on the browser's own
        [hidden] default (block's natural display once unhidden) rather
@@ -571,7 +580,7 @@
     .recurring-row:last-child { border-bottom:none; }
     .recurring-row-desc { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .recurring-row-category { font-size:11px; color:var(--text-muted); flex-shrink:0; }
-    .recurring-row-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+    .recurring-row-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; white-space:nowrap; }
     .recurring-due-badge {
         font-family:'JetBrains Mono',monospace; font-size:10.5px;
         padding:2px 8px; border-radius:999px; flex-shrink:0;
@@ -868,7 +877,14 @@ function renderTrendChart() {
             responsive: true,
             maintainAspectRatio: false,
             animation: { duration: 500, easing: "easeOutQuart" },
-            layout: { padding: { top: 28, bottom: 22 } },
+            // The datalabel plugin centers each value horizontally over
+            // its own bar — fine as long as the bar isn't near the plot
+            // edge, but the first/last bar on a narrow phone screen (few
+            // bars, tightly packed) sits close enough to the canvas edge
+            // that a wide value like "+$6,217.64" gets half-clipped off
+            // the side. Reserving side padding gives that overhang
+            // somewhere to go instead of running off the canvas.
+            layout: { padding: { top: 28, bottom: 22, left: 18, right: 18 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -900,7 +916,16 @@ function renderTrendChart() {
                     align: "end",
                     offset: 6,
                     color: function (ctx) { return ctx.dataset.data[ctx.dataIndex] >= 0 ? emerald : red; },
-                    font: { size: 12, weight: "700", family: "'JetBrains Mono', monospace" },
+                    // Smaller than the Cash Flow tab's labels on purpose:
+                    // up to 6 bars share this chart's width, each with its
+                    // own signed dollar value centered over it, so there's
+                    // much less room per label here than a 2-3-bar chart
+                    // has — 12px was wide enough for adjacent labels to
+                    // overlap each other once several months land close
+                    // to the same value (all reading roughly the same
+                    // width), not just the "run off the canvas edge" case
+                    // the side padding above already covers.
+                    font: { size: 10, weight: "700", family: "'JetBrains Mono', monospace" },
                     formatter: function (value) { return signedMoney(value); },
                 } : false,
             },

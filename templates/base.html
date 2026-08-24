@@ -343,7 +343,14 @@
                 </div>
 
                 <!-- PAGE CONTENT -->
-                <main style="padding:32px;">
+                <!-- Extra bottom padding clears the feedback FAB below
+                     (fixed, bottom-right, ~68px footprint from the edge)
+                     — without it, whatever real content happens to land
+                     at the true bottom of a page (a scenario's Edit/
+                     Archive/Delete row, for instance) gets stuck directly
+                     under the button once you've scrolled as far as the
+                     page allows, with no way to scroll it clear. -->
+                <main style="padding:32px 32px 96px;">
                     {{ self.content() }}
                 </main>
             </div>
