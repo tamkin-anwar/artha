@@ -241,6 +241,25 @@
     var clearBtn = document.getElementById("expr-clear-btn");
     var totalValueEl = document.getElementById("expr-total-value");
 
+    // Both calculators are otherwise pure page state — navigating to
+    // another tab in the app is a full page load here (not an SPA route
+    // change), so without this every line typed vanished the moment you
+    // left the page, even to go check a number on Finance and come right
+    // back. Persisted client-side only (matches the existing theme/
+    // currency preference pattern) — never sent to the server, and
+    // wrapped in try/catch since localStorage throws in some private-
+    // browsing modes rather than just being unavailable.
+    var STORAGE_KEY_SMART = "artha-calculator-expr";
+
+    function persistSmartCalc() {
+        try { localStorage.setItem(STORAGE_KEY_SMART, textarea.value); } catch (e) { /* private mode, etc. */ }
+    }
+
+    try {
+        var savedExpr = localStorage.getItem(STORAGE_KEY_SMART);
+        if (savedExpr !== null) textarea.value = savedExpr;
+    } catch (e) { /* private mode, etc. — starts blank */ }
+
     // This inline script is a classic script (math.js needs a plain global,
     // not a module), so pulling in the app's real currency formatter — an
     // ES module export — needs a dynamic import bridged into this closure,
@@ -587,6 +606,7 @@
         if (totalValueEl) totalValueEl.textContent = computeTotal(lines, scope);
         autoGrow();
         updateCursorLine();
+        persistSmartCalc();
     }
 
     function autoGrow() {
@@ -625,11 +645,21 @@
     var calcResultDisplay = document.getElementById("calc-result-display");
     var calcPanel = document.getElementById("calc-panel");
     var kbInput = document.getElementById("calc-keyboard-input");
+    var STORAGE_KEY_QUICK = "artha-calculator-quickcalc";
     var currentExpr = "";
+    try {
+        var savedQuick = localStorage.getItem(STORAGE_KEY_QUICK);
+        if (savedQuick !== null) currentExpr = savedQuick;
+    } catch (e) { /* private mode, etc. — starts blank */ }
+
+    function persistQuickCalc() {
+        try { localStorage.setItem(STORAGE_KEY_QUICK, currentExpr); } catch (e) { /* private mode, etc. */ }
+    }
 
     var OP_SYMBOLS = { "/": "÷", "*": "×", "-": "−", "+": "+" };
 
     function refreshCalcDisplay() {
+        persistQuickCalc();
         calcExprLine.textContent = currentExpr
             ? currentExpr.replace(/[/*\-+]/g, function (m) { return " " + OP_SYMBOLS[m] + " "; })
             : " ";
@@ -716,6 +746,7 @@
                 appendResultLineToExpr(result);
                 currentExpr = String(result);
                 calcExprLine.textContent = " ";
+                persistQuickCalc();
             }
         } catch (err) {
             // Invalid expression (e.g. "7+") — ignore the press.

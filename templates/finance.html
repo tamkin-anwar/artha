@@ -23,6 +23,7 @@
     <button type="button" id="fp-tab-spending" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false" aria-controls="fp-pane-spending" tabindex="-1">Spending</button>
     <button type="button" id="fp-tab-income" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false" aria-controls="fp-pane-income" tabindex="-1">Income</button>
     <button type="button" id="fp-tab-cashflow" class="fp-toptab" data-fp-tab="cashflow" role="tab" aria-selected="false" aria-controls="fp-pane-cashflow" tabindex="-1">Cash Flow</button>
+    <button type="button" id="fp-tab-recurring" class="fp-toptab" data-fp-tab="recurring" role="tab" aria-selected="false" aria-controls="fp-pane-recurring" tabindex="-1">Recurring</button>
 </div>
 
 <div id="fp-pane-transactions" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-transactions">
@@ -326,27 +327,11 @@
 
     <div id="fp-recurring-count">
     {% if recurring_count > 0 %}
-        <button type="button" class="recurring-toggle-btn" aria-expanded="false" aria-controls="recurring-panel">
+        <button type="button" class="recurring-jump-link">
             <i data-lucide="repeat" aria-hidden="true"></i>
             {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
-            <i data-lucide="chevron-down" class="recurring-toggle-chevron" aria-hidden="true"></i>
+            <i data-lucide="arrow-right" aria-hidden="true"></i>
         </button>
-        <div id="recurring-panel" class="recurring-panel" hidden>
-            {% for bill in recurring_bills %}
-                <div class="recurring-row">
-                    <span class="recurring-row-desc">{{ bill.description }}</span>
-                    {% if bill.category and bill.category in categories %}
-                        <span class="recurring-row-category">{{ categories[bill.category].label }}</span>
-                    {% endif %}
-                    <span class="recurring-row-amount" style="color:{{ 'var(--emerald)' if bill.type == 'income' else 'var(--red)' }};">
-                        {{ '+' if bill.type == 'income' else '-' }}${{ '%.2f'|format(bill.amount) }}
-                    </span>
-                    {% if bill.due_label %}
-                        <span class="recurring-due-badge {{ 'recurring-due-soon' if bill.due_soon }}">{{ bill.due_label }}</span>
-                    {% endif %}
-                </div>
-            {% endfor %}
-        </div>
     {% endif %}
     </div>
 
@@ -451,6 +436,32 @@
     </div>
 </div>
 
+<!-- Recurring -->
+<div id="fp-pane-recurring" class="fp-tabpane" data-fp-view="recurring" role="tabpanel" aria-labelledby="fp-tab-recurring" hidden>
+    <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+        {{ period_selector("recurring") }}
+        <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
+
+        <div class="fp-cashflow-summary">
+            <div>
+                <div class="eyebrow">Income</div>
+                <div class="fp-money" data-fp-rec-income data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--emerald);">$0.00</div>
+            </div>
+            <div>
+                <div class="eyebrow">Spending</div>
+                <div class="fp-money" data-fp-rec-expense data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--red);">$0.00</div>
+            </div>
+            <div>
+                <div class="eyebrow" data-fp-rec-net-label>Net</div>
+                <div class="fp-money" data-fp-rec-net data-money-signed="1" data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px;">+$0.00</div>
+            </div>
+        </div>
+
+        <div class="recurring-panel" data-fp-rec-list style="margin-top:18px;"></div>
+        <p class="fp-empty-msg" data-fp-rec-empty hidden>No recurring transactions set.</p>
+    </div>
+</div>
+
 <style>
     /* An author-stylesheet display rule on this selector always beats the
        browser's own [hidden] { display:none } default (author styles
@@ -507,16 +518,16 @@
 
     .csv-import-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-shrink:0; }
 
-    .recurring-toggle-btn {
+    .recurring-jump-link {
         font-size:13px; color:var(--gold); margin:0 0 12px;
         display:inline-flex; align-items:center; gap:5px;
         background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
     }
-    .recurring-toggle-btn svg, .recurring-toggle-btn i { width:12px; height:12px; stroke-width:2; }
-    .recurring-toggle-chevron { transition:transform 0.15s ease; margin-left:1px; }
-    .recurring-toggle-btn[aria-expanded="true"] .recurring-toggle-chevron { transform:rotate(180deg); }
+    .recurring-jump-link svg, .recurring-jump-link i { width:12px; height:12px; stroke-width:2; }
+    .recurring-jump-link:hover { text-decoration:underline; }
 
-    /* No explicit display rule here — relies on the browser's own
+    /* Reused by the Recurring tab's own item list below. No explicit
+       display rule on .recurring-panel — relies on the browser's own
        [hidden] default (block's natural display once unhidden) rather
        than fighting it with an author display:flex/block override, the
        exact mistake fixed earlier on the CSV-import modal's own panels. */
@@ -868,6 +879,11 @@ document.addEventListener("currency-refresh-ui", renderTrendChart);
 // ---------------------------------------------------------------------
 var fpCharts = {};
 var fpLoadedViews = {};
+// The Recurring tab's item list needs category display labels, and the
+// breakdown JSON only carries the raw category key (same as every other
+// view) — reusing the categories dict already rendered for the quick-add
+// form below avoids a second source of truth for label/icon text.
+var fpCategories = {{ categories|tojson }};
 
 function fpPane(view) {
     return document.querySelector('.fp-tabpane[data-fp-view="' + view + '"]');
@@ -1021,21 +1037,17 @@ function fpRenderCashflow(pane, data) {
         return;
     }
     if (wrap) wrap.style.height = "220px";
-
-    // Same fix renderTrendChart already applies above: a category-scale bar
-    // chart always divides its FULL width evenly among however many
-    // categories exist, so too few months stretches the bars apart with a
-    // huge empty gap between them. Capping the chart's own width to
-    // roughly "N months worth of room" and centering it keeps bars close
-    // together instead of exploding to fill an oversized category axis.
-    if (wrap) {
-        wrap.style.maxWidth = "none";
-        var available = wrap.getBoundingClientRect().width;
-        var desiredWidth = Math.max(220, Math.min(available, data.buckets.length * 140));
-        wrap.style.maxWidth = desiredWidth + "px";
-        wrap.style.marginLeft = "auto";
-        wrap.style.marginRight = "auto";
-    }
+    // Force the browser to actually lay out the wrap/canvas we just
+    // resized/unhid before Chart.js reads their dimensions below —
+    // reading a layout property (getBoundingClientRect) is what forces
+    // that reflow to happen synchronously. Without this, switching
+    // straight from "Month" (which collapses the canvas to 0 height) to
+    // any other period builds the chart against whatever narrow width
+    // the canvas still had from the collapsed state, cramming every bar
+    // into a sliver at the left edge instead of spreading across the
+    // now-visible card — the resize only self-corrects on a later window
+    // resize, which nothing here otherwise triggers.
+    if (wrap) wrap.getBoundingClientRect();
 
     if (canvas && typeof Chart !== "undefined") {
         var emerald = getVar("--emerald", "#22c55e");
@@ -1046,6 +1058,20 @@ function fpRenderCashflow(pane, data) {
         var borderCard = getVar("--border-card", "rgba(255,255,255,0.08)");
         var hasDatalabels = typeof ChartDataLabels !== "undefined";
 
+        // Same soft top-to-bottom gradient as the 6-Month Trend chart above
+        // (barGradient() there) — a flat fill read noticeably flatter next
+        // to it despite sitting one tab away, so this reuses the identical
+        // treatment rather than introducing a second bar style.
+        var cfCtx2d = canvas.getContext("2d");
+        var cfChartHeight = canvas.getBoundingClientRect().height || 220;
+        function cfBarGradient(color) {
+            var rgb = hexToRgbTriplet(color);
+            var gradient = cfCtx2d.createLinearGradient(0, 0, 0, cfChartHeight);
+            gradient.addColorStop(0, "rgba(" + rgb + ",0.95)");
+            gradient.addColorStop(1, "rgba(" + rgb + ",0.45)");
+            return gradient;
+        }
+
         fpCharts.cashflow = new Chart(canvas, {
             type: "bar",
             data: {
@@ -1054,7 +1080,8 @@ function fpRenderCashflow(pane, data) {
                     {
                         label: "Income",
                         data: data.buckets.map(function (b) { return b.income; }),
-                        backgroundColor: emerald,
+                        backgroundColor: cfBarGradient(emerald),
+                        hoverBackgroundColor: emerald,
                         borderRadius: 6,
                         borderSkipped: false,
                         maxBarThickness: 28,
@@ -1062,7 +1089,8 @@ function fpRenderCashflow(pane, data) {
                     {
                         label: "Spending",
                         data: data.buckets.map(function (b) { return b.expense; }),
-                        backgroundColor: red,
+                        backgroundColor: cfBarGradient(red),
+                        hoverBackgroundColor: red,
                         borderRadius: 6,
                         borderSkipped: false,
                         maxBarThickness: 28,
@@ -1111,6 +1139,20 @@ function fpRenderCashflow(pane, data) {
                 },
             },
         });
+
+        // Chart.js's own resize/layout pass can lag one frame behind the
+        // browser's — switching straight from "Month" (which collapses
+        // this canvas to 0 height) to any other period was building the
+        // chart correctly against the *scale* (min/max/width all read
+        // right), but leaving individual bars laid out from whatever
+        // near-zero geometry existed the instant before, cramming every
+        // bar into a sliver instead of spreading across the now-visible
+        // card. Forcing one more resize on the next paint — after the
+        // browser has definitely finished the reflow — makes Chart.js
+        // redo bar placement against the real, current size.
+        requestAnimationFrame(function () {
+            if (fpCharts.cashflow) fpCharts.cashflow.resize();
+        });
     }
 }
 
@@ -1141,6 +1183,46 @@ function fpStartSpinner(canvas, view) {
     canvas.style.display = "";
     var frame = 0;
     fpSpinnerIntervals[view] = setInterval(function () { drawSpinner(canvas, frame++); }, 50);
+}
+
+function fpRenderRecurring(pane, data) {
+    var periodLabelEl = pane.querySelector("[data-fp-period-label]");
+    if (periodLabelEl) periodLabelEl.textContent = data.period_label;
+
+    fpSetMoney(pane.querySelector("[data-fp-rec-income]"), data.income_total, false);
+    fpSetMoney(pane.querySelector("[data-fp-rec-expense]"), data.expense_total, false);
+    var netEl = pane.querySelector("[data-fp-rec-net]");
+    fpSetMoney(netEl, data.net, true);
+    if (netEl) netEl.style.color = data.net >= 0 ? getVar("--emerald", "#22c55e") : getVar("--red", "#ef4444");
+
+    var listEl = pane.querySelector("[data-fp-rec-list]");
+    var emptyMsg = pane.querySelector("[data-fp-rec-empty]");
+
+    if (!data.items.length) {
+        if (listEl) listEl.innerHTML = "";
+        if (emptyMsg) emptyMsg.hidden = false;
+        return;
+    }
+    if (emptyMsg) emptyMsg.hidden = true;
+    if (!listEl) return;
+
+    listEl.innerHTML = data.items.map(function (b) {
+        var catMeta = b.category ? fpCategories[b.category] : null;
+        var catHtml = catMeta ? '<span class="recurring-row-category">' + catMeta.label + '</span>' : "";
+        var dueHtml = b.due_label
+            ? '<span class="recurring-due-badge' + (b.due_soon ? ' recurring-due-soon' : '') + '">' + b.due_label + '</span>'
+            : "";
+        var amountColor = b.type === "income" ? "var(--emerald)" : "var(--red)";
+        var sign = b.type === "income" ? "+" : "-";
+        return (
+            '<div class="recurring-row">' +
+                '<span class="recurring-row-desc">' + b.description + '</span>' +
+                catHtml +
+                '<span class="recurring-row-amount fp-money" data-money-signed="1" data-money-value="' + (b.type === "income" ? b.amount : -b.amount) + '" style="color:' + amountColor + ';">' + sign + formatMoney(b.amount) + '</span>' +
+                dueHtml +
+            '</div>'
+        );
+    }).join("");
 }
 
 function fpLoadBreakdown(view) {
@@ -1182,6 +1264,7 @@ function fpLoadBreakdown(view) {
         .then(function (data) {
             fpStopSpinner(view);
             if (view === "cashflow") fpRenderCashflow(pane, data);
+            else if (view === "recurring") fpRenderRecurring(pane, data);
             else fpRenderDonut(pane, data);
             formatFinanceMoneyElements();
         })
@@ -1194,18 +1277,26 @@ function fpLoadBreakdown(view) {
             var canvas = fpChartCanvas(pane, view);
             if (canvas) drawFallbackMessage(canvas, "Couldn't load — try again");
             // The chart isn't the only thing on the card — the total and
-            // category list (or cash flow's income/expense/net figures)
-            // are still sitting there from whatever period was shown
-            // before, which would otherwise read as real numbers for the
-            // period the user just selected instead of a failed request.
+            // category list (or cash flow's/recurring's income/expense/net
+            // figures) are still sitting there from whatever period was
+            // shown before, which would otherwise read as real numbers for
+            // the period the user just selected instead of a failed request.
             var periodLabelEl = pane.querySelector("[data-fp-period-label]");
             if (periodLabelEl) periodLabelEl.textContent = "Couldn't load";
-            if (view === "cashflow") {
-                fpSetMoney(pane.querySelector("[data-fp-cf-income]"), 0, false);
-                fpSetMoney(pane.querySelector("[data-fp-cf-expense]"), 0, false);
-                fpSetMoney(pane.querySelector("[data-fp-cf-net]"), 0, true);
-                var netLabelEl = pane.querySelector("[data-fp-cf-net-label]");
+            if (view === "cashflow" || view === "recurring") {
+                var incomeSel = view === "cashflow" ? "[data-fp-cf-income]" : "[data-fp-rec-income]";
+                var expenseSel = view === "cashflow" ? "[data-fp-cf-expense]" : "[data-fp-rec-expense]";
+                var netSel = view === "cashflow" ? "[data-fp-cf-net]" : "[data-fp-rec-net]";
+                var netLabelSel = view === "cashflow" ? "[data-fp-cf-net-label]" : "[data-fp-rec-net-label]";
+                fpSetMoney(pane.querySelector(incomeSel), 0, false);
+                fpSetMoney(pane.querySelector(expenseSel), 0, false);
+                fpSetMoney(pane.querySelector(netSel), 0, true);
+                var netLabelEl = pane.querySelector(netLabelSel);
                 if (netLabelEl) netLabelEl.textContent = "Net";
+                if (view === "recurring") {
+                    var recListEl = pane.querySelector("[data-fp-rec-list]");
+                    if (recListEl) recListEl.innerHTML = "";
+                }
             } else {
                 fpSetMoney(pane.querySelector("[data-fp-total]"), 0, false);
                 var listEl = pane.querySelector("[data-fp-category-list]");
@@ -1251,6 +1342,7 @@ var fpTabPanes = {
     spending: fpPane("spending"),
     income: fpPane("income"),
     cashflow: fpPane("cashflow"),
+    recurring: fpPane("recurring"),
 };
 
 function fpActivateTab(btn, focus) {
@@ -1332,18 +1424,15 @@ if (scrollRow && leftBtn && rightBtn) {
 }
 
 // Delegated on document (not bound to the button directly) because
-// #fp-recurring-count's whole subtree — button and panel both — gets
-// replaced via innerHTML by refreshFinancialSummary() in transactions.js
-// on every add/edit/delete, which would silently drop a directly-bound
-// listener the next time a transaction changes.
+// #fp-recurring-count's subtree gets replaced via innerHTML by
+// refreshFinancialSummary() in transactions.js on every add/edit/delete,
+// which would silently drop a directly-bound listener the next time a
+// transaction changes.
 document.addEventListener("click", function (e) {
-    var btn = e.target.closest(".recurring-toggle-btn");
-    if (!btn) return;
-    var panel = document.getElementById("recurring-panel");
-    if (!panel) return;
-    var wasExpanded = btn.getAttribute("aria-expanded") === "true";
-    btn.setAttribute("aria-expanded", String(!wasExpanded));
-    panel.hidden = wasExpanded;
+    var jumpBtn = e.target.closest(".recurring-jump-link");
+    if (!jumpBtn) return;
+    var tabBtn = document.getElementById("fp-tab-recurring");
+    if (tabBtn) tabBtn.click();
 });
 
 // Silently generate this month's recurring transactions on page load. If

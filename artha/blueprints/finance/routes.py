@@ -619,6 +619,51 @@ def _ordinal(n: int) -> str:
     return f"{n}{suffix}"
 
 
+def _recurring_bills(uid: int, today: date) -> list[dict]:
+    """Every distinct recurring "rule" (by description + type), soonest due
+    first — shared by finance_page()'s panel and the Recurring tab's
+    breakdown so both agree on the exact same list. Not a raw row count:
+    each rule accumulates one generated row per month, so the most recent
+    row per rule is the template used both for its displayed amount/
+    category and for next_due_date()'s day-of-month signal — same
+    dedup-then-next_due_date() pattern the dashboard's "renewals this
+    week" and the calendar's upcoming-recurring banner already use, so
+    all agree on the same due date for the same bill.
+    """
+    recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
+    templates: dict[tuple[str, str], Transaction] = {}
+    for t in recurring_rows:
+        key = (t.description, t.type)
+        current = templates.get(key)
+        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
+            templates[key] = t
+
+    bills = []
+    for (desc, ttype), tx in templates.items():
+        due = next_due_date(tx, today)
+        bills.append({
+            "description": desc,
+            "type": ttype,
+            "amount": float(tx.amount),
+            "category": tx.category,
+            "due_date": due,
+            "due_label": (
+                "Today" if due == today
+                else f"{calendar.month_abbr[due.month]} {due.day}" if due
+                else None
+            ),
+            # Matches the dashboard's "renewals this week" and the
+            # calendar's upcoming-recurring banner — same 7-day window
+            # counts as "soon" everywhere it's shown in the app.
+            "due_soon": due is not None and 0 <= (due - today).days <= 7,
+        })
+    # Soonest due first; a rule with no resolvable due date (shouldn't
+    # happen in practice — next_due_date always finds one within a year)
+    # sorts last rather than crashing the comparison.
+    bills.sort(key=lambda b: b["due_date"] or date.max)
+    return bills
+
+
 @finance_bp.route("/finance")
 @login_required
 def finance_page():
@@ -775,47 +820,8 @@ def finance_page():
             "net": float(b["income"] - b["expense"]),
         })
 
-    # Distinct recurring "rules" (by description + type), not a raw row
-    # count — each rule accumulates one generated row per month, so a raw
-    # count would grow every month even though nothing new was configured.
-    # The most recent row per rule is the template used both for its
-    # displayed amount/category and for next_due_date()'s day-of-month
-    # signal — same dedup-then-next_due_date() pattern the dashboard's
-    # "renewals this week" and the calendar's upcoming-recurring banner
-    # already use, so all three agree on the same due date for the same
-    # bill.
-    recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
-    recurring_templates: dict[tuple[str, str], Transaction] = {}
-    for t in recurring_rows:
-        key = (t.description, t.type)
-        current = recurring_templates.get(key)
-        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
-            recurring_templates[key] = t
-    recurring_count = len(recurring_templates)
-
-    recurring_bills = []
-    for (desc, ttype), tx in recurring_templates.items():
-        due = next_due_date(tx, today)
-        recurring_bills.append({
-            "description": desc,
-            "type": ttype,
-            "amount": float(tx.amount),
-            "category": tx.category,
-            "due_date": due,
-            "due_label": (
-                "Today" if due == today
-                else f"{calendar.month_abbr[due.month]} {due.day}" if due
-                else None
-            ),
-            # Matches the dashboard's "renewals this week" and the
-            # calendar's upcoming-recurring banner — same 7-day window
-            # counts as "soon" everywhere it's shown in the app.
-            "due_soon": due is not None and 0 <= (due - today).days <= 7,
-        })
-    # Soonest due first; a rule with no resolvable due date (shouldn't
-    # happen in practice — next_due_date always finds one within a year)
-    # sorts last rather than crashing the comparison.
-    recurring_bills.sort(key=lambda b: b["due_date"] or date.max)
+    recurring_bills = _recurring_bills(uid, today)
+    recurring_count = len(recurring_bills)
 
     # Always the real current month's spend, independent of whatever month
     # is being browsed above — "my budget" means this calendar month, not
@@ -945,12 +951,54 @@ def finance_breakdown():
         year = today.year
     month_param = (request.args.get("month") or "").strip()
 
-    if view not in ("spending", "income", "cashflow"):
+    if view not in ("spending", "income", "cashflow", "recurring"):
         view = "spending"
     if period not in ("month", "3m", "6m", "12m", "year"):
         period = "month"
 
     start, end, period_label = _period_bounds(period, year, today, month_param or None)
+
+    if view == "recurring":
+        # Recurring rules aren't bounded by a real transaction date range
+        # the way the other three views are — there's nothing to query by
+        # date, since a rule always describes "the current commitment,"
+        # not a historical record. Instead the period picker here scales
+        # a *projection*: the number of calendar months between `start`
+        # and `end` (1 for a month, 3/6/12 for those windows, and — reusing
+        # the exact same _period_bounds() "Year to Date" logic Cash Flow
+        # already has — however many months have elapsed for the current
+        # year, or a full 12 for a past one) multiplied by the monthly
+        # commitment, so "Last 3 Months" reads as "3 months of this bill
+        # load," consistent with what every other period label means
+        # elsewhere on this page.
+        months = (end.year - start.year) * 12 + (end.month - start.month)
+        bills = _recurring_bills(uid, today)
+        monthly_income = sum(b["amount"] for b in bills if b["type"] == "income")
+        monthly_expense = sum(b["amount"] for b in bills if b["type"] == "expense")
+        items = [
+            {
+                "description": b["description"],
+                "type": b["type"],
+                "amount": b["amount"],
+                "category": b["category"],
+                "due_label": b["due_label"],
+                "due_soon": b["due_soon"],
+            }
+            for b in bills
+        ]
+        return jsonify({
+            "view": view,
+            "period": period,
+            "period_label": period_label,
+            "months": months,
+            "monthly_income": monthly_income,
+            "monthly_expense": monthly_expense,
+            "income_total": monthly_income * months,
+            "expense_total": monthly_expense * months,
+            "net": (monthly_income - monthly_expense) * months,
+            "items": items,
+        })
+
     start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
     end_dt = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
 
