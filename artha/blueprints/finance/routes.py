@@ -23,6 +23,90 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Categories — a small, closed set (not user-extensible). Deliberately kept
+# to ~10 buckets: "broad categories that match real decisions" is the
+# researched sweet spot for a personal budget — enough to be useful, few
+# enough that categorizing a transaction is never a chore. A custom/
+# per-user category system is a materially bigger feature (its own CRUD,
+# migration of existing data, etc.) and isn't what was asked for here.
+# ---------------------------------------------------------------------------
+
+TRANSACTION_CATEGORIES = {
+    "income":        {"label": "Income",             "icon": "trending-up"},
+    "housing":       {"label": "Housing",             "icon": "home"},
+    "utilities":     {"label": "Utilities",           "icon": "zap"},
+    "groceries":     {"label": "Groceries",           "icon": "shopping-cart"},
+    "dining":        {"label": "Dining",              "icon": "utensils"},
+    "transport":     {"label": "Transport",           "icon": "car"},
+    "subscriptions": {"label": "Subscriptions",       "icon": "repeat"},
+    "shopping":      {"label": "Shopping",            "icon": "shopping-bag"},
+    "health":        {"label": "Health",              "icon": "heart-pulse"},
+    "entertainment": {"label": "Entertainment",       "icon": "clapperboard"},
+    "debt":          {"label": "Debt & loans",        "icon": "credit-card"},
+    "other":         {"label": "Other",               "icon": "more-horizontal"},
+}
+
+# Keyword -> category, checked against a lowercased transaction description.
+# Deliberately simple substring matching, not an ML/LLM call: it's free,
+# instant, fully offline, and good enough for the common-merchant case that
+# dominates a real bank statement. Order matters within a description only
+# in the pathological case of two keywords both matching — first match in
+# dict-iteration (i.e. definition) order wins, so more distinctive brand
+# names are listed ahead of generic terms where that could matter.
+_CATEGORY_KEYWORDS = {
+    "housing": ["rent", "mortgage", "landlord", "property management"],
+    "utilities": [
+        "electric", "electricity", "water bill", "gas bill", "internet",
+        "comcast", "xfinity", "verizon", "at&t", "att bill", "t-mobile",
+        "utility", "utilities",
+    ],
+    "groceries": [
+        "grocery", "groceries", "supermarket", "walmart", "target",
+        "safeway", "kroger", "whole foods", "trader joe", "costco",
+        "aldi", "publix",
+    ],
+    "dining": [
+        "restaurant", "starbucks", "coffee", "mcdonald", "chipotle",
+        "doordash", "uber eats", "ubereats", "grubhub", "pizza", "cafe",
+        "diner", "bar & grill",
+    ],
+    "transport": [
+        "uber", "lyft", "gas station", "shell", "chevron", "exxon",
+        "parking", "transit", "metro", "dmv", "auto insurance",
+    ],
+    "subscriptions": [
+        "netflix", "spotify", "hulu", "disney+", "disney plus",
+        "amazon prime", "subscription", "apple.com/bill", "icloud",
+        "youtube premium", "playstation plus", "xbox game pass",
+    ],
+    "shopping": ["amazon", "ebay", "best buy", "clothing", "mall", "ikea"],
+    "health": [
+        "pharmacy", "cvs", "walgreens", "doctor", "clinic", "hospital",
+        "dental", "vision", "urgent care",
+    ],
+    "entertainment": [
+        "movie", "cinema", "amc", "concert", "ticketmaster", "steam",
+        "playstation store", "xbox live",
+    ],
+    "debt": ["loan payment", "credit card payment", "student loan"],
+}
+
+
+def _guess_category(description: str, t_type: str) -> str | None:
+    """Best-effort category from a free-text description — used to
+    pre-fill CSV-import rows so most of a statement doesn't need manual
+    categorizing. Returns None (not "other") when nothing matches, so the
+    caller can tell "confidently uncategorized" apart from "no guess"."""
+    if t_type == "income":
+        return "income"
+    desc = (description or "").lower()
+    for category, keywords in _CATEGORY_KEYWORDS.items():
+        if any(kw in desc for kw in keywords):
+            return category
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Validation helpers
 # ---------------------------------------------------------------------------
 
@@ -91,6 +175,10 @@ def add_transaction():
         flash(msg, "error")
         return redirect(url_for("dashboard.index"))
 
+    category = request.form.get("category") or None
+    if category not in TRANSACTION_CATEGORIES:
+        category = None
+
     max_pos = (
         db.session.query(func.max(Transaction.position))
         .filter_by(user_id=current_user.id)
@@ -105,6 +193,8 @@ def add_transaction():
         position=int(max_pos) + 1,
         timestamp=_resolve_transaction_timestamp(request.form.get("date")),
         is_recurring=bool(request.form.get("is_recurring")),
+        category=category,
+        import_source="manual",
     )
 
     try:
@@ -115,6 +205,7 @@ def add_transaction():
                 "partials/transaction_row.html",
                 tx=new_tx,
                 today_date=date.today().strftime("%Y-%m-%d"),
+                categories=TRANSACTION_CATEGORIES,
             )
         flash("Transaction added!", "success")
         return redirect(url_for("dashboard.index"))
@@ -162,6 +253,13 @@ def update_transaction(transaction_id):
     if date_str:
         tx.timestamp = _resolve_transaction_timestamp(date_str)
 
+    # Same "only touch what was sent" rule as date — "category" being
+    # absent from the payload (every other caller of this endpoint today)
+    # must never silently clear an existing category.
+    if "category" in data:
+        category = data.get("category") or None
+        tx.category = category if category in TRANSACTION_CATEGORIES else None
+
     try:
         db.session.commit()
         return jsonify({
@@ -199,6 +297,8 @@ def delete_transaction(transaction_id):
         "type": tx.type,
         "position": int(tx.position or 0),
         "is_recurring": bool(tx.is_recurring),
+        "category": tx.category,
+        "import_source": tx.import_source,
         "timestamp": (
             tx.timestamp.replace(tzinfo=timezone.utc).isoformat()
             if tx.timestamp
@@ -284,6 +384,8 @@ def undo_delete_transaction():
             position=restored_pos,
             timestamp=ts or db.func.current_timestamp(),
             is_recurring=bool(data.get("is_recurring")),
+            category=data.get("category"),
+            import_source=data.get("import_source"),
         )
         db.session.add(restored)
         db.session.commit()
@@ -293,6 +395,7 @@ def undo_delete_transaction():
             "partials/transaction_row.html",
             tx=restored,
             today_date=date.today().strftime("%Y-%m-%d"),
+            categories=TRANSACTION_CATEGORIES,
         )
         return jsonify({"message": "Transaction restored.", "row_html": row_html})
     except Exception as e:
@@ -623,8 +726,12 @@ def finance_page():
     _ring_circumference = 2 * math.pi * 38
     savings_ring_offset = _ring_circumference * (1 - max(0.0, min(100.0, savings_rate)) / 100)
 
-    # Biggest expense "category" (first word of the description, per spec)
-    # and the single day of the month with the most spending.
+    # Biggest expense "category" and the single day of the month with the
+    # most spending. Prefers the real category field where a transaction
+    # has one (labeled via TRANSACTION_CATEGORIES); falls back to the old
+    # first-word-of-description heuristic only for the uncategorized
+    # remainder, so pre-existing data (and anything a user never bothers
+    # to categorize) still produces a sensible stat instead of nothing.
     expense_txs = [t for t in transactions if t.type == "expense"] if not all_time else [
         t for t in all_tx if t.type == "expense"
     ]
@@ -632,8 +739,12 @@ def finance_page():
     category_totals: dict[str, Decimal] = defaultdict(Decimal)
     day_totals: dict[int, Decimal] = defaultdict(Decimal)
     for t in expense_txs:
-        first_word = (t.description or "").strip().split(" ")[0] if (t.description or "").strip() else "Other"
-        category_totals[first_word.capitalize()] += t.amount
+        if t.category and t.category in TRANSACTION_CATEGORIES:
+            label = TRANSACTION_CATEGORIES[t.category]["label"]
+        else:
+            first_word = (t.description or "").strip().split(" ")[0] if (t.description or "").strip() else "Other"
+            label = first_word.capitalize()
+        category_totals[label] += t.amount
         if t.timestamp:
             day_totals[t.timestamp.day] += t.amount
 
@@ -691,7 +802,171 @@ def finance_page():
         budget=budget,
         budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
         today_date=today.strftime("%Y-%m-%d"),
+        categories=TRANSACTION_CATEGORIES,
     )
+
+
+# ---------------------------------------------------------------------------
+# CSV import — bank statement upload. One generic, bank-agnostic parser
+# (not a per-bank integration) plus a client-side preview/edit step as the
+# safety net for whatever the parser gets wrong, rather than trying to
+# perfectly special-case every bank's export format up front.
+# ---------------------------------------------------------------------------
+
+_IMPORT_DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%m/%d/%Y",
+    "%d/%m/%Y",
+    "%m-%d-%Y",
+    "%d-%m-%Y",
+    "%b %d, %Y",
+    "%d %b %Y",
+    "%m/%d/%y",
+    "%d/%m/%y",
+]
+
+_DATE_HEADER_ALIASES = {"date", "transaction date", "posted date", "trans date", "post date", "value date"}
+_DESC_HEADER_ALIASES = {"description", "memo", "narrative", "details", "payee", "merchant", "particulars"}
+_AMOUNT_HEADER_ALIASES = {"amount", "transaction amount", "amt"}
+_DEBIT_HEADER_ALIASES = {"debit", "withdrawal", "withdrawals", "money out", "dr"}
+_CREDIT_HEADER_ALIASES = {"credit", "deposit", "deposits", "money in", "cr"}
+
+
+def _parse_import_date(raw: str) -> date | None:
+    """
+    Tries each statement date format banks commonly export in, in order.
+    Ambiguous day/month ordering (e.g. "03/04") is resolved US-first —
+    the preview step (every parsed date is shown before anything is
+    saved) is what catches a wrong guess, not this function. Critically,
+    this NEVER falls back to today: a row whose date can't be parsed is
+    skipped (see _parse_statement_csv), not silently dated to the day of
+    the upload — a March statement imported in July must file under
+    March, or the whole point of importing history is defeated.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    for fmt in _IMPORT_DATE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _detect_import_columns(header: list[str]) -> dict:
+    """Maps a CSV header row to column indices by role, matching common
+    bank export header names case-insensitively. A role missing from the
+    return dict means it wasn't found — the caller decides what's required."""
+    normalized = [h.strip().lower() for h in header]
+    roles: dict[str, int] = {}
+    for i, h in enumerate(normalized):
+        if h in _DATE_HEADER_ALIASES and "date" not in roles:
+            roles["date"] = i
+        elif h in _DESC_HEADER_ALIASES and "description" not in roles:
+            roles["description"] = i
+        elif h in _AMOUNT_HEADER_ALIASES and "amount" not in roles:
+            roles["amount"] = i
+        elif h in _DEBIT_HEADER_ALIASES and "debit" not in roles:
+            roles["debit"] = i
+        elif h in _CREDIT_HEADER_ALIASES and "credit" not in roles:
+            roles["credit"] = i
+    return roles
+
+
+def _parse_import_amount(raw: str) -> Decimal | None:
+    """Strips common statement formatting ($, commas, parens-for-negative)
+    before parsing — a bank export rarely hands back a bare number."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    negative = raw.startswith("(") and raw.endswith(")")
+    cleaned = raw.strip("()").replace("$", "").replace(",", "").strip()
+    if not cleaned:
+        return None
+    try:
+        value = Decimal(cleaned)
+    except InvalidOperation:
+        return None
+    return -value if negative else value
+
+
+def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
+    """
+    Parses an uploaded bank-statement CSV into row dicts, each carrying
+    its own statement date (see _parse_import_date's docstring on why
+    that's never defaulted) and a best-effort category guess. Rows with
+    an unparseable date/amount are excluded and reported as warnings
+    rather than silently dropped or defaulted. Returns (rows, warnings);
+    nothing is written to the database here.
+    """
+    warnings: list[str] = []
+    try:
+        text = file_stream.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            file_stream.seek(0)
+            text = file_stream.read().decode("latin-1")
+        except Exception:
+            return [], ["Could not read file — please export as CSV (UTF-8 or Latin-1)."]
+
+    reader = csv.reader(io.StringIO(text))
+    try:
+        header = next(reader)
+    except StopIteration:
+        return [], ["File is empty."]
+
+    roles = _detect_import_columns(header)
+    if "date" not in roles or "description" not in roles:
+        return [], [
+            "Couldn't find date and description columns. Expected headers like "
+            "\"Date\", \"Description\", and \"Amount\" (or \"Debit\"/\"Credit\")."
+        ]
+    if "amount" not in roles and "debit" not in roles and "credit" not in roles:
+        return [], ["Couldn't find an amount column (\"Amount\", or \"Debit\"/\"Credit\")."]
+
+    rows: list[dict] = []
+    for line_num, raw_row in enumerate(reader, start=2):
+        if not raw_row or all(not cell.strip() for cell in raw_row):
+            continue
+
+        def cell(role: str) -> str:
+            idx = roles.get(role)
+            return raw_row[idx].strip() if idx is not None and idx < len(raw_row) else ""
+
+        parsed_date = _parse_import_date(cell("date"))
+        description = cell("description")
+        if parsed_date is None or not description:
+            warnings.append(f"Row {line_num}: skipped — missing/unparseable date or description.")
+            continue
+
+        if "debit" in roles or "credit" in roles:
+            debit = _parse_import_amount(cell("debit"))
+            credit = _parse_import_amount(cell("credit"))
+            if debit:
+                amount, t_type = abs(debit), "expense"
+            elif credit:
+                amount, t_type = abs(credit), "income"
+            else:
+                warnings.append(f"Row {line_num}: skipped — no debit or credit amount.")
+                continue
+        else:
+            amount = _parse_import_amount(cell("amount"))
+            if amount is None:
+                warnings.append(f"Row {line_num}: skipped — unparseable amount.")
+                continue
+            t_type = "expense" if amount < 0 else "income"
+            amount = abs(amount)
+
+        rows.append({
+            "date": parsed_date.strftime("%Y-%m-%d"),
+            "description": description,
+            "amount": float(amount),
+            "type": t_type,
+            "category": _guess_category(description, t_type),
+        })
+
+    return rows, warnings
 
 
 def _csv_formula_safe(value: str) -> str:
@@ -759,19 +1034,136 @@ def export_csv():
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Date", "Description", "Type", "Amount", "Recurring"])
+    writer.writerow(["Date", "Description", "Type", "Amount", "Category", "Recurring"])
     for t in rows:
         writer.writerow([
             t.timestamp.strftime("%Y-%m-%d") if t.timestamp else "",
             _csv_formula_safe(t.description),
             t.type,
             f"{t.amount:.2f}",
+            TRANSACTION_CATEGORIES.get(t.category, {}).get("label", "") if t.category else "",
             "yes" if t.is_recurring else "no",
         ])
 
     response = Response(buffer.getvalue(), mimetype="text/csv")
     response.headers["Content-Disposition"] = f"attachment; filename=artha-transactions-{filename_part}.csv"
     return response
+
+
+@finance_bp.route("/finance/import/preview", methods=["POST"])
+@login_required
+def import_preview():
+    """
+    Parses an uploaded statement CSV and returns what WOULD be imported —
+    nothing is saved here. The client renders this as an editable table
+    (date/description/amount/type/category per row, duplicates pre-
+    unchecked); only import_commit() below actually writes anything.
+    """
+    file = request.files.get("statement")
+    if file is None or not file.filename:
+        return jsonify({"message": "No file uploaded"}), 400
+
+    rows, warnings = _parse_statement_csv(file.stream)
+    if not rows:
+        return jsonify({"message": warnings[0] if warnings else "No transactions found in file."}), 400
+
+    # Flag rows that look like they're already in Artha (same date,
+    # description, amount, and type) so the preview can leave them
+    # unchecked by default — re-uploading a statement whose date range
+    # overlaps a previous import shouldn't double every transaction in it.
+    existing = {
+        (t.timestamp.strftime("%Y-%m-%d"), t.description, f"{t.amount:.2f}", t.type)
+        for t in Transaction.query.filter_by(user_id=current_user.id).all()
+    }
+    for row in rows:
+        key = (row["date"], row["description"], f"{row['amount']:.2f}", row["type"])
+        row["duplicate"] = key in existing
+
+    return jsonify({
+        "rows": rows,
+        "warnings": warnings,
+        "categories": {key: val["label"] for key, val in TRANSACTION_CATEGORIES.items()},
+    })
+
+
+@finance_bp.route("/finance/import/commit", methods=["POST"])
+@login_required
+def import_commit():
+    """
+    Saves the (possibly user-edited) row list produced by import_preview().
+    Each row keeps its own statement date exactly as parsed — a March
+    statement imported in July is filed under March, never today.
+    """
+    data = request.get_json(silent=True) or {}
+    rows = data.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return jsonify({"message": "No rows to import"}), 400
+
+    uid = current_user.id
+    max_pos = db.session.query(func.max(Transaction.position)).filter_by(user_id=uid).scalar() or 0
+
+    imported = 0
+    skipped = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped += 1
+            continue
+
+        description = (row.get("description") or "").strip()
+        t_type = row.get("type")
+        date_str = (row.get("date") or "").strip()
+
+        if not description or t_type not in ("income", "expense"):
+            skipped += 1
+            continue
+
+        try:
+            amount = Decimal(str(row.get("amount", "")))
+            if amount < 0:
+                raise InvalidOperation
+        except InvalidOperation:
+            skipped += 1
+            continue
+
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            skipped += 1
+            continue
+
+        category = row.get("category") or None
+        if category not in TRANSACTION_CATEGORIES:
+            category = None
+
+        max_pos += 1
+        db.session.add(Transaction(
+            description=description,
+            amount=amount,
+            type=t_type,
+            user_id=uid,
+            position=int(max_pos),
+            # Reuses the same date_str -> noon-UTC construction every other
+            # transaction date in the app goes through — date_str is
+            # already confirmed valid above, so this never hits that
+            # helper's own "fall back to today" branch.
+            timestamp=_resolve_transaction_timestamp(date_str),
+            category=category,
+            import_source="csv",
+        ))
+        imported += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error committing CSV import: %s", e, exc_info=True)
+        return jsonify({"message": "Database error"}), 500
+
+    return jsonify({
+        "message": f"Imported {imported} transaction{'s' if imported != 1 else ''}.",
+        "imported": imported,
+        "skipped": skipped,
+    })
 
 
 @finance_bp.route("/finance/budget", methods=["POST"])

@@ -9,6 +9,7 @@ import "./ai.js";
 import "./auth.js";
 import "./scenarios.js";
 import "./search.js";
+import "./csv_import.js";
 
 import { updateChartData } from "./chart.js";
 

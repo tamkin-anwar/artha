@@ -17,6 +17,17 @@ class Transaction(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     is_recurring = db.Column(db.Boolean, nullable=False, default=False)
 
+    # One of TRANSACTION_CATEGORIES (artha.blueprints.finance.routes) — a
+    # small fixed set, deliberately not user-extensible (see that constant's
+    # own docstring for why). Nullable so every transaction that already
+    # existed before this column shipped stays valid without a backfill.
+    category = db.Column(db.String(20), nullable=True)
+
+    # "manual" | "csv" | None (legacy rows predating this column). Not used
+    # for any behavior yet — just provenance, so the UI can show "Imported"
+    # and a re-import of an overlapping statement can be reasoned about.
+    import_source = db.Column(db.String(10), nullable=True)
+
     # First-of-month date this row represents, set only on rows created by
     # generate_recurring() (NULL for everything else). A unique constraint
     # on (user_id, description, type, recurring_month) stops two

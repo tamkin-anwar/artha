@@ -64,6 +64,15 @@
             <option value="expense" {% if tx.type == "expense" %}selected{% endif %}>Expense</option>
         </select>
 
+        <select data-id="{{ tx.id }}"
+                class="tx-category min-w-[110px] sm:w-[130px] h-9 field-input"
+                style="font-size:13px; padding:0 8px;">
+            <option value="" {% if not tx.category %}selected{% endif %}>Uncategorized</option>
+            {% for key, meta in categories.items() %}
+                <option value="{{ key }}" {% if tx.category == key %}selected{% endif %}>{{ meta.label }}</option>
+            {% endfor %}
+        </select>
+
         <button
             type="button"
             class="tx-recurring-toggle {{ 'tx-recurring-on' if tx.is_recurring }}"

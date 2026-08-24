@@ -30,7 +30,7 @@ def test_export_current_month_by_default(auth_client, user):
     body = resp.get_data(as_text=True)
     assert "Coffee" in body
     assert "Paycheck" in body
-    assert body.startswith("Date,Description,Type,Amount,Recurring")
+    assert body.startswith("Date,Description,Type,Amount,Category,Recurring")
 
 
 def test_export_only_includes_current_users_transactions(auth_client, user):
@@ -51,7 +51,7 @@ def test_export_requires_login(client):
 def test_export_empty_month_returns_header_only(auth_client):
     body = auth_client.get("/finance/export?month=1999-01").get_data(as_text=True)
     lines = [line for line in body.strip().split("\r\n") if line]
-    assert lines == ["Date,Description,Type,Amount,Recurring"]
+    assert lines == ["Date,Description,Type,Amount,Category,Recurring"]
 
 
 def test_export_neutralizes_formula_injection_in_description(auth_client, user):

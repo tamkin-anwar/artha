@@ -117,10 +117,16 @@
 <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
         <div class="eyebrow">{{ selected_month_label|upper }}</div>
-        <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); text-decoration:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
-            Export CSV
-        </a>
+        <div style="display:flex; align-items:center; gap:16px;">
+            <button type="button" id="csv-import-btn" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); background:none; border:none; padding:0; cursor:pointer; font-family:inherit;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M4 4h16"/></svg>
+                Import CSV
+            </button>
+            <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); text-decoration:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
+                Export CSV
+            </a>
+        </div>
     </div>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:20px; align-items:center;">
         <div style="display:flex; align-items:center; gap:14px;">
@@ -340,6 +346,109 @@
             </li>
         {% endfor %}
     </ul>
+</div>
+
+<style>
+    /* An author-stylesheet display rule on this selector always beats the
+       browser's own [hidden] { display:none } default (author styles
+       outrank the UA stylesheet regardless of selector specificity) — so
+       "display:flex" must be scoped to :not([hidden]), or the modal would
+       render open on every page load regardless of the hidden attribute. */
+    .csv-import-backdrop {
+        position: fixed; inset: 0; z-index: 200;
+        padding: 24px;
+        background: rgba(10, 10, 14, 0.5);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .csv-import-backdrop:not([hidden]) {
+        display: flex; align-items: center; justify-content: center;
+    }
+    .csv-import-step-preview:not([hidden]) {
+        display: flex; flex-direction: column; min-height: 0; flex: 1;
+    }
+    .csv-import-modal {
+        width: 100%; max-width: 620px; max-height: 84vh;
+        display: flex; flex-direction: column;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 24px 26px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 4px 16px rgba(0,0,0,0.16);
+    }
+    .dark .csv-import-modal { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
+    .csv-import-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-shrink:0; }
+    .csv-import-header h3 { font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0; color:var(--text-primary); }
+    .csv-import-close { background:none; border:none; color:var(--text-muted); cursor:pointer; line-height:0; padding:4px; }
+    .csv-import-close:hover { color:var(--text-primary); }
+    .csv-import-close svg, .csv-import-close i { width:18px; height:18px; }
+    .csv-import-hint { font-size:13px; color:var(--text-secondary); margin:0 0 16px; line-height:1.5; }
+    .csv-import-error { font-size:13px; color:var(--red); margin:0 0 14px; display:none; }
+    .csv-import-file-row { display:flex; align-items:center; gap:10px; }
+    #csv-import-file { font-size:13px; color:var(--text-secondary); flex:1; min-width:0; }
+
+    .csv-import-summary { font-size:13px; color:var(--text-secondary); margin:0 0 12px; flex-shrink:0; }
+    .csv-import-summary strong { color:var(--text-primary); }
+    .csv-import-table-scroll { overflow-y:auto; overflow-x:auto; border:1px solid var(--border-subtle); border-radius:10px; flex:1; min-height:0; }
+    .csv-import-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .csv-import-table th {
+        position:sticky; top:0; background:var(--bg-surface); text-align:left;
+        font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);
+        font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border-subtle);
+    }
+    .csv-import-table td { padding:6px 10px; border-bottom:1px solid var(--border-subtle); color:var(--text-secondary); white-space:nowrap; }
+    .csv-import-table tr:last-child td { border-bottom:none; }
+    .csv-import-table tr.csv-import-row-dupe { opacity:0.5; }
+    .csv-import-table select { font-size:12px; background:var(--bg-page); border:1px solid var(--border-subtle); border-radius:6px; padding:3px 6px; color:var(--text-primary); }
+    .csv-import-table td.csv-import-desc { white-space:normal; max-width:220px; color:var(--text-primary); }
+    .csv-import-badge { font-size:10px; text-transform:uppercase; letter-spacing:0.03em; padding:1px 6px; border-radius:999px; background:var(--amber-dim); color:var(--amber); }
+
+    .csv-import-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-shrink:0; }
+</style>
+
+<div id="csv-import-backdrop" class="csv-import-backdrop" hidden>
+    <div class="csv-import-modal">
+        <div class="csv-import-header">
+            <h3>Import bank statement</h3>
+            <button type="button" id="csv-import-close" class="csv-import-close" aria-label="Close">
+                <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <div id="csv-import-step-upload">
+            <p class="csv-import-hint">
+                Upload a CSV export from your bank. Every transaction keeps the date it happened on the
+                statement — importing a March statement in July still files those transactions under March.
+            </p>
+            <p id="csv-import-error" class="csv-import-error"></p>
+            <div class="csv-import-file-row">
+                <input type="file" id="csv-import-file" accept=".csv,text/csv">
+                <button type="button" id="csv-import-preview-btn" class="btn-primary" style="padding:8px 18px; font-size:13px;">Preview</button>
+            </div>
+        </div>
+
+        <div id="csv-import-step-preview" class="csv-import-step-preview" hidden>
+            <p id="csv-import-summary" class="csv-import-summary"></p>
+            <div class="csv-import-table-scroll">
+                <table class="csv-import-table">
+                    <thead>
+                        <tr>
+                            <th style="width:24px;"></th>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th style="text-align:right;">Amount</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody id="csv-import-tbody"></tbody>
+                </table>
+            </div>
+            <div class="csv-import-actions">
+                <button type="button" id="csv-import-back-btn" class="btn-secondary" style="padding:8px 16px; font-size:13px;">Back</button>
+                <button type="button" id="csv-import-commit-btn" class="btn-primary" style="padding:8px 18px; font-size:13px;">Import selected</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script type="module">

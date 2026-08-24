@@ -13,6 +13,7 @@ from ...models import Note, Transaction, Event, EventException
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates
 from ...utils import current_month_bounds, derive_title_and_preview, budget_status
+from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
@@ -225,6 +226,7 @@ def index():
         renewals_total=renewals_total,
         dashboard_summary=dashboard_summary,
         budget=budget,
+        categories=TRANSACTION_CATEGORIES,
     )
 
 

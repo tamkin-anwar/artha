@@ -556,6 +556,13 @@ function attachRowListeners(row) {
             debounceSaveTransaction(e);
         });
     }
+
+    const categorySelect = row.querySelector(".tx-category");
+    if (categorySelect) {
+        categorySelect.addEventListener("change", (e) => {
+            debounceSaveTransaction(e);
+        });
+    }
 }
 
 async function saveTransaction(e) {
@@ -567,12 +574,14 @@ async function saveTransaction(e) {
     const amountEl = row.querySelector(".tx-amount");
     const typeSelect = row.querySelector(".tx-type");
     const dateInput = row.querySelector(".tx-date");
+    const categorySelect = row.querySelector(".tx-category");
     if (!descEl || !amountEl || !typeSelect) return;
 
     const dateBeforeSave = row.dataset.date;
     const desc = descEl.textContent.trim();
     const type = typeSelect.value;
     const dateValue = dateInput ? dateInput.value : "";
+    const category = categorySelect ? categorySelect.value : "";
 
     const parsed = parseEditableMoneyToNumber(amountEl.textContent);
     if (parsed === null) {
@@ -592,7 +601,7 @@ async function saveTransaction(e) {
                 "Content-Type": "application/json",
                 ...csrfHeaders(),
             },
-            body: JSON.stringify({ description: desc, amount: parsed, type, date: dateValue }),
+            body: JSON.stringify({ description: desc, amount: parsed, type, date: dateValue, category }),
         });
 
         const responseData = await res.json().catch(() => ({}));
