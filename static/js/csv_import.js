@@ -24,6 +24,8 @@ function initCsvImport() {
     const backdrop = document.getElementById("csv-import-backdrop");
     const closeBtn = document.getElementById("csv-import-close");
     const fileInput = document.getElementById("csv-import-file");
+    const passwordRow = document.getElementById("csv-import-password-row");
+    const passwordInput = document.getElementById("csv-import-password");
     const previewBtn = document.getElementById("csv-import-preview-btn");
     const backBtn = document.getElementById("csv-import-back-btn");
     const commitBtn = document.getElementById("csv-import-commit-btn");
@@ -44,6 +46,8 @@ function initCsvImport() {
         tbody.innerHTML = "";
         previewBtn.disabled = false;
         previewBtn.textContent = "Preview";
+        passwordRow.hidden = true;
+        passwordInput.value = "";
     }
 
     function openModal() {
@@ -115,6 +119,7 @@ function initCsvImport() {
 
         const formData = new FormData();
         formData.append("statement", file);
+        if (passwordInput.value) formData.append("pdf_password", passwordInput.value);
 
         try {
             const res = await fetch("/finance/import/preview", {
@@ -130,6 +135,10 @@ function initCsvImport() {
                 errorEl.style.display = "";
                 previewBtn.disabled = false;
                 previewBtn.textContent = "Preview";
+                if (data.needs_password) {
+                    passwordRow.hidden = false;
+                    passwordInput.focus();
+                }
                 return;
             }
 

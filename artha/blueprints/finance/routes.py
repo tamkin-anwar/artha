@@ -1101,6 +1101,7 @@ _IMPORT_DATE_FORMATS = [
     "%d-%m-%Y",
     "%b %d, %Y",
     "%d %b %Y",
+    "%d-%b-%Y",
     "%m/%d/%y",
     "%d/%m/%y",
 ]
@@ -1250,15 +1251,27 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
 
 
 _MONEY = r"-?\$?[\d,]+\.\d{2}"
+# "9/19" (US-style, resolved against the statement period in
+# _resolve_pdf_date) or "19-Sep-2024" (day-month-year, common outside the
+# US — BRAC Bank among others prints exactly this on every line).
+_PDF_DATE_PATTERN = r"(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}-[A-Za-z]{3}-\d{4})"
 # Tried first: some banks (Chase among them) print a running balance right
 # after the amount on every line — "... -21.30 15,937.21" — so the
 # amount/balance pair has to be matched together, or a naive "last number
 # on the line" match grabs the balance instead of the actual amount.
 _PDF_TX_LINE_WITH_BALANCE_RE = re.compile(
-    rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_MONEY})\s+{_MONEY}$"
+    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+{_MONEY}$"
 )
 _PDF_TX_LINE_RE = re.compile(
-    rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_MONEY})$"
+    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})$"
+)
+# Separate withdraw/deposit columns plus a running balance — "19-Sep-2024
+# CARD ANNUAL FEE **8562 FOR 2024-25 600.00 0.00 4,400.00" — instead of one
+# signed amount. Whichever of the two money columns is non-zero is the
+# transaction; tried before _PDF_TX_LINE_WITH_BALANCE_RE would otherwise
+# misread the deposit column as a second "balance" and drop it.
+_PDF_TX_LINE_WITHDRAW_DEPOSIT_RE = re.compile(
+    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+({_MONEY})\s+{_MONEY}$"
 )
 
 # "June 24, 2026 through July 22, 2026" (pdfplumber often extracts this with
@@ -1298,8 +1311,9 @@ def _resolve_pdf_date(date_str: str, year_context: tuple[int, int, int, int] | N
     Falls back to the current year if the document had no resolvable
     period at all, rather than failing every bare-MM/DD date outright.
     """
-    if date_str.count("/") >= 2:
-        return _parse_import_date(date_str)
+    parsed = _parse_import_date(date_str)
+    if parsed is not None:
+        return parsed
 
     try:
         month_str, day_str = date_str.split("/")
@@ -1319,7 +1333,14 @@ def _resolve_pdf_date(date_str: str, year_context: tuple[int, int, int, int] | N
         return None
 
 
-def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
+class PdfPasswordRequired(Exception):
+    """Raised by _parse_statement_pdf when the PDF is encrypted and either
+    no password or the wrong password was supplied — the route catches
+    this specifically so the client can prompt for a password and retry,
+    instead of surfacing it as a generic "corrupted file" error."""
+
+
+def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list[dict], list[str]]:
     """
     Parses an uploaded bank-statement PDF by reading each page's plain
     text and matching transaction lines with a regex, rather than
@@ -1363,16 +1384,20 @@ def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
     # weight that only this one path needs — no reason to pay it on every
     # app boot for a feature most requests never touch.
     import pdfplumber
+    from pdfminer.pdfdocument import PDFPasswordIncorrect
     from pdfplumber.utils.exceptions import PdfminerException
 
     try:
-        pdf = pdfplumber.open(file_stream)
-    except PdfminerException:
+        pdf = pdfplumber.open(file_stream, password=password or "")
+    except PdfminerException as exc:
+        if isinstance(exc.args[0] if exc.args else None, PDFPasswordIncorrect):
+            raise PdfPasswordRequired() from None
         return [], ["Could not read that PDF — it may be encrypted or corrupted."]
     except Exception:
         return [], ["Could not read that PDF."]
 
     rows: list[dict] = []
+    warnings: list[str] = []
     any_text_found = False
     year_context: tuple[int, int, int, int] | None = None
 
@@ -1387,6 +1412,49 @@ def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
             for raw_line in text.split("\n"):
                 line = raw_line.strip()
                 if not line:
+                    continue
+
+                wd_m = _PDF_TX_LINE_WITHDRAW_DEPOSIT_RE.match(line)
+                if wd_m:
+                    date_str, description, withdraw_str, deposit_str = wd_m.groups()
+                    parsed_date = _resolve_pdf_date(date_str, year_context)
+                    if parsed_date is None:
+                        continue
+
+                    withdraw = _parse_import_amount(withdraw_str.lstrip("$"))
+                    deposit = _parse_import_amount(deposit_str.lstrip("$"))
+                    if withdraw is None or deposit is None:
+                        continue
+
+                    if withdraw != 0:
+                        t_type, amount = "expense", abs(withdraw)
+                    elif deposit != 0:
+                        t_type, amount = "income", abs(deposit)
+                    else:
+                        continue
+
+                    # A statement whose description wraps onto the line before
+                    # or after can leave a transaction line that's nothing but
+                    # date + numbers — the regex still "matches" by taking a
+                    # leading digit-string as the description (e.g. "500.00"
+                    # split into desc="5", amount="00.00"). No real merchant
+                    # name is ever pure digits/punctuation, so reject that
+                    # rather than import a transaction with a garbage label.
+                    description = description.strip()
+                    if not description or not any(ch.isalpha() for ch in description):
+                        warnings.append(
+                            f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
+                            "its description wrapped onto another line and couldn't be matched."
+                        )
+                        continue
+
+                    rows.append({
+                        "date": parsed_date.strftime("%Y-%m-%d"),
+                        "description": description,
+                        "amount": float(amount),
+                        "type": t_type,
+                        "category": _guess_category(description, t_type),
+                    })
                     continue
 
                 m = _PDF_TX_LINE_WITH_BALANCE_RE.match(line) or _PDF_TX_LINE_RE.match(line)
@@ -1404,7 +1472,11 @@ def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
                     amount = abs(amount)
 
                     description = description.strip()
-                    if not description:
+                    if not description or not any(ch.isalpha() for ch in description):
+                        warnings.append(
+                            f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: "
+                            "its description wrapped onto another line and couldn't be matched."
+                        )
                         continue
 
                     rows.append({
@@ -1429,7 +1501,7 @@ def _parse_statement_pdf(file_stream) -> tuple[list[dict], list[str]]:
             "offers one, will work more reliably than a PDF."
         ]
 
-    return rows, []
+    return rows, warnings
 
 
 def _csv_formula_safe(value: str) -> str:
@@ -1529,7 +1601,16 @@ def import_preview():
 
     is_pdf = file.filename.lower().endswith(".pdf") or file.mimetype == "application/pdf"
     if is_pdf:
-        rows, warnings = _parse_statement_pdf(file.stream)
+        password = request.form.get("pdf_password") or None
+        try:
+            rows, warnings = _parse_statement_pdf(file.stream, password=password)
+        except PdfPasswordRequired:
+            message = (
+                "That PDF needs a password to open."
+                if password is None
+                else "That password didn't work."
+            )
+            return jsonify({"message": message, "needs_password": True}), 400
     else:
         rows, warnings = _parse_statement_csv(file.stream)
     if not rows:
