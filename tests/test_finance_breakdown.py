@@ -95,6 +95,24 @@ def test_cashflow_breakdown_current_year_stops_at_this_month_not_december(auth_c
     assert data["period_label"] == f"{today.year} (Year to Date)"
 
 
+def test_spending_breakdown_month_param_selects_a_specific_past_month(auth_client, user):
+    _add_tx(user, "Rent", "1200.00", "expense", category="housing", when=datetime(2025, 6, 15, tzinfo=timezone.utc))
+    _add_tx(user, "Rent", "9999.00", "expense", category="housing", when=_this_month())  # must not leak in
+
+    resp = auth_client.get("/finance/breakdown?view=spending&period=month&month=2025-06")
+    data = resp.get_json()
+    assert data["total"] == 1200.00
+    assert data["period_label"] == "June 2025"
+
+
+def test_spending_breakdown_month_param_ignores_malformed_value(auth_client, user):
+    _add_tx(user, "Rent", "300.00", "expense", category="housing", when=_this_month())
+    resp = auth_client.get("/finance/breakdown?view=spending&period=month&month=not-a-month")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["total"] == 300.00  # falls back to the current month, not a 500
+
+
 def test_breakdown_defaults_to_spending_month_on_bad_params(auth_client, user):
     _add_tx(user, "Rent", "300.00", "expense", category="housing", when=_this_month())
     resp = auth_client.get("/finance/breakdown?view=nonsense&period=nonsense")

@@ -19,13 +19,13 @@
 <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
 
 <div class="fp-toptabs" role="tablist" aria-label="Finance views">
-    <button type="button" class="fp-toptab fp-toptab-active" data-fp-tab="transactions" role="tab" aria-selected="true">Transactions</button>
-    <button type="button" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false">Spending</button>
-    <button type="button" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false">Income</button>
-    <button type="button" class="fp-toptab" data-fp-tab="cashflow" role="tab" aria-selected="false">Cash Flow</button>
+    <button type="button" id="fp-tab-transactions" class="fp-toptab fp-toptab-active" data-fp-tab="transactions" role="tab" aria-selected="true" aria-controls="fp-pane-transactions" tabindex="0">Transactions</button>
+    <button type="button" id="fp-tab-spending" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false" aria-controls="fp-pane-spending" tabindex="-1">Spending</button>
+    <button type="button" id="fp-tab-income" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false" aria-controls="fp-pane-income" tabindex="-1">Income</button>
+    <button type="button" id="fp-tab-cashflow" class="fp-toptab" data-fp-tab="cashflow" role="tab" aria-selected="false" aria-controls="fp-pane-cashflow" tabindex="-1">Cash Flow</button>
 </div>
 
-<div id="fp-pane-transactions" class="fp-tabpane">
+<div id="fp-pane-transactions" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-transactions">
 <!-- Month selector -->
 <div class="glass-card" style="padding:12px 14px; margin-bottom:24px; display:flex; align-items:center; gap:8px;">
     <button type="button" id="month-scroll-left" aria-label="Scroll months left" style="background:none; border:none; color:var(--text-secondary); font-size:16px; cursor:pointer; flex-shrink:0; padding:4px;">
@@ -378,12 +378,17 @@
 {% macro period_selector(view) %}
 <div class="fp-period-row">
     <div class="fp-period-chips" role="group" aria-label="Period">
-        <button type="button" class="fp-period-chip fp-period-chip-active" data-period="month">This Month</button>
-        <button type="button" class="fp-period-chip" data-period="3m">Last 3M</button>
-        <button type="button" class="fp-period-chip" data-period="6m">Last 6M</button>
-        <button type="button" class="fp-period-chip" data-period="12m">Last 12M</button>
+        <button type="button" class="fp-period-chip fp-period-chip-active" data-period="month">Month</button>
+        <button type="button" class="fp-period-chip" data-period="3m">Last 3 Months</button>
+        <button type="button" class="fp-period-chip" data-period="6m">Last 6 Months</button>
+        <button type="button" class="fp-period-chip" data-period="12m">Last 12 Months</button>
         <button type="button" class="fp-period-chip" data-period="year">Year</button>
     </div>
+    <select class="fp-month-select" aria-label="Month">
+        {% for m in available_months %}
+            <option value="{{ m.value }}" {{ 'selected' if m.value == today_date[:7] else '' }}>{{ m.label }}</option>
+        {% endfor %}
+    </select>
     <select class="fp-year-select" hidden aria-label="Year">
         {% for y in available_years %}
             <option value="{{ y }}">{{ y }}</option>
@@ -393,7 +398,7 @@
 {% endmacro %}
 
 <!-- Spending -->
-<div id="fp-pane-spending" class="fp-tabpane" data-fp-view="spending" hidden>
+<div id="fp-pane-spending" class="fp-tabpane" data-fp-view="spending" role="tabpanel" aria-labelledby="fp-tab-spending" hidden>
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("spending") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
@@ -406,7 +411,7 @@
 </div>
 
 <!-- Income -->
-<div id="fp-pane-income" class="fp-tabpane" data-fp-view="income" hidden>
+<div id="fp-pane-income" class="fp-tabpane" data-fp-view="income" role="tabpanel" aria-labelledby="fp-tab-income" hidden>
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("income") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
@@ -419,7 +424,7 @@
 </div>
 
 <!-- Cash Flow -->
-<div id="fp-pane-cashflow" class="fp-tabpane" data-fp-view="cashflow" hidden>
+<div id="fp-pane-cashflow" class="fp-tabpane" data-fp-view="cashflow" role="tabpanel" aria-labelledby="fp-tab-cashflow" hidden>
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("cashflow") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
@@ -558,7 +563,7 @@
     }
     .fp-period-chip:hover { background:var(--bg-hover); }
     .fp-period-chip.fp-period-chip-active { background:var(--gold-dim); color:var(--gold); border-color:var(--gold); }
-    .fp-year-select {
+    .fp-month-select, .fp-year-select {
         font-size:12px; background:var(--bg-page); border:1px solid var(--border-subtle);
         border-radius:8px; padding:5px 10px; color:var(--text-primary); font-family:inherit;
     }
@@ -635,6 +640,7 @@
 <script type="module">
 import { onThemeChange } from "{{ url_for('static', filename='js/theme.js') }}";
 import { formatMoney } from "{{ url_for('static', filename='js/currency.js') }}";
+import { drawSpinner, drawFallbackMessage } from "{{ url_for('static', filename='js/chart.js') }}";
 
 function getVar(name, fallback) {
     var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -877,6 +883,11 @@ function fpActiveYear(pane) {
     return sel && sel.value ? sel.value : String(new Date().getFullYear());
 }
 
+function fpActiveMonth(pane) {
+    var sel = pane.querySelector(".fp-month-select");
+    return sel ? sel.value : "";
+}
+
 function fpSetMoney(el, value, signed) {
     if (!el) return;
     el.setAttribute("data-money-value", value);
@@ -991,6 +1002,40 @@ function fpRenderCashflow(pane, data) {
     }
     if (emptyMsg) emptyMsg.hidden = true;
     if (canvas) canvas.style.display = "";
+    var wrap = document.getElementById("fpCashflowChartWrap");
+
+    // A single-bucket period ("Month") is a genuine Chart.js limitation,
+    // not just a styling gap: its category scale needs at least 2 ticks
+    // to measure a distance between them, and degenerates (min and max
+    // both collapse to 0) with only one — which breaks bar *positioning*,
+    // not just width, so even a fixed barThickness still renders the pair
+    // overlapping near the left edge instead of side by side. But a chart
+    // here would only be re-plotting the Income/Spending numbers already
+    // shown as text above in two bars — skip it for this one case rather
+    // than fighting a broken scale to draw something with no new
+    // information; 2+ buckets is where the chart earns its place (an
+    // actual trend across time) and its normal auto-sizing already works.
+    if (data.buckets.length === 1) {
+        if (canvas) canvas.style.display = "none";
+        if (wrap) wrap.style.height = "0";
+        return;
+    }
+    if (wrap) wrap.style.height = "220px";
+
+    // Same fix renderTrendChart already applies above: a category-scale bar
+    // chart always divides its FULL width evenly among however many
+    // categories exist, so too few months stretches the bars apart with a
+    // huge empty gap between them. Capping the chart's own width to
+    // roughly "N months worth of room" and centering it keeps bars close
+    // together instead of exploding to fill an oversized category axis.
+    if (wrap) {
+        wrap.style.maxWidth = "none";
+        var available = wrap.getBoundingClientRect().width;
+        var desiredWidth = Math.max(220, Math.min(available, data.buckets.length * 140));
+        wrap.style.maxWidth = desiredWidth + "px";
+        wrap.style.marginLeft = "auto";
+        wrap.style.marginRight = "auto";
+    }
 
     if (canvas && typeof Chart !== "undefined") {
         var emerald = getVar("--emerald", "#22c55e");
@@ -1069,47 +1114,177 @@ function fpRenderCashflow(pane, data) {
     }
 }
 
+// Per-view in-flight request + spinner tracking. Two things this guards
+// against that the first pass didn't: (1) switching periods faster than
+// the network can answer, where an older, slower response could land
+// after a newer one and silently overwrite it with stale numbers — every
+// fetch aborts whatever request the same view had in flight before it;
+// (2) a network hiccup leaving the pane frozen on whatever it last
+// showed (or its unloaded "$0.00" placeholder) with zero feedback.
+var fpAbortControllers = {};
+var fpSpinnerIntervals = {};
+
+function fpChartCanvas(pane, view) {
+    return view === "cashflow" ? pane.querySelector("[data-fp-cashflow-chart]") : pane.querySelector("[data-fp-donut]");
+}
+
+function fpStopSpinner(view) {
+    if (fpSpinnerIntervals[view]) {
+        clearInterval(fpSpinnerIntervals[view]);
+        fpSpinnerIntervals[view] = null;
+    }
+}
+
+function fpStartSpinner(canvas, view) {
+    fpStopSpinner(view);
+    if (!canvas) return;
+    canvas.style.display = "";
+    var frame = 0;
+    fpSpinnerIntervals[view] = setInterval(function () { drawSpinner(canvas, frame++); }, 50);
+}
+
 function fpLoadBreakdown(view) {
     var pane = fpPane(view);
     if (!pane) return;
     var period = fpActivePeriod(pane);
     var year = fpActiveYear(pane);
+    var month = fpActiveMonth(pane);
     var url = "/finance/breakdown?view=" + view + "&period=" + period;
     if (period === "year") url += "&year=" + year;
+    if (period === "month" && month) url += "&month=" + encodeURIComponent(month);
 
-    fetch(url, { credentials: "same-origin", headers: { "X-Requested-With": "XMLHttpRequest" } })
-        .then(function (res) { return res.ok ? res.json() : null; })
+    if (fpAbortControllers[view]) fpAbortControllers[view].abort();
+    var controller = new AbortController();
+    fpAbortControllers[view] = controller;
+
+    if (fpCharts[view]) {
+        fpCharts[view].destroy();
+        fpCharts[view] = null;
+    }
+    var emptyMsg = pane.querySelector("[data-fp-empty-msg]");
+    if (emptyMsg) emptyMsg.hidden = true;
+    // A prior load with zero categories hides the whole donut wrapper (not
+    // just its canvas) — undo that before drawing the spinner into it, or
+    // the spinner runs invisibly behind display:none.
+    var donutWrap = pane.querySelector(".fp-donut-wrap");
+    if (donutWrap) donutWrap.style.display = "";
+    fpStartSpinner(fpChartCanvas(pane, view), view);
+
+    fetch(url, {
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: controller.signal,
+    })
+        .then(function (res) {
+            if (!res.ok) throw new Error("Request failed with status " + res.status);
+            return res.json();
+        })
         .then(function (data) {
-            if (!data) return;
+            fpStopSpinner(view);
             if (view === "cashflow") fpRenderCashflow(pane, data);
             else fpRenderDonut(pane, data);
             formatFinanceMoneyElements();
         })
-        .catch(function (err) { console.warn("Could not load " + view + " breakdown:", err); });
+        .catch(function (err) {
+            // A request this same view superseded with a newer one — not a
+            // real failure, the newer call already owns the spinner/canvas.
+            if (err.name === "AbortError") return;
+            fpStopSpinner(view);
+            console.warn("Could not load " + view + " breakdown:", err);
+            var canvas = fpChartCanvas(pane, view);
+            if (canvas) drawFallbackMessage(canvas, "Couldn't load — try again");
+            // The chart isn't the only thing on the card — the total and
+            // category list (or cash flow's income/expense/net figures)
+            // are still sitting there from whatever period was shown
+            // before, which would otherwise read as real numbers for the
+            // period the user just selected instead of a failed request.
+            var periodLabelEl = pane.querySelector("[data-fp-period-label]");
+            if (periodLabelEl) periodLabelEl.textContent = "Couldn't load";
+            if (view === "cashflow") {
+                fpSetMoney(pane.querySelector("[data-fp-cf-income]"), 0, false);
+                fpSetMoney(pane.querySelector("[data-fp-cf-expense]"), 0, false);
+                fpSetMoney(pane.querySelector("[data-fp-cf-net]"), 0, true);
+                var netLabelEl = pane.querySelector("[data-fp-cf-net-label]");
+                if (netLabelEl) netLabelEl.textContent = "Net";
+            } else {
+                fpSetMoney(pane.querySelector("[data-fp-total]"), 0, false);
+                var listEl = pane.querySelector("[data-fp-category-list]");
+                if (listEl) listEl.innerHTML = "";
+            }
+            formatFinanceMoneyElements();
+        });
 }
 
+// Re-render whichever breakdown tab is currently on screen with the new
+// theme's colors immediately (matches renderTrendChart's own
+// onThemeChange hook above); any other tab the user has already visited
+// is just marked stale so it re-fetches with correct colors next time
+// it's opened, rather than redrawing an off-screen canvas — Chart.js
+// sizes a new chart from its canvas's current layout, which is 0x0 while
+// its pane is `hidden`, so building one while off-screen would size it
+// wrong or fail outright.
+onThemeChange(function () {
+    var activeTab = document.querySelector(".fp-toptab.fp-toptab-active");
+    var activeView = activeTab ? activeTab.dataset.fpTab : "transactions";
+    Object.keys(fpTabPanes).forEach(function (key) {
+        if (key === "transactions") return;
+        if (key === activeView) {
+            fpLoadBreakdown(key);
+        } else if (fpLoadedViews[key]) {
+            fpLoadedViews[key] = false;
+            if (fpCharts[key]) {
+                fpCharts[key].destroy();
+                fpCharts[key] = null;
+            }
+        }
+    });
+});
+
 // Top-level tab switching (Transactions / Spending / Income / Cash Flow).
-var fpTopTabs = document.querySelectorAll(".fp-toptab");
+// Standard ARIA tabs pattern: clicking or arrowing to a tab moves both
+// selection and keyboard focus together (roving tabindex — only the
+// active tab is in the Tab order, matching what a screen reader/keyboard
+// user expects from role="tab", not just the visual click behavior).
+var fpTopTabs = Array.prototype.slice.call(document.querySelectorAll(".fp-toptab"));
 var fpTabPanes = {
     transactions: document.getElementById("fp-pane-transactions"),
     spending: fpPane("spending"),
     income: fpPane("income"),
     cashflow: fpPane("cashflow"),
 };
-fpTopTabs.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-        var target = btn.dataset.fpTab;
-        fpTopTabs.forEach(function (b) {
-            var active = b === btn;
-            b.classList.toggle("fp-toptab-active", active);
-            b.setAttribute("aria-selected", String(active));
-        });
-        Object.keys(fpTabPanes).forEach(function (key) {
-            if (fpTabPanes[key]) fpTabPanes[key].hidden = key !== target;
-        });
-        if (target !== "transactions" && !fpLoadedViews[target]) {
-            fpLoadedViews[target] = true;
-            fpLoadBreakdown(target);
+
+function fpActivateTab(btn, focus) {
+    var target = btn.dataset.fpTab;
+    fpTopTabs.forEach(function (b) {
+        var active = b === btn;
+        b.classList.toggle("fp-toptab-active", active);
+        b.setAttribute("aria-selected", String(active));
+        b.tabIndex = active ? 0 : -1;
+    });
+    Object.keys(fpTabPanes).forEach(function (key) {
+        if (fpTabPanes[key]) fpTabPanes[key].hidden = key !== target;
+    });
+    if (focus) btn.focus();
+    if (target !== "transactions" && !fpLoadedViews[target]) {
+        fpLoadedViews[target] = true;
+        fpLoadBreakdown(target);
+    }
+}
+
+fpTopTabs.forEach(function (btn, i) {
+    btn.addEventListener("click", function () { fpActivateTab(btn, false); });
+    btn.addEventListener("keydown", function (e) {
+        var delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (delta) {
+            e.preventDefault();
+            var next = fpTopTabs[(i + delta + fpTopTabs.length) % fpTopTabs.length];
+            fpActivateTab(next, true);
+        } else if (e.key === "Home") {
+            e.preventDefault();
+            fpActivateTab(fpTopTabs[0], true);
+        } else if (e.key === "End") {
+            e.preventDefault();
+            fpActivateTab(fpTopTabs[fpTopTabs.length - 1], true);
         }
     });
 });
@@ -1127,11 +1302,13 @@ document.addEventListener("click", function (e) {
     });
     var yearSelect = pane.querySelector(".fp-year-select");
     if (yearSelect) yearSelect.hidden = chip.dataset.period !== "year";
+    var monthSelect = pane.querySelector(".fp-month-select");
+    if (monthSelect) monthSelect.hidden = chip.dataset.period !== "month";
     fpLoadBreakdown(pane.dataset.fpView);
 });
 
 document.addEventListener("change", function (e) {
-    if (!e.target.classList.contains("fp-year-select")) return;
+    if (!e.target.classList.contains("fp-year-select") && !e.target.classList.contains("fp-month-select")) return;
     var pane = e.target.closest(".fp-tabpane");
     if (!pane) return;
     fpLoadBreakdown(pane.dataset.fpView);

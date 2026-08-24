@@ -48,7 +48,7 @@ function prepare2dForDpr(canvas, ctx) {
     return { cssWidth, cssHeight };
 }
 
-function drawFallbackMessage(canvas, message) {
+export function drawFallbackMessage(canvas, message) {
     if (!canvas?.getContext) return;
 
     syncCanvasSize(canvas);
@@ -239,7 +239,7 @@ export function updateFinanceChart(income, expense) {
     financeChartInstance.update();
 }
 
-function drawSpinner(canvas, frame = 0) {
+export function drawSpinner(canvas, frame = 0) {
     if (!canvas?.getContext) return;
 
     syncCanvasSize(canvas);

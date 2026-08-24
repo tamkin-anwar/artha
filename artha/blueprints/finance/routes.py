@@ -832,6 +832,20 @@ def finance_page():
     if today.year not in available_years:
         available_years.insert(0, today.year)
 
+    # Every calendar month that has at least one transaction, newest first —
+    # the month picker shown when "Month" is the selected period on the
+    # Cash Flow/Spending/Income tabs, so a user can drill into e.g. March
+    # 2026 specifically rather than only ever seeing whichever month is
+    # "current". Reuses `buckets` (already keyed by "YYYY-MM" from the loop
+    # above) instead of re-scanning all_tx a second time.
+    current_month_key = today.strftime("%Y-%m")
+    available_months = [
+        {"value": key, "label": f"{calendar.month_abbr[int(key[5:7])]} {key[:4]}"}
+        for key in sorted(buckets.keys(), reverse=True)
+    ]
+    if not available_months or available_months[0]["value"] != current_month_key:
+        available_months.insert(0, {"value": current_month_key, "label": f"{calendar.month_abbr[today.month]} {today.year}"})
+
     return render_template(
         "finance.html",
         transactions=transactions,
@@ -855,6 +869,7 @@ def finance_page():
         today_date=today.strftime("%Y-%m-%d"),
         categories=TRANSACTION_CATEGORIES,
         available_years=available_years,
+        available_months=available_months,
     )
 
 
@@ -868,19 +883,27 @@ def finance_page():
 #   - income:   income total broken down by category
 # ---------------------------------------------------------------------------
 
-def _period_bounds(period: str, year: int, today: date) -> tuple[date, date, str]:
+def _period_bounds(period: str, year: int, today: date, month_str: str | None = None) -> tuple[date, date, str]:
     """(start, end_exclusive, label) for a period key.
 
-    "month"/"3m"/"6m"/"12m" are trailing windows anchored to today (matches
-    how banking apps show "Last 3 Months" — always relative to now, not to
-    whatever year is selected). "year" is the one period that actually reads
-    the `year` param, since that's what lets a user look back at 2025's
-    totals vs. 2026's — the whole point of the year picker.
+    "3m"/"6m"/"12m" are trailing windows anchored to today (matches how
+    banking apps show "Last 3 Months" — always relative to now, not to
+    whatever year is selected). "year" reads the `year` param, and "month"
+    reads `month_str` ("YYYY-MM") — the two periods that let a user look
+    back at a specific past year or a specific past month rather than only
+    ever seeing today's.
     """
     if period == "month":
-        start = _month_start(today.year, today.month)
-        end = _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
-        return start, end, f"{calendar.month_name[today.month]} {today.year}"
+        target = _month_start(today.year, today.month)
+        if month_str:
+            try:
+                m_year, m_month = (int(part) for part in month_str.split("-", 1))
+                target = _month_start(m_year, m_month)
+            except (ValueError, TypeError):
+                pass
+        start = target
+        end = _month_start(target.year + 1, 1) if target.month == 12 else _month_start(target.year, target.month + 1)
+        return start, end, f"{calendar.month_name[target.month]} {target.year}"
 
     if period in ("3m", "6m", "12m"):
         n = {"3m": 3, "6m": 6, "12m": 12}[period]
@@ -920,13 +943,14 @@ def finance_breakdown():
         year = int(request.args.get("year") or today.year)
     except (TypeError, ValueError):
         year = today.year
+    month_param = (request.args.get("month") or "").strip()
 
     if view not in ("spending", "income", "cashflow"):
         view = "spending"
     if period not in ("month", "3m", "6m", "12m", "year"):
         period = "month"
 
-    start, end, period_label = _period_bounds(period, year, today)
+    start, end, period_label = _period_bounds(period, year, today, month_param or None)
     start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
     end_dt = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
 
