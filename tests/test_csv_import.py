@@ -56,6 +56,29 @@ def test_preview_supports_debit_credit_columns(auth_client):
     assert deposit["amount"] == 1500.00
 
 
+def test_preview_parses_sterling_amounts_with_uk_date_format(auth_client):
+    """A UK bank's CSV export: £ symbol on the amount, DD/MM/YYYY dates
+    (Money In/Money Out columns, Monzo/Starling-style headers)."""
+    csv_text = (
+        "Date,Description,Money Out,Money In\n"
+        "25/12/2026,Tesco Store,£45.23,\n"
+        "05/06/2026,Salary,,£1500.00\n"
+    )
+    resp = _upload(auth_client, csv_text)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert len(rows) == 2
+
+    tesco = next(r for r in rows if "Tesco" in r["description"])
+    assert tesco["type"] == "expense"
+    assert tesco["amount"] == 45.23
+    assert tesco["date"] == "2026-12-25"  # unambiguous day (25) resolves day-first
+
+    salary = next(r for r in rows if "Salary" in r["description"])
+    assert salary["type"] == "income"
+    assert salary["amount"] == 1500.00
+
+
 def test_preview_auto_suggests_category_from_merchant_name(auth_client):
     csv_text = "Date,Description,Amount\n2026-04-01,NETFLIX.COM,-15.49\n"
     resp = _upload(auth_client, csv_text)

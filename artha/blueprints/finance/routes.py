@@ -1101,6 +1101,7 @@ _IMPORT_DATE_FORMATS = [
     "%d-%m-%Y",
     "%b %d, %Y",
     "%d %b %Y",
+    "%d %B %Y",
     "%d-%b-%Y",
     "%m/%d/%y",
     "%d/%m/%y",
@@ -1156,13 +1157,16 @@ def _detect_import_columns(header: list[str]) -> dict:
 
 
 def _parse_import_amount(raw: str) -> Decimal | None:
-    """Strips common statement formatting ($, commas, parens-for-negative)
+    """Strips common statement formatting ($/£/€, commas, parens-for-negative)
     before parsing — a bank export rarely hands back a bare number."""
     raw = (raw or "").strip()
     if not raw:
         return None
     negative = raw.startswith("(") and raw.endswith(")")
-    cleaned = raw.strip("()").replace("$", "").replace(",", "").strip()
+    cleaned = raw.strip("()")
+    for symbol in ("$", "£", "€", ","):
+        cleaned = cleaned.replace(symbol, "")
+    cleaned = cleaned.strip()
     if not cleaned:
         return None
     try:
@@ -1250,11 +1254,15 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
     return rows, warnings
 
 
-_MONEY = r"-?\$?[\d,]+\.\d{2}"
+_MONEY = r"-?[$£€]?[\d,]+\.\d{2}"
 # "9/19" (US-style, resolved against the statement period in
-# _resolve_pdf_date) or "19-Sep-2024" (day-month-year, common outside the
-# US — BRAC Bank among others prints exactly this on every line).
-_PDF_DATE_PATTERN = r"(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}-[A-Za-z]{3}-\d{4})"
+# _resolve_pdf_date), "19-Sep-2024" (day-month-year with no separator space,
+# common outside the US — BRAC Bank among others prints exactly this), or
+# "19 Sep 2024" / "19 September 2024" (day-month-year with spaces, common on
+# UK statements).
+_PDF_DATE_PATTERN = (
+    r"(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}-[A-Za-z]{3}-\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})"
+)
 # Tried first: some banks (Chase among them) print a running balance right
 # after the amount on every line — "... -21.30 15,937.21" — so the
 # amount/balance pair has to be matched together, or a naive "last number
@@ -1421,8 +1429,8 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
                     if parsed_date is None:
                         continue
 
-                    withdraw = _parse_import_amount(withdraw_str.lstrip("$"))
-                    deposit = _parse_import_amount(deposit_str.lstrip("$"))
+                    withdraw = _parse_import_amount(withdraw_str.lstrip("$£€"))
+                    deposit = _parse_import_amount(deposit_str.lstrip("$£€"))
                     if withdraw is None or deposit is None:
                         continue
 
@@ -1464,11 +1472,11 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
                     if parsed_date is None:
                         continue
 
-                    amount = _parse_import_amount(amount_str.lstrip("$"))
+                    amount = _parse_import_amount(amount_str.lstrip("$£€"))
                     if amount is None:
                         continue
 
-                    t_type = "expense" if amount < 0 or amount_str.lstrip("$").startswith("-") else "income"
+                    t_type = "expense" if amount < 0 or amount_str.lstrip("$£€").startswith("-") else "income"
                     amount = abs(amount)
 
                     description = description.strip()

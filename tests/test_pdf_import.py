@@ -203,6 +203,54 @@ def test_preview_parses_encrypted_pdf_with_correct_password(auth_client):
     assert rows[0]["amount"] == 15.49
 
 
+def test_preview_parses_sterling_amounts(auth_client):
+    """UK statements print £ directly against the number with no space
+    ("£45.23", not "£ 45.23") — the money pattern has to accept that
+    exact shape or the whole line silently fails to match."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 TESCO STORES £45.23",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["amount"] == 45.23
+    assert "TESCO" in rows[0]["description"]
+
+
+def test_preview_parses_euro_amounts_with_balance_column(auth_client):
+    pdf = _make_statement_pdf([
+        "12/03/2026 CARREFOUR PARIS €67.10 €1,200.00",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["amount"] == 67.10  # not the 1,200.00 balance
+
+
+def test_preview_parses_space_separated_day_month_year_dates(auth_client):
+    """Common on UK statements: '19 Sep 2024' or the full month name
+    '19 September 2024', rather than BRAC's hyphenated '19-Sep-2024'."""
+    pdf = _make_statement_pdf([
+        "Deposits and other additions",
+        "19 Sep 2024 CARD PAYMENT SAINSBURYS -32.10",
+        "22 September 2024 SALARY PAYMENT 1500.00",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert len(rows) == 2
+
+    card = next(r for r in rows if "SAINSBURYS" in r["description"])
+    assert card["date"] == "2024-09-19"
+    assert card["type"] == "expense"
+
+    salary = next(r for r in rows if "SALARY" in r["description"])
+    assert salary["date"] == "2024-09-22"
+    assert salary["type"] == "income"
+
+
 def test_preview_parses_day_month_year_dates_with_separate_withdraw_deposit_columns(auth_client):
     """Matches BRAC Bank's format (common across Bangladeshi banks): dates
     as '19-Sep-2024' rather than MM/DD, and separate withdraw/deposit/
