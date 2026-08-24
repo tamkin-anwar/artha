@@ -47,6 +47,9 @@ function initSettingsMenu() {
     const btn = document.getElementById("settings-btn");
     const menu = document.getElementById("settings-dropdown");
 
+    const accountBtn = document.getElementById("account-btn");
+    const accountMenu = document.getElementById("account-dropdown");
+
     const mobileMenuBtn = document.getElementById("menu-btn");
     const mobileMenu = document.getElementById("mobile-menu");
 
@@ -75,6 +78,35 @@ function initSettingsMenu() {
 
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape") closeMenu();
+        });
+    }
+
+    // Same open/close/outside-click/Escape pattern as the settings menu
+    // above — the user's own name+avatar in the sidebar is the
+    // conventional home for identity actions (change password, sign out),
+    // same as it would be in Slack, Notion, Linear, etc.
+    if (accountBtn && accountMenu) {
+        const closeAccountMenu = () => {
+            accountMenu.classList.add("hidden");
+            accountBtn.setAttribute("aria-expanded", "false");
+        };
+
+        accountBtn.addEventListener("click", () => {
+            const isHidden = accountMenu.classList.contains("hidden");
+            if (isHidden) {
+                accountMenu.classList.remove("hidden");
+                accountBtn.setAttribute("aria-expanded", "true");
+            } else {
+                closeAccountMenu();
+            }
+        });
+
+        document.addEventListener("click", (e) => {
+            if (!accountMenu.contains(e.target) && !accountBtn.contains(e.target)) closeAccountMenu();
+        });
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") closeAccountMenu();
         });
     }
 

@@ -133,14 +133,43 @@
                     {% endif %}
                 </nav>
 
-                <!-- User chip -->
-                <div style="padding:20px 16px 24px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:10px;">
-                    <div style="width:32px; height:32px; border-radius:50%; background:var(--gold-dim); border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--gold); font-family:'Fraunces',serif; flex-shrink:0;">
-                        {{ current_user.first_name[0] if current_user.is_authenticated and current_user.first_name else '?' }}
-                    </div>
-                    <div style="min-width:0; overflow:hidden;">
-                        <div style="font-size:13px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
-                        <div style="font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Personal OS</div>
+                <!-- User chip / account menu. The user's own name+avatar is
+                     the conventional home for identity-scoped actions
+                     (change password, sign out) in virtually every modern
+                     app — it used to be a static, unclickable label with
+                     those two actions buried in the unrelated top-right
+                     "Preferences" gear instead. -->
+                <div style="padding:20px 16px 24px; border-top:1px solid var(--border-subtle); position:relative;">
+                    <button
+                        id="account-btn"
+                        type="button"
+                        style="width:100%; display:flex; align-items:center; gap:10px; background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:inherit;"
+                        aria-haspopup="menu"
+                        aria-expanded="false"
+                    >
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--gold-dim); border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--gold); font-family:'Fraunces',serif; flex-shrink:0;">
+                            {{ current_user.first_name[0] if current_user.is_authenticated and current_user.first_name else '?' }}
+                        </div>
+                        <div style="min-width:0; overflow:hidden; flex:1;">
+                            <div style="font-size:13px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
+                            <div style="font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.email if current_user.is_authenticated and current_user.email else 'Personal OS' }}</div>
+                        </div>
+                        <i data-lucide="chevron-up" aria-hidden="true" style="width:14px; height:14px; stroke-width:1.5; color:var(--text-muted); flex-shrink:0;"></i>
+                    </button>
+
+                    <div
+                        id="account-dropdown"
+                        class="hidden glass-card"
+                        style="position:absolute; left:16px; right:16px; bottom:100%; margin-bottom:8px; padding:8px; z-index:50;"
+                        role="menu"
+                        aria-label="Account menu"
+                    >
+                        <a href="{{ url_for('auth.change_password') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
+                            Change password
+                        </a>
+                        <a href="{{ url_for('auth.logout') }}" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none; color:var(--red);" role="menuitem">
+                            Logout
+                        </a>
                     </div>
                 </div>
 
@@ -239,16 +268,6 @@
                                     <option value="CAD">$ CAD</option>
                                     <option value="AUD">$ AUD</option>
                                 </select>
-
-                                <div style="margin:10px 0; height:1px; background:var(--border-subtle);"></div>
-
-                                <a href="{{ url_for('auth.change_password') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
-                                    Change password
-                                </a>
-
-                                <a href="{{ url_for('auth.logout') }}" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none; color:var(--red);" role="menuitem">
-                                    Logout
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -302,6 +321,9 @@
                             <option value="CAD">$ CAD</option>
                             <option value="AUD">$ AUD</option>
                         </select>
+
+                        <div style="margin:2px 0; height:1px; background:var(--border-subtle);"></div>
+                        <div class="eyebrow" style="padding:0 12px;">Account</div>
 
                         <a href="{{ url_for('auth.change_password') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
                             Change password
