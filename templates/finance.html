@@ -502,7 +502,29 @@
 
     .csv-import-summary { font-size:13px; color:var(--text-secondary); margin:0 0 12px; flex-shrink:0; }
     .csv-import-summary strong { color:var(--text-primary); }
+    .csv-import-table-wrap { position:relative; flex:1; min-height:0; display:flex; }
     .csv-import-table-scroll { overflow-y:auto; overflow-x:auto; border:1px solid var(--border-subtle); border-radius:10px; flex:1; min-height:0; }
+    /* Date/Description/Amount/Type/Category plus a checkbox column is
+       more than a phone screen can show at once — the table scrolls
+       horizontally there, same as it would in a native app, but without
+       this it read as *broken* rather than *scrollable*: text got sliced
+       mid-character flush against the modal's edge with no visual cue
+       anything continued past it. A persistent fade into the modal's own
+       background at the scroll container's trailing edge reads as an
+       intentional "more this way," not a cropping bug — pointer-events:
+       none so it never blocks tapping the row content underneath it. */
+    .csv-import-table-wrap::after {
+        content: ""; position:absolute; top:1px; right:1px; bottom:1px; width:28px;
+        background:linear-gradient(to right, transparent, var(--bg-surface));
+        border-radius:0 10px 10px 0; pointer-events:none; display:none;
+    }
+    @media (max-width:700px) {
+        .csv-import-table-wrap::after { display:block; }
+    }
+    @media (max-width:480px) {
+        .csv-import-backdrop { padding:10px; }
+        .csv-import-modal { padding:16px 14px; border-radius:16px; }
+    }
     .csv-import-table { width:100%; border-collapse:collapse; font-size:12.5px; }
     .csv-import-table th {
         position:sticky; top:0; background:var(--bg-surface); text-align:left;
@@ -515,6 +537,13 @@
     .csv-import-table select { font-size:12px; background:var(--bg-page); border:1px solid var(--border-subtle); border-radius:6px; padding:3px 6px; color:var(--text-primary); }
     .csv-import-table td.csv-import-desc { white-space:normal; max-width:220px; color:var(--text-primary); }
     .csv-import-badge { font-size:10px; text-transform:uppercase; letter-spacing:0.03em; padding:1px 6px; border-radius:999px; background:var(--amber-dim); color:var(--amber); }
+    @media (max-width:480px) {
+        /* Every px of cell padding here is multiplied by 6 columns, so
+           trimming it back gives noticeably more of the description
+           column a chance to show before the scroll-fade kicks in. */
+        .csv-import-table th, .csv-import-table td { padding:6px 6px; }
+        .csv-import-table td.csv-import-desc { max-width:150px; }
+    }
 
     .csv-import-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-shrink:0; }
 
@@ -549,6 +578,28 @@
         background:var(--bg-page); color:var(--text-secondary);
     }
     .recurring-due-badge.recurring-due-soon { background:var(--gold-dim); color:var(--gold); }
+    /* display:contents on wider screens: the wrapper exists so the mobile
+       layout below can move category/amount/due together onto their own
+       line, but at desktop widths it should behave as if it isn't there
+       at all — its three children stay direct flex items of
+       .recurring-row, same as before this wrapper existed. */
+    .recurring-row-meta { display:contents; }
+
+    /* A real recurring description ("Zelle payment from MOHIUDDIN ANWAR
+       Conf# 99crgnghv", "Disney+, Hulu, HBO Max Bundle") plus a category,
+       a signed amount, and a due-date badge is too much to fit on one
+       line once the row narrows much past a phone's width — the
+       description was getting clipped to 5-6 characters. Below 640px the
+       row wraps onto two lines instead: the description gets the full
+       width on its own line, and category/amount/due share a second line
+       (via .recurring-row-meta), matching the same flex-col-then-flex-row
+       responsive pattern the regular transaction rows already use. */
+    @media (max-width: 640px) {
+        .recurring-row { flex-wrap:wrap; row-gap:4px; }
+        .recurring-row-desc { flex:1 1 100%; white-space:normal; overflow-wrap:break-word; }
+        .recurring-row-meta { display:flex; align-items:center; gap:8px; width:100%; }
+        .recurring-row-amount { margin-left:auto; }
+    }
 
     /* Top-level Finance tabs (Transactions / Spending / Income / Cash Flow).
        No unconditional display rule on .fp-tabpane — same [hidden]-vs-author-
@@ -625,20 +676,22 @@
 
         <div id="csv-import-step-preview" class="csv-import-step-preview" hidden>
             <p id="csv-import-summary" class="csv-import-summary"></p>
-            <div class="csv-import-table-scroll">
-                <table class="csv-import-table">
-                    <thead>
-                        <tr>
-                            <th style="width:24px;"></th>
-                            <th>Date</th>
-                            <th>Description</th>
-                            <th style="text-align:right;">Amount</th>
-                            <th>Type</th>
-                            <th>Category</th>
-                        </tr>
-                    </thead>
-                    <tbody id="csv-import-tbody"></tbody>
-                </table>
+            <div class="csv-import-table-wrap">
+                <div class="csv-import-table-scroll">
+                    <table class="csv-import-table">
+                        <thead>
+                            <tr>
+                                <th style="width:24px;"></th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th style="text-align:right;">Amount</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                            </tr>
+                        </thead>
+                        <tbody id="csv-import-tbody"></tbody>
+                    </table>
+                </div>
             </div>
             <div class="csv-import-actions">
                 <button type="button" id="csv-import-back-btn" class="btn-secondary" style="padding:8px 16px; font-size:13px;">Back</button>
@@ -667,6 +720,18 @@ function hexToRgbTriplet(hex) {
 
 function signedMoney(value) {
     return (value >= 0 ? "+" : "-") + formatMoney(Math.abs(value));
+}
+
+// fpRenderRecurring() below builds its item list via innerHTML, and the
+// description in there is a raw user-typed transaction description (not
+// a fixed, developer-controlled label like a category name) — inserting
+// it unescaped would let something like "<img src=x onerror=...>" saved
+// as a transaction description execute as real HTML the next time this
+// tab renders. Same pattern already used in csv_import.js/scenarios.js.
+function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
 }
 
 // The stat cards, their "more/less than last month" deltas, and each
@@ -1208,18 +1273,23 @@ function fpRenderRecurring(pane, data) {
 
     listEl.innerHTML = data.items.map(function (b) {
         var catMeta = b.category ? fpCategories[b.category] : null;
-        var catHtml = catMeta ? '<span class="recurring-row-category">' + catMeta.label + '</span>' : "";
+        var catHtml = catMeta ? '<span class="recurring-row-category">' + escapeHtml(catMeta.label) + '</span>' : "";
         var dueHtml = b.due_label
-            ? '<span class="recurring-due-badge' + (b.due_soon ? ' recurring-due-soon' : '') + '">' + b.due_label + '</span>'
+            ? '<span class="recurring-due-badge' + (b.due_soon ? ' recurring-due-soon' : '') + '">' + escapeHtml(b.due_label) + '</span>'
             : "";
         var amountColor = b.type === "income" ? "var(--emerald)" : "var(--red)";
         var sign = b.type === "income" ? "+" : "-";
         return (
             '<div class="recurring-row">' +
-                '<span class="recurring-row-desc">' + b.description + '</span>' +
-                catHtml +
-                '<span class="recurring-row-amount fp-money" data-money-signed="1" data-money-value="' + (b.type === "income" ? b.amount : -b.amount) + '" style="color:' + amountColor + ';">' + sign + formatMoney(b.amount) + '</span>' +
-                dueHtml +
+                '<span class="recurring-row-desc">' + escapeHtml(b.description) + '</span>' +
+                // Grouped so the mobile layout can drop this trio onto its
+                // own line under the description (see .recurring-row-meta
+                // in the <style> block) without a 4-line-per-item stack.
+                '<div class="recurring-row-meta">' +
+                    catHtml +
+                    '<span class="recurring-row-amount fp-money" data-money-signed="1" data-money-value="' + (b.type === "income" ? b.amount : -b.amount) + '" style="color:' + amountColor + ';">' + sign + formatMoney(b.amount) + '</span>' +
+                    dueHtml +
+                '</div>' +
             '</div>'
         );
     }).join("");
@@ -1357,6 +1427,13 @@ function fpActivateTab(btn, focus) {
         if (fpTabPanes[key]) fpTabPanes[key].hidden = key !== target;
     });
     if (focus) btn.focus();
+    // The tab strip scrolls horizontally on narrow screens (5 tabs don't
+    // fit a phone width) — without this, tapping a tab near the scrolled-
+    // off edge (Cash Flow, Recurring) activates it correctly but leaves
+    // the visible portion of the strip showing no gold-highlighted tab at
+    // all, since the newly-active one is still off-screen. Only scrolls
+    // the strip itself (inline/nearest), never the page.
+    btn.scrollIntoView({ inline: "nearest", block: "nearest" });
     if (target !== "transactions" && !fpLoadedViews[target]) {
         fpLoadedViews[target] = true;
         fpLoadBreakdown(target);
