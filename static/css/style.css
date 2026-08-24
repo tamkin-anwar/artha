@@ -211,6 +211,19 @@ h1, h2, h3, .stat-number {
   outline-offset: 1px;
 }
 
+/* iOS Safari paints its own solid-black chrome behind a date input's
+   value text regardless of the background we set on the element, which
+   reads as a mismatched black pill next to the other form fields.
+   -webkit-appearance:none stops it from doing that; left-aligning the
+   value keeps it consistent with the text inputs beside it. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Scenario list cards (sidebar) */
 .scenario-list-card:hover {
   border-color: rgba(212,168,67,0.4) !important;
