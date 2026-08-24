@@ -894,10 +894,19 @@ def _period_bounds(period: str, year: int, today: date) -> tuple[date, date, str
         start = _month_start(cursor_year, cursor_month)
         return start, end, f"Last {n} Months"
 
-    # "year" (and any unrecognized value, so the route never 500s on a bad param)
+    # "year" (and any unrecognized value, so the route never 500s on a bad param).
+    # A past year runs Jan-Dec in full; the current year stops at the end of
+    # *this* month rather than running out to December, so "2026" doesn't
+    # render 4 empty trailing months — it's year-to-date, same as every
+    # other period here being "as of today" rather than a fixed future window.
     start = date(year, 1, 1)
-    end = date(year + 1, 1, 1)
-    return start, end, str(year)
+    if year == today.year:
+        end = _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
+        label = f"{year} (Year to Date)"
+    else:
+        end = date(year + 1, 1, 1)
+        label = str(year)
+    return start, end, label
 
 
 @finance_bp.route("/finance/breakdown")

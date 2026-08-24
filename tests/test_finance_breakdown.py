@@ -85,6 +85,16 @@ def test_cashflow_breakdown_year_period_uses_year_param_not_today(auth_client, u
     assert len(data["buckets"]) == 12
 
 
+def test_cashflow_breakdown_current_year_stops_at_this_month_not_december(auth_client, user):
+    today = date.today()
+    _add_tx(user, "Paycheck", "1000.00", "income", when=_this_month())
+
+    resp = auth_client.get(f"/finance/breakdown?view=cashflow&period=year&year={today.year}")
+    data = resp.get_json()
+    assert len(data["buckets"]) == today.month
+    assert data["period_label"] == f"{today.year} (Year to Date)"
+
+
 def test_breakdown_defaults_to_spending_month_on_bad_params(auth_client, user):
     _add_tx(user, "Rent", "300.00", "expense", category="housing", when=_this_month())
     resp = auth_client.get("/finance/breakdown?view=nonsense&period=nonsense")
