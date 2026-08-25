@@ -228,6 +228,25 @@ input[type="time"]::-webkit-date-and-time-value {
   text-align: inherit;
 }
 
+/* Same native-chrome mismatch as date/time inputs above, but for <select>:
+   iOS Safari's default select chrome doesn't fully honor the custom
+   background/color .field-input sets. -webkit-appearance:none removes it,
+   which also removes the native dropdown arrow, so a CSS-drawn chevron
+   replaces it — themed separately for light/dark since it's a background
+   image, not a color a CSS variable can reach. */
+select.field-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6478' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 11px;
+  padding-right: 22px;
+}
+.dark select.field-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
 /* Scenario list cards (sidebar) */
 .scenario-list-card:hover {
   border-color: rgba(212,168,67,0.4) !important;
