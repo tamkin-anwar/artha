@@ -104,17 +104,17 @@
             <div id="admin-feedback-list" data-status-filter="{{ status_filter }}">
                 {% for item in feedback_items %}
                     <div class="admin-feedback-card" data-feedback-id="{{ item.id }}">
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
-                            <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                                 <span class="admin-category-pill admin-category-{{ item.category }}">{{ item.category }}</span>
                                 <span class="admin-status-pill admin-status-{{ item.status }}" data-status-pill>{{ item.status }}</span>
                             </div>
-                            <span style="font-size:11px; color:var(--text-muted);">{{ item.author_name }} &middot; {{ item.created_label }}</span>
+                            <span style="font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{{ item.author_name }} &middot; {{ item.created_label }}</span>
                         </div>
-                        <p style="font-size:14px; color:var(--text-primary); margin:0 0 10px; white-space:pre-wrap;">{{ item.message }}</p>
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                            <span style="font-size:11px; color:var(--text-muted);">{{ item.page_url or '' }}</span>
-                            <div style="display:flex; gap:6px;" data-feedback-actions>
+                        <p style="font-size:14px; color:var(--text-primary); margin:0 0 10px; white-space:pre-wrap; overflow-wrap:break-word;">{{ item.message }}</p>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; color:var(--text-muted); overflow-wrap:break-word; min-width:0; flex:1;">{{ item.page_url or '' }}</span>
+                            <div style="display:flex; gap:6px; flex-shrink:0;" data-feedback-actions>
                                 {% if item.status != 'seen' %}
                                     <button type="button" class="admin-feedback-action" data-set-status="seen">Mark seen</button>
                                 {% endif %}
