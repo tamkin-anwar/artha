@@ -25,7 +25,7 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 - Web Push notifications for bills and notes due today, with independent opt-in per reminder type
 - A Numi-style smart calculator with variables, a running total, unit and currency conversion via live exchange rates, loan payment and compound interest math, and flexible natural-language input ("10k x 9%," "$300k loan at 4.5% for 30 years"); state persists across navigation
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
-- An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, or scheduling an event, always behind an explicit confirm step before anything is saved
+- An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, scheduling an event, or setting a budget, always behind an explicit confirm step before anything is saved
 - A global search palette (⌘K) across transactions, notes, scenarios, and events
 - Self-serve, email-based password reset, no admin needed
 - In-app feedback (floating button, any page) and an admin panel to triage it and see who's actually using the app
