@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from ...extensions import db
 from ...models import Transaction
 from ...models.budget import Budget
+from ...models.category_budget import CategoryBudget
 from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date
 from . import finance_bp
 
@@ -827,8 +828,32 @@ def finance_page():
     # is being browsed above — "my budget" means this calendar month, not
     # whichever one the filter tabs happen to be showing.
     budget_row = Budget.query.filter_by(user_id=uid).first()
+    current_month_txs = bucket_for(_month_start(today.year, today.month))["txs"]
     current_month_expense = bucket_for(_month_start(today.year, today.month))["expense"]
     budget = budget_status(budget_row.monthly_cap if budget_row else None, current_month_expense)
+
+    # Per-category budgets: same current-month scope as the overall budget
+    # above, just grouped by the raw category slug instead of summed.
+    category_expense_totals: dict[str, Decimal] = defaultdict(Decimal)
+    for t in current_month_txs:
+        if t.type == "expense" and t.category:
+            category_expense_totals[t.category] += t.amount
+
+    category_budget_rows = CategoryBudget.query.filter_by(user_id=uid).all()
+    category_budgets = [
+        {
+            "category": row.category,
+            "label": TRANSACTION_CATEGORIES.get(row.category, {}).get("label", row.category),
+            "icon": TRANSACTION_CATEGORIES.get(row.category, {}).get("icon"),
+            "status": budget_status(row.monthly_cap, category_expense_totals.get(row.category, Decimal("0"))),
+        }
+        for row in category_budget_rows
+    ]
+    budgeted_categories = {row.category for row in category_budget_rows}
+    budgetable_categories = {
+        key: val for key, val in TRANSACTION_CATEGORIES.items()
+        if key != "income" and key not in budgeted_categories
+    }
 
     # Every calendar year that has at least one transaction, newest first —
     # populates the year picker on the Cash Flow/Spending/Income tabs so
@@ -872,6 +897,8 @@ def finance_page():
         recurring_bills=recurring_bills,
         budget=budget,
         budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
+        category_budgets=category_budgets,
+        budgetable_categories=budgetable_categories,
         today_date=today.strftime("%Y-%m-%d"),
         categories=TRANSACTION_CATEGORIES,
         available_years=available_years,
@@ -1791,5 +1818,62 @@ def set_budget():
         db.session.rollback()
         log.error("Error saving budget: %s", e, exc_info=True)
         flash("Error saving budget.", "error")
+
+    return redirect(url_for("finance.finance_page"))
+
+
+@finance_bp.route("/finance/category-budget", methods=["POST"])
+@login_required
+def set_category_budget():
+    """Upsert one category's monthly spending cap. Separate rows per
+    category (CategoryBudget), alongside the single overall Budget above,
+    not replacing it."""
+    category = (request.form.get("category") or "").strip()
+    if category not in TRANSACTION_CATEGORIES or category == "income":
+        flash("Choose a valid category to budget.", "error")
+        return redirect(url_for("finance.finance_page"))
+
+    raw = (request.form.get("monthly_cap") or "").strip()
+    try:
+        cap = _validate_amount(raw) if raw else Decimal("0")
+    except ValidationError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("finance.finance_page"))
+
+    if cap <= 0:
+        flash("Enter an amount greater than zero.", "error")
+        return redirect(url_for("finance.finance_page"))
+
+    row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
+    if row is None:
+        row = CategoryBudget(user_id=current_user.id, category=category, monthly_cap=cap)
+        db.session.add(row)
+    else:
+        row.monthly_cap = cap
+
+    try:
+        db.session.commit()
+        flash(f"{TRANSACTION_CATEGORIES[category]['label']} budget saved.", "success")
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error saving category budget: %s", e, exc_info=True)
+        flash("Error saving budget.", "error")
+
+    return redirect(url_for("finance.finance_page"))
+
+
+@finance_bp.route("/finance/category-budget/<category>/delete", methods=["POST"])
+@login_required
+def delete_category_budget(category):
+    row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
+    if row is not None:
+        try:
+            db.session.delete(row)
+            db.session.commit()
+            flash("Category budget removed.", "success")
+        except Exception as e:
+            db.session.rollback()
+            log.error("Error deleting category budget: %s", e, exc_info=True)
+            flash("Error removing budget.", "error")
 
     return redirect(url_for("finance.finance_page"))

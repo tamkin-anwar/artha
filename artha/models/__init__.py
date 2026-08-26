@@ -8,8 +8,9 @@ from .event import Event
 from .event_exception import EventException
 from .feedback import Feedback
 from .budget import Budget
+from .category_budget import CategoryBudget
 from .push_subscription import PushSubscription
 
 __all__ = [
-    "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "PushSubscription",
+    "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
 ]
