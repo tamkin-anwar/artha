@@ -55,6 +55,20 @@ def test_search_finds_transaction_by_description(auth_client, user):
     assert "4.50" in data["transactions"][0]["snippet"]
 
 
+def test_search_finds_transaction_by_category(auth_client, user):
+    # "Trader Joe's" never contains the word "groceries" — only the
+    # category field does, so this only passes once category is searched.
+    db.session.add(Transaction(
+        description="Trader Joe's", amount=Decimal("62.10"), type="expense",
+        category="groceries", user_id=user.id, timestamp=datetime.now(timezone.utc),
+    ))
+    db.session.commit()
+
+    data = auth_client.get("/search?q=groceries").get_json()
+    assert len(data["transactions"]) == 1
+    assert data["transactions"][0]["title"] == "Trader Joe's"
+
+
 def test_search_finds_scenario_by_title_excludes_archived(auth_client, user):
     db.session.add(Scenario(title="Move to Boston", user_id=user.id, status="active"))
     db.session.add(Scenario(title="Move to Seattle", user_id=user.id, status="archived"))
@@ -63,6 +77,18 @@ def test_search_finds_scenario_by_title_excludes_archived(auth_client, user):
     data = auth_client.get("/search?q=move").get_json()
     titles = [s["title"] for s in data["scenarios"]]
     assert titles == ["Move to Boston"]
+
+
+def test_search_finds_scenario_by_description_and_notes(auth_client, user):
+    db.session.add(Scenario(title="Untitled plan", description="A 4-day work week", user_id=user.id, status="active"))
+    db.session.add(Scenario(title="Another plan", notes="thinking about a sabbatical", user_id=user.id, status="active"))
+    db.session.commit()
+
+    by_desc = auth_client.get("/search?q=work+week").get_json()
+    assert [s["title"] for s in by_desc["scenarios"]] == ["Untitled plan"]
+
+    by_notes = auth_client.get("/search?q=sabbatical").get_json()
+    assert [s["title"] for s in by_notes["scenarios"]] == ["Another plan"]
 
 
 def test_search_finds_event_by_title(auth_client, user):
@@ -87,9 +113,9 @@ def test_search_scoped_to_current_user_only(auth_client, user):
 
 
 def test_search_results_capped_per_category(auth_client, user):
-    for i in range(8):
+    for i in range(11):
         db.session.add(Note(title=f"Capped note {i}", content="x", user_id=user.id))
     db.session.commit()
 
     data = auth_client.get("/search?q=capped").get_json()
-    assert len(data["notes"]) == 5
+    assert len(data["notes"]) == 8

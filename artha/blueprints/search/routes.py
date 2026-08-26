@@ -20,10 +20,12 @@ def _fmt_datetime(dt) -> str:
     hour12 = dt.hour % 12 or 12
     return f"{dt.strftime('%b %d, %Y')} · {hour12}:{dt.minute:02d} {'AM' if dt.hour < 12 else 'PM'}"
 
-# Small, fixed cap per category — this powers a quick-jump ⌘K palette, not
-# a full search-results page, so a handful of the most relevant hits per
-# type is more useful than an exhaustive list to scroll through.
-MAX_RESULTS_PER_CATEGORY = 5
+# Fixed cap per category — this powers a quick-jump ⌘K palette, not a
+# full search-results page, so a bounded list of the most relevant hits
+# per type is more useful than an exhaustive one to scroll through. Was
+# 5; raised to 8 since 5 was clipping common searches before the user
+# could find what they were looking for.
+MAX_RESULTS_PER_CATEGORY = 8
 MIN_QUERY_LENGTH = 2
 
 
@@ -52,7 +54,10 @@ def search():
     transactions = (
         Transaction.query.filter(
             Transaction.user_id == uid,
-            Transaction.description.ilike(like),
+            # Category included alongside description — searching "groceries"
+            # should surface transactions filed under that category even
+            # when the word never appears in the description itself.
+            or_(Transaction.description.ilike(like), Transaction.category.ilike(like)),
         )
         .order_by(Transaction.timestamp.desc())
         .limit(MAX_RESULTS_PER_CATEGORY)
@@ -63,7 +68,7 @@ def search():
         Scenario.query.filter(
             Scenario.user_id == uid,
             Scenario.status != "archived",
-            Scenario.title.ilike(like),
+            or_(Scenario.title.ilike(like), Scenario.description.ilike(like), Scenario.notes.ilike(like)),
         )
         .order_by(Scenario.created_at.desc())
         .limit(MAX_RESULTS_PER_CATEGORY)
