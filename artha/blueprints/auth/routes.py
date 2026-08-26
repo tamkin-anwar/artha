@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-from flask import current_app, render_template, redirect, url_for, request, flash
+from flask import current_app, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -270,3 +270,25 @@ def change_password():
             return redirect(url_for("auth.change_password"))
 
     return render_template("change_password.html")
+
+
+# Matches CURRENCY_PRESETS in static/js/currency.js — the closed set of
+# codes the currency selector actually offers.
+CURRENCY_CODES = {"USD", "GBP", "EUR", "BDT", "CAD", "AUD"}
+
+
+@auth_bp.route("/set_currency", methods=["POST"])
+@login_required
+def set_currency():
+    """Persists the account-wide currency preference (static/js/settings.js
+    calls this on every change, best-effort). A brand-new device with no
+    localStorage entry of its own yet reads this back to inherit the
+    account's choice instead of defaulting to USD."""
+    data = request.get_json(silent=True) or {}
+    code = (data.get("code") or "").strip().upper()
+    if code not in CURRENCY_CODES:
+        return jsonify({"message": "Invalid currency"}), 400
+
+    current_user.preferred_currency = code
+    db.session.commit()
+    return jsonify({"message": "Currency updated"}), 200

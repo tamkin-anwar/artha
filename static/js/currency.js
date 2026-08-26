@@ -30,6 +30,13 @@ export function getCurrencyCode() {
     return safeGetPreset(stored).code;
 }
 
+// Whether *this* browser has ever explicitly saved a currency — settings.js
+// uses this to decide whether to seed a brand-new device from the account's
+// saved preference, versus leaving an already-configured device alone.
+export function hasStoredPreference() {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+}
+
 export function getCurrencyPreset() {
     return safeGetPreset(getCurrencyCode());
 }

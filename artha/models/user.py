@@ -27,6 +27,11 @@ class User(UserMixin, db.Model):
     notify_bills_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     notify_notes_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
+    # One of currency.js's CURRENCY_PRESETS ("USD", "GBP", ...), or None
+    # if this account has never explicitly saved one — a brand-new device
+    # then has nothing to inherit and falls back to USD, same as today.
+    preferred_currency = db.Column(db.String(3), nullable=True)
+
     notes = db.relationship(
         "Note", backref="author", lazy="dynamic", cascade="all, delete-orphan"
     )

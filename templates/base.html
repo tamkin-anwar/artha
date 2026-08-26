@@ -276,6 +276,7 @@
                                     style="width:100%; font-size:13px;"
                                     role="menuitem"
                                     aria-label="Currency"
+                                    data-user-currency="{{ current_user.preferred_currency or '' }}"
                                 >
                                     <option value="USD">$ USD</option>
                                     <option value="GBP">£ GBP</option>
@@ -342,6 +343,7 @@
                             class="field-input"
                             style="width:100%;"
                             aria-label="Currency"
+                            data-user-currency="{{ current_user.preferred_currency or '' }}"
                         >
                             <option value="USD">$ USD</option>
                             <option value="GBP">£ GBP</option>
