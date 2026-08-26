@@ -1488,6 +1488,27 @@ onThemeChange(function () {
     });
 });
 
+// Same staleness problem as the theme-change handler above, different
+// trigger: currency-refresh-ui fires after any transaction add/edit/
+// delete (transactions.js), and an inline category/amount/type change
+// made from the Transactions tab was otherwise invisible on Spending/
+// Income/Cash Flow/Recurring until a full page reload, since each of
+// those panes only fetches once per page load and then trusts its cache
+// (fpLoadedViews) forever. Mirrors the exact same "re-fetch if it's the
+// one on screen, otherwise just mark it stale" approach.
+document.addEventListener("currency-refresh-ui", function () {
+    var activeTab = document.querySelector(".fp-toptab.fp-toptab-active");
+    var activeView = activeTab ? activeTab.dataset.fpTab : "transactions";
+    Object.keys(fpTabPanes).forEach(function (key) {
+        if (key === "transactions") return;
+        if (key === activeView) {
+            fpLoadBreakdown(key);
+        } else if (fpLoadedViews[key]) {
+            fpLoadedViews[key] = false;
+        }
+    });
+});
+
 // Top-level tab switching (Transactions / Spending / Income / Cash Flow).
 // Standard ARIA tabs pattern: clicking or arrowing to a tab moves both
 // selection and keyboard focus together (roving tabindex — only the
