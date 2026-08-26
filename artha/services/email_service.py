@@ -52,7 +52,7 @@ def send_password_reset_email(user, reset_url: str) -> bool:
         "Someone requested a password reset for your Artha account. "
         f"Click the link below to set a new password:\n\n{reset_url}\n\n"
         "This link expires in 1 hour. If you didn't request this, you can "
-        "safely ignore this email — your password won't change."
+        "safely ignore this email. Your password won't change."
     )
     html_body = f"""
         <p>Hi {first_name},</p>
@@ -64,8 +64,8 @@ def send_password_reset_email(user, reset_url: str) -> bool:
             Reset Password
         </a></p>
         <p style="color:#666; font-size:13px;">This link expires in 1 hour.
-        If you didn't request this, you can safely ignore this email —
-        your password won't change.</p>
+        If you didn't request this, you can safely ignore this email.
+        Your password won't change.</p>
     """
 
     try:
