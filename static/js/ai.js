@@ -93,7 +93,7 @@ function initAI() {
         Array.from(root.childNodes).forEach(walk);
     }
 
-    function appendMessage(role, text) {
+    function appendMessage(role, text, onRendered) {
         if (role === "user") {
             hideEmpty();
             showClearBtn();
@@ -118,22 +118,28 @@ function initAI() {
         const renderNow = () => {
             removeLoading();
 
-            const row = document.createElement("div");
-            row.className = "ai-row assistant";
+            // A reply can be empty when the model only proposed a tool
+            // action with no accompanying text — skip the bubble so the
+            // action card isn't preceded by a blank one.
+            if (text && text.trim()) {
+                const row = document.createElement("div");
+                row.className = "ai-row assistant";
 
-            const avatar = document.createElement("div");
-            avatar.className = "ai-avatar-dot";
-            avatar.setAttribute("aria-hidden", "true");
+                const avatar = document.createElement("div");
+                avatar.className = "ai-avatar-dot";
+                avatar.setAttribute("aria-hidden", "true");
 
-            const bubble = document.createElement("div");
-            bubble.className = "ai-bubble-assistant";
-            bubble.innerHTML = formatText(text);
-            wrapWordsForAnimation(bubble);
+                const bubble = document.createElement("div");
+                bubble.className = "ai-bubble-assistant";
+                bubble.innerHTML = formatText(text);
+                wrapWordsForAnimation(bubble);
 
-            row.appendChild(avatar);
-            row.appendChild(bubble);
-            messagesEl.appendChild(row);
+                row.appendChild(avatar);
+                row.appendChild(bubble);
+                messagesEl.appendChild(row);
+            }
             scrollToBottom();
+            if (typeof onRendered === "function") onRendered();
         };
 
         if (loadingOrb) {
@@ -162,6 +168,136 @@ function initAI() {
 
     function removeLoading() {
         document.getElementById("ai-loading-row")?.remove();
+    }
+
+    // Renders an "add_transaction" proposal as a confirmation card the user
+    // must explicitly approve. Confirm submits straight to the existing
+    // /add_transaction route (same CSRF, same server-side validation as
+    // the manual form) — the AI never has a path to the database itself.
+    function renderActionCard(action) {
+        if (!action || action.type !== "add_transaction") return;
+        const p = action.params || {};
+
+        const description = String(p.description || "Transaction");
+        const amountNum    = Number.parseFloat(p.amount);
+        const type          = p.type === "income" ? "income" : "expense";
+        const category      = typeof p.category === "string" ? p.category : "";
+        const date          = typeof p.date === "string" && p.date ? p.date : null;
+
+        const row = document.createElement("div");
+        row.className = "ai-row assistant";
+
+        const avatar = document.createElement("div");
+        avatar.className = "ai-avatar-dot";
+        avatar.setAttribute("aria-hidden", "true");
+
+        const card = document.createElement("div");
+        card.style.cssText =
+            "background:var(--bg-card); border:1px solid var(--border-subtle); " +
+            "border-radius:12px; padding:14px 16px; max-width:360px; display:flex; " +
+            "flex-direction:column; gap:10px;";
+
+        const topRow = document.createElement("div");
+        topRow.style.cssText = "display:flex; justify-content:space-between; align-items:baseline; gap:12px;";
+
+        const label = document.createElement("span");
+        label.textContent = description;
+        label.style.cssText = "color:var(--text-primary); font-weight:600;";
+
+        const amount = document.createElement("span");
+        amount.style.cssText =
+            "font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; " +
+            "color:" + (type === "income" ? "var(--emerald)" : "var(--red)") + ";";
+        amount.textContent =
+            (type === "income" ? "+" : "−") +
+            "$" + (Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00");
+
+        topRow.appendChild(label);
+        topRow.appendChild(amount);
+
+        const meta = document.createElement("div");
+        meta.style.cssText = "color:var(--text-secondary); font-size:13px;";
+        const metaParts = [type === "income" ? "Income" : "Expense"];
+        if (category) metaParts.push(category.charAt(0).toUpperCase() + category.slice(1));
+        metaParts.push(date || "Today");
+        meta.textContent = metaParts.join(" · ");
+
+        const buttons = document.createElement("div");
+        buttons.style.cssText = "display:flex; gap:8px;";
+
+        const confirmBtn = document.createElement("button");
+        confirmBtn.type = "button";
+        confirmBtn.className = "btn-primary";
+        confirmBtn.textContent = "Confirm";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "btn-secondary";
+        cancelBtn.textContent = "Cancel";
+
+        buttons.appendChild(confirmBtn);
+        buttons.appendChild(cancelBtn);
+
+        card.appendChild(topRow);
+        card.appendChild(meta);
+        card.appendChild(buttons);
+
+        cancelBtn.addEventListener("click", () => {
+            card.style.opacity = "0.5";
+            buttons.remove();
+        });
+
+        confirmBtn.addEventListener("click", async () => {
+            confirmBtn.disabled = true;
+            cancelBtn.disabled  = true;
+
+            const formData = new FormData();
+            formData.append("description", description);
+            formData.append("amount", Number.isFinite(amountNum) ? String(amountNum) : "0");
+            formData.append("type", type);
+            if (category) formData.append("category", category);
+            if (date) formData.append("date", date);
+            formData.append("csrf_token", CSRF);
+
+            try {
+                const res = await fetch("/add_transaction", {
+                    method:  "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "X-CSRFToken":       CSRF,
+                    },
+                    body: formData,
+                });
+
+                buttons.remove();
+                meta.remove();
+
+                if (res.ok) {
+                    const done = document.createElement("div");
+                    done.style.cssText = "color:var(--emerald); font-size:13px; font-weight:600;";
+                    done.textContent = "Added to your transactions";
+                    card.appendChild(done);
+                } else {
+                    const data = await res.json().catch(() => null);
+                    const errEl = document.createElement("div");
+                    errEl.style.cssText = "color:var(--red); font-size:13px;";
+                    errEl.textContent = data?.message || "Could not add the transaction.";
+                    card.appendChild(errEl);
+                }
+            } catch {
+                buttons.remove();
+                const errEl = document.createElement("div");
+                errEl.style.cssText = "color:var(--red); font-size:13px;";
+                errEl.textContent = "Network error. Please try again.";
+                card.appendChild(errEl);
+            }
+        });
+
+        row.appendChild(avatar);
+        row.appendChild(card);
+        messagesEl.appendChild(row);
+        scrollToBottom();
     }
 
     function appendError(msg) {
@@ -234,7 +370,9 @@ function initAI() {
                 return;
             }
 
-            appendMessage("assistant", data.reply);
+            appendMessage("assistant", data.reply, () => {
+                (data.pending_actions || []).forEach(renderActionCard);
+            });
             history.push({ role: "assistant", content: data.reply });
 
         } catch {

@@ -35,6 +35,7 @@ from anthropic import (
     APITimeoutError,
 )
 
+from ..blueprints.finance.routes import TRANSACTION_CATEGORIES
 from ..models import Transaction
 
 log = logging.getLogger(__name__)
@@ -66,7 +67,43 @@ You are talking to {first_name}. Today is {today}.
 - You can help with budgeting, spending analysis, financial planning, \
 goal setting, and general productivity.
 - Never use em dashes (—). Use a period, comma, or colon instead.
+- Use the add_transaction tool only when {first_name} clearly wants a real \
+transaction logged (e.g. "log a $12 coffee expense"), never for hypothetical \
+questions or questions about past spending. The tool shows a confirmation \
+card with the full details, so keep your own reply to one short sentence \
+instead of repeating them.
 """
+
+# ---------------------------------------------------------------------------
+# Tools — actions the model can propose. Nothing here executes on its own:
+# a tool_use block only becomes a "pending_actions" entry in chat()'s return
+# value, and the frontend renders it as a confirmation card the user must
+# explicitly approve before the existing /add_transaction route ever runs.
+# ---------------------------------------------------------------------------
+
+_TOOLS = [
+    {
+        "name": "add_transaction",
+        "description": (
+            "Propose adding an income or expense transaction. This never "
+            "executes on its own: the user sees a confirmation card and "
+            "must explicitly approve it before anything is saved. Only "
+            "call this when the user clearly wants a real transaction "
+            "logged, not for hypotheticals or questions about past spending."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "Short label, e.g. 'Coffee'."},
+                "amount": {"type": "number", "description": "Positive amount."},
+                "type": {"type": "string", "enum": ["income", "expense"]},
+                "category": {"type": "string", "enum": list(TRANSACTION_CATEGORIES.keys())},
+                "date": {"type": "string", "description": "YYYY-MM-DD. Omit for today."},
+            },
+            "required": ["description", "amount", "type"],
+        },
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +242,15 @@ class AIService:
                      [{"role": "user"|"assistant", "content": "..."}, ...]
 
         Returns:
-            {"reply": str, "usage": {"input_tokens": int, "output_tokens": int}}
+            {"reply": str, "pending_actions": [{"type": str, "params": dict}],
+             "usage": {"input_tokens": int, "output_tokens": int}}
             {"error": str}
+
+            pending_actions is always present, empty on ordinary turns. Each
+            entry is a proposal only: nothing is written to the database
+            here. The frontend renders a confirmation card, and only a user
+            click submits the params to the real, already-validated write
+            route (e.g. /add_transaction).
         """
         if not message or not message.strip():
             return {"error": "Message cannot be empty."}
@@ -228,9 +272,21 @@ class AIService:
                 max_tokens=_MAX_TOKENS,
                 system=_build_system_prompt(user),
                 messages=messages,
+                tools=_TOOLS,
             )
+
+            reply_text = "".join(
+                block.text for block in resp.content if block.type == "text"
+            )
+            pending_actions = [
+                {"type": block.name, "params": block.input}
+                for block in resp.content
+                if block.type == "tool_use"
+            ]
+
             return {
-                "reply": resp.content[0].text,
+                "reply": reply_text,
+                "pending_actions": pending_actions,
                 "usage": {
                     "input_tokens":  resp.usage.input_tokens,
                     "output_tokens": resp.usage.output_tokens,

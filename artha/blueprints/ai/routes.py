@@ -67,8 +67,14 @@ def chat():
     Non-streaming chat.
 
     Request  (JSON): { "message": "...", "history": [...] }
-    Response (JSON): { "reply": "...", "usage": { "input_tokens": N, "output_tokens": N } }
+    Response (JSON): { "reply": "...", "pending_actions": [...],
+                        "usage": { "input_tokens": N, "output_tokens": N } }
                   or { "error": "..." }
+
+    pending_actions is empty on ordinary turns. Each entry
+    ({"type": "add_transaction", "params": {...}}) is a proposal the AI
+    is not allowed to execute itself: the frontend renders a confirmation
+    card, and only a user click submits it to the real write route.
 
     The client appends the reply to its local history and sends the updated
     history on the next request. The server is fully stateless.
