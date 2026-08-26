@@ -24,9 +24,10 @@ from datetime import date, datetime, timedelta
 import click
 from flask import current_app
 
+from .blueprints.dashboard.routes import _generate_recurring_events
 from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
-from .models import Note, PushSubscription, Transaction, User
+from .models import Event, Note, PushSubscription, Transaction, User
 from .services.push_service import send_push
 from .utils import next_due_date
 
@@ -34,20 +35,24 @@ log = logging.getLogger(__name__)
 
 
 def _due_today_items(
-    user_id: int, today: date, notify_bills: bool = True, notify_notes: bool = True
+    user_id: int,
+    today: date,
+    notify_bills: bool = True,
+    notify_notes: bool = True,
+    notify_events: bool = True,
 ) -> list[str]:
     """Everything worth a daily nudge for this user, as one flat list of
     display strings: recurring bills whose next occurrence lands today
     (same dedup-by-(description,type)-then-next_due_date() approach the
-    dashboard's own "renewals this week" callout uses), plus Notes due
-    today. The notification doesn't need to distinguish *why* something's
-    due, just *what* is, so both feed the same list rather than being
-    tracked and formatted separately.
+    dashboard's own "renewals this week" callout uses), Notes due today,
+    and calendar Events starting today. The notification doesn't need to
+    distinguish *why* something's due, just *what* is, so all three feed
+    the same list rather than being tracked and formatted separately.
 
-    notify_bills/notify_notes gate each half independently per the
-    user's own preference (User.notify_bills_due/notify_notes_due) —
-    both default True so every existing caller/test keeps seeing today's
-    behavior unchanged."""
+    notify_bills/notify_notes/notify_events gate each third independently
+    per the user's own preference (User.notify_bills_due/notify_notes_due/
+    notify_events_due) — all three default True so every existing caller/
+    test keeps seeing today's behavior unchanged."""
     items = []
 
     if notify_bills:
@@ -72,6 +77,25 @@ def _due_today_items(
         for note in notes_due_today:
             items.append(note.title or (note.preview[:40] if note.preview else "Untitled note"))
 
+    if notify_events:
+        today_start_dt = datetime(today.year, today.month, today.day)
+        today_end_dt = today_start_dt + timedelta(days=1)
+        # Recurring event occurrences only become real Event rows once
+        # something queries their window (see _generate_recurring_events's
+        # own docstring) — normally that's the calendar page loading, but
+        # this command runs on a schedule with nobody around to trigger
+        # that, so it has to do the same materialization itself first, or
+        # a recurring event's "today" occurrence could simply not exist
+        # yet for this query to find.
+        _generate_recurring_events(user_id, today_start_dt, today_end_dt)
+        events_today = Event.query.filter(
+            Event.user_id == user_id,
+            Event.start >= today_start_dt,
+            Event.start < today_end_dt,
+        ).all()
+        for event in events_today:
+            items.append(event.title)
+
     return items
 
 
@@ -92,7 +116,13 @@ def register_cli(app):
             owner = db.session.get(User, user_id)
             if owner is None:
                 continue
-            items = _due_today_items(user_id, today, owner.notify_bills_due, owner.notify_notes_due)
+            items = _due_today_items(
+                user_id,
+                today,
+                owner.notify_bills_due,
+                owner.notify_notes_due,
+                owner.notify_events_due,
+            )
             if not items:
                 continue
 

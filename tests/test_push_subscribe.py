@@ -39,25 +39,35 @@ def test_resubscribe_same_endpoint_upserts_not_duplicates(auth_client, user):
 def test_notification_preferences_default_to_true(user):
     assert user.notify_bills_due is True
     assert user.notify_notes_due is True
+    assert user.notify_events_due is True
 
 
-def test_set_preferences_updates_both_flags(auth_client, user):
+def test_set_preferences_updates_all_flags(auth_client, user):
     resp = auth_client.post(
-        "/push/preferences", json={"notify_bills_due": False, "notify_notes_due": False}
+        "/push/preferences",
+        json={"notify_bills_due": False, "notify_notes_due": False, "notify_events_due": False},
     )
     assert resp.status_code == 200
     assert user.notify_bills_due is False
     assert user.notify_notes_due is False
+    assert user.notify_events_due is False
 
 
-def test_set_preferences_partial_update_leaves_other_flag_untouched(auth_client, user):
+def test_set_preferences_partial_update_leaves_other_flags_untouched(auth_client, user):
     auth_client.post("/push/preferences", json={"notify_bills_due": False})
     assert user.notify_bills_due is False
     assert user.notify_notes_due is True
+    assert user.notify_events_due is True
 
     auth_client.post("/push/preferences", json={"notify_notes_due": False})
     assert user.notify_bills_due is False
     assert user.notify_notes_due is False
+    assert user.notify_events_due is True
+
+    auth_client.post("/push/preferences", json={"notify_events_due": False})
+    assert user.notify_bills_due is False
+    assert user.notify_notes_due is False
+    assert user.notify_events_due is False
 
 
 def test_set_preferences_requires_login(client):

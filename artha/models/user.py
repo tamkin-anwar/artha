@@ -26,6 +26,7 @@ class User(UserMixin, db.Model):
     # actively turn one off.
     notify_bills_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     notify_notes_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    notify_events_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
     # One of currency.js's CURRENCY_PRESETS ("USD", "GBP", ...), or None
     # if this account has never explicitly saved one — a brand-new device

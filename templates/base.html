@@ -265,6 +265,10 @@
                                         <input type="checkbox" id="notify-notes-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
                                         Notes due today
                                     </label>
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
+                                        <input type="checkbox" id="notify-events-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
+                                        Events today
+                                    </label>
                                 </div>
                                 {% endif %}
 
@@ -334,6 +338,10 @@
                             <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
                                 <input type="checkbox" id="notify-notes-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
                                 Notes due today
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
+                                <input type="checkbox" id="notify-events-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
+                                Events today
                             </label>
                         </div>
                         {% endif %}
@@ -680,12 +688,14 @@
                     });
                 });
 
-                // Bills/Notes checkboxes: desktop and mobile are separate
-                // DOM elements for the same two preferences (same pattern
-                // as currency-select/currency-select-mobile in settings.js)
-                // — keep both pairs in sync and persist on every change.
+                // Bills/Notes/Events checkboxes: desktop and mobile are
+                // separate DOM elements for the same preferences (same
+                // pattern as currency-select/currency-select-mobile in
+                // settings.js) — keep each pair in sync and persist on
+                // every change.
                 var billsBoxes = [document.getElementById("notify-bills-due"), document.getElementById("notify-bills-due-mobile")].filter(Boolean);
                 var notesBoxes = [document.getElementById("notify-notes-due"), document.getElementById("notify-notes-due-mobile")].filter(Boolean);
+                var eventsBoxes = [document.getElementById("notify-events-due"), document.getElementById("notify-events-due-mobile")].filter(Boolean);
 
                 function savePreferences(payload) {
                     return fetch("{{ url_for('push.set_preferences') }}", {
@@ -714,6 +724,7 @@
                 }
                 bindPrefGroup(billsBoxes, billsBoxes, "notify_bills_due");
                 bindPrefGroup(notesBoxes, notesBoxes, "notify_notes_due");
+                bindPrefGroup(eventsBoxes, eventsBoxes, "notify_events_due");
             })();
         </script>
     {% endif %}
