@@ -20,6 +20,13 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     last_login_at = db.Column(db.DateTime, nullable=True)
 
+    # Which "due today" push reminders (flask send-renewal-reminders,
+    # artha/cli.py) this user wants. Both default True so every existing
+    # subscriber keeps getting exactly what they get today until they
+    # actively turn one off.
+    notify_bills_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    notify_notes_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+
     notes = db.relationship(
         "Note", backref="author", lazy="dynamic", cascade="all, delete-orphan"
     )

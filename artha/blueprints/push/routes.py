@@ -69,3 +69,20 @@ def unsubscribe():
         db.session.commit()
 
     return jsonify({"message": "Unsubscribed"})
+
+
+@push_bp.route("/preferences", methods=["POST"])
+@login_required
+def set_preferences():
+    """Upsert which kinds of "due today" reminders this user wants.
+    Per-user (on User itself), not per-subscription — someone with a
+    phone and a laptop subscribed wants one shared preference, not one
+    per device. A key not sent leaves that flag untouched, so the two
+    checkboxes can each POST independently without clobbering the other."""
+    data = request.get_json(silent=True) or {}
+    if "notify_bills_due" in data:
+        current_user.notify_bills_due = bool(data.get("notify_bills_due"))
+    if "notify_notes_due" in data:
+        current_user.notify_notes_due = bool(data.get("notify_notes_due"))
+    db.session.commit()
+    return jsonify({"message": "Preferences updated"})

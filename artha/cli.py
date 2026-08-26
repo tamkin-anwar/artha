@@ -26,41 +26,51 @@ from flask import current_app
 
 from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
-from .models import Note, PushSubscription, Transaction
+from .models import Note, PushSubscription, Transaction, User
 from .services.push_service import send_push
 from .utils import next_due_date
 
 log = logging.getLogger(__name__)
 
 
-def _due_today_items(user_id: int, today: date) -> list[str]:
+def _due_today_items(
+    user_id: int, today: date, notify_bills: bool = True, notify_notes: bool = True
+) -> list[str]:
     """Everything worth a daily nudge for this user, as one flat list of
     display strings: recurring bills whose next occurrence lands today
     (same dedup-by-(description,type)-then-next_due_date() approach the
     dashboard's own "renewals this week" callout uses), plus Notes due
     today. The notification doesn't need to distinguish *why* something's
     due, just *what* is, so both feed the same list rather than being
-    tracked and formatted separately."""
-    recurring_rows = Transaction.query.filter_by(user_id=user_id, is_recurring=True).all()
-    templates_by_key: dict[tuple[str, str], Transaction] = {}
-    for t in recurring_rows:
-        key = (t.description, t.type)
-        current = templates_by_key.get(key)
-        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
-            templates_by_key[key] = t
+    tracked and formatted separately.
 
+    notify_bills/notify_notes gate each half independently per the
+    user's own preference (User.notify_bills_due/notify_notes_due) —
+    both default True so every existing caller/test keeps seeing today's
+    behavior unchanged."""
     items = []
-    for (desc, _ttype), tx in templates_by_key.items():
-        due = next_due_date(tx, today)
-        if due == today:
-            items.append(desc)
 
-    # Archived notes are done/put-away by definition — they shouldn't nag.
-    notes_due_today = Note.query.filter_by(
-        user_id=user_id, due_date=today, archived=False
-    ).all()
-    for note in notes_due_today:
-        items.append(note.title or (note.preview[:40] if note.preview else "Untitled note"))
+    if notify_bills:
+        recurring_rows = Transaction.query.filter_by(user_id=user_id, is_recurring=True).all()
+        templates_by_key: dict[tuple[str, str], Transaction] = {}
+        for t in recurring_rows:
+            key = (t.description, t.type)
+            current = templates_by_key.get(key)
+            if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
+                templates_by_key[key] = t
+
+        for (desc, _ttype), tx in templates_by_key.items():
+            due = next_due_date(tx, today)
+            if due == today:
+                items.append(desc)
+
+    if notify_notes:
+        # Archived notes are done/put-away by definition — they shouldn't nag.
+        notes_due_today = Note.query.filter_by(
+            user_id=user_id, due_date=today, archived=False
+        ).all()
+        for note in notes_due_today:
+            items.append(note.title or (note.preview[:40] if note.preview else "Untitled note"))
 
     return items
 
@@ -79,7 +89,10 @@ def register_cli(app):
         sent, skipped, pruned, failed = 0, 0, 0, 0
 
         for user_id, user_subs in by_user.items():
-            items = _due_today_items(user_id, today)
+            owner = db.session.get(User, user_id)
+            if owner is None:
+                continue
+            items = _due_today_items(user_id, today, owner.notify_bills_due, owner.notify_notes_due)
             if not items:
                 continue
 

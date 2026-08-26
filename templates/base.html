@@ -255,6 +255,19 @@
                                     Enable renewal reminders
                                 </button>
 
+                                {% if current_user.is_authenticated %}
+                                <div id="push-preferences" style="display:none; flex-direction:column; gap:2px; padding:2px 12px 6px;">
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
+                                        <input type="checkbox" id="notify-bills-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_bills_due }}>
+                                        Bills due today
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
+                                        <input type="checkbox" id="notify-notes-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
+                                        Notes due today
+                                    </label>
+                                </div>
+                                {% endif %}
+
                                 <div class="eyebrow" style="padding:10px 12px 4px;">Currency</div>
 
                                 <select
@@ -310,6 +323,19 @@
                         <button id="toggle-push-mobile" type="button" class="btn-secondary" style="width:100%; padding:9px 12px; font-size:14px; display:none;">
                             Enable renewal reminders
                         </button>
+
+                        {% if current_user.is_authenticated %}
+                        <div id="push-preferences-mobile" style="display:none; flex-direction:column; gap:2px; padding:0 4px;">
+                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
+                                <input type="checkbox" id="notify-bills-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_bills_due }}>
+                                Bills due today
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
+                                <input type="checkbox" id="notify-notes-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
+                                Notes due today
+                            </label>
+                        </div>
+                        {% endif %}
 
                         <select
                             id="currency-select-mobile"
@@ -540,11 +566,16 @@
                     return outputArray;
                 }
 
+                var prefBlocks = [document.getElementById("push-preferences"), document.getElementById("push-preferences-mobile")].filter(Boolean);
+
                 function setLabel(subscribed) {
                     toggles.forEach(function (btn) {
                         btn.textContent = subscribed ? "Disable renewal reminders" : "Enable renewal reminders";
                         btn.style.display = "";
                     });
+                    // A preference is meaningless with no active
+                    // subscription to apply it to.
+                    prefBlocks.forEach(function (el) { el.style.display = subscribed ? "flex" : "none"; });
                 }
 
                 function subscribe() {
@@ -646,6 +677,41 @@
                             .finally(function () { btn.disabled = false; });
                     });
                 });
+
+                // Bills/Notes checkboxes: desktop and mobile are separate
+                // DOM elements for the same two preferences (same pattern
+                // as currency-select/currency-select-mobile in settings.js)
+                // — keep both pairs in sync and persist on every change.
+                var billsBoxes = [document.getElementById("notify-bills-due"), document.getElementById("notify-bills-due-mobile")].filter(Boolean);
+                var notesBoxes = [document.getElementById("notify-notes-due"), document.getElementById("notify-notes-due-mobile")].filter(Boolean);
+
+                function savePreferences(payload) {
+                    return fetch("{{ url_for('push.set_preferences') }}", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                        body: JSON.stringify(payload),
+                    }).then(function (res) {
+                        if (!res.ok) throw new Error("save_failed");
+                    });
+                }
+
+                function bindPrefGroup(boxes, otherBoxes, payloadKey) {
+                    boxes.forEach(function (box) {
+                        box.addEventListener("change", function () {
+                            var checked = box.checked;
+                            otherBoxes.forEach(function (other) { other.checked = checked; });
+                            var payload = {};
+                            payload[payloadKey] = checked;
+                            savePreferences(payload).catch(function () {
+                                box.checked = !checked;
+                                otherBoxes.forEach(function (other) { other.checked = !checked; });
+                                showToast("Couldn't update reminder preferences. Please try again.", "error");
+                            });
+                        });
+                    });
+                }
+                bindPrefGroup(billsBoxes, billsBoxes, "notify_bills_due");
+                bindPrefGroup(notesBoxes, notesBoxes, "notify_notes_due");
             })();
         </script>
     {% endif %}
