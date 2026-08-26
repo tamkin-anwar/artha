@@ -2,9 +2,9 @@
 
 A personal finance and productivity "Personal OS," built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps.
 
-It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API. Runs as a real multi-user app today: friends and family log in with their own accounts, not just a single-owner tool.
+It focuses on clarity, speed, and control: self-hosted and no tracking, with an AI Assistant powered by Anthropic's API that can act on your data, not just talk about it. Runs as a real multi-user app today: friends and family log in with their own independent accounts, not just a single-owner tool.
 
-[Live app →](https://artha-dashboard.onrender.com)
+[Live app →](https://arthaapp.com)
 
 ## Features
 
@@ -14,20 +14,22 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 - Spending and Income break down by category in a live Chart.js doughnut; Cash Flow shows income vs. spending as a bar chart per period
 - Recurring lists every recurring bill/income with a projected total scaled to the selected period
 - Inline transaction editing, no page reloads; undo delete with toast notifications
-- Bank statement import from CSV or PDF, with a preview-and-edit step and auto-categorization before anything is committed
+- Bank statement import from CSV or PDF (including password-protected PDFs and international formats: £/€ amounts, day-month-year dates, Taka), with a preview-and-edit step and auto-categorization before anything is committed
 - CSV export respecting whichever month filter is active
-- Monthly spending budgets with a progress card and an over/near-limit alert
+- An overall monthly budget and per-category budgets side by side, each with its own progress card and over/near-limit alert
 - Recurring transactions with automatic monthly regeneration
 
 **Elsewhere**
 - Notes with pinning, colors, tags, due dates, and a 30-day trash
 - Calendar with due-date notes, recurring bill reminders, and time-blocked events
-- Web Push notifications for bills and notes due today (opt-in, from Settings)
-- A Numi-style smart calculator with variables, a running total, unit conversion, currency conversion via live exchange rates, and flexible natural-language input ("10k x 9%," "Rent 1800"); state persists across navigation
+- Web Push notifications for bills and notes due today, with independent opt-in per reminder type
+- A Numi-style smart calculator with variables, a running total, unit and currency conversion via live exchange rates, loan payment and compound interest math, and flexible natural-language input ("10k x 9%," "$300k loan at 4.5% for 30 years"); state persists across navigation
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
-- An AI Assistant with your financial data as context, powered by Anthropic's API
+- An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, or scheduling an event, always behind an explicit confirm step before anything is saved
+- A global search palette (⌘K) across transactions, notes, scenarios, and events
+- Self-serve, email-based password reset, no admin needed
 - In-app feedback (floating button, any page) and an admin panel to triage it and see who's actually using the app
-- An Account menu (your name/avatar) for identity actions (change password, sign out), separate from a Preferences menu (theme, currency, notifications)
+- An Account menu (your name/avatar) for identity actions (edit profile, change password, sign out), separate from a Preferences menu (theme, currency, notifications)
 - Dark and light theme with persistence, multi-currency display
 - Mobile-first responsive design, tuned against real iOS and Android widths, not just "technically doesn't overflow"
 - Offline support via Service Worker (PWA-ready)
@@ -36,8 +38,10 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 ## Tech stack
 - Flask + SQLAlchemy
 - Flask-Login + Flask-WTF (CSRF protection) + Flask-Limiter (login rate limiting)
+- Anthropic API (AI Assistant, tool-use for taking actions)
 - pdfplumber (bank statement PDF parsing)
 - pywebpush (Web Push notifications)
+- Resend (transactional email, password reset)
 - Vanilla JavaScript (ES modules), no frontend framework
 - Chart.js
 - Utility-first CSS (Tailwind) plus a small hand-written component layer
@@ -45,7 +49,7 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 - pytest
 
 ## Why Artha
-No SaaS lock-in, full control over data, and a real production-minded Flask app rather than a weekend prototype, built incrementally for a real household of users, with clean Git history and feature isolation.
+No SaaS lock-in, full control over data, and a real production-minded Flask app rather than a weekend prototype, built incrementally for real people using it day to day, with clean Git history and feature isolation.
 
 ## Running locally
 ```bash
@@ -55,7 +59,7 @@ pip install -r requirements-dev.txt
 python init_db.py
 python wsgi.py
 ```
-`init_db.py` creates the local SQLite database and prompts for confirmation before running. The AI Assistant needs an `ANTHROPIC_API_KEY` environment variable to work; everything else runs without extra setup, including Web Push (a fixed dev-only VAPID keypair ships as a fallback; set real `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIMS_EMAIL` env vars in any deployed environment instead).
+`init_db.py` creates the local SQLite database and prompts for confirmation before running. The AI Assistant needs an `ANTHROPIC_API_KEY` environment variable to work; password reset needs `RESEND_API_KEY`/`RESET_EMAIL_FROM`; everything else runs without extra setup, including Web Push (a fixed dev-only VAPID keypair ships as a fallback; set real `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIMS_EMAIL` env vars in any deployed environment instead).
 
 `requirements-dev.txt` adds pytest on top of `requirements.txt`; production only needs the latter.
 
