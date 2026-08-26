@@ -68,12 +68,6 @@ python wsgi.py
 pytest
 ```
 
-## Admin access
-No account is an admin by default. Grant one with:
-```bash
-flask make-admin <username>
-```
-
 ## Renewal reminders (Web Push)
 Subscribing/receiving works from a normal page load, but *sending* a reminder on the actual due date needs to run even if nobody opens the app that day, and that can't happen from a request handler. Schedule this once a day (e.g. a Render Cron Job):
 ```bash
