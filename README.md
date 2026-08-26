@@ -22,7 +22,7 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 **Elsewhere**
 - Notes with pinning, colors, tags, due dates, and a 30-day trash
 - Calendar with due-date notes, recurring bill reminders, and time-blocked events
-- Web Push notifications for bills and notes due today, with independent opt-in per reminder type
+- Web Push notifications for bills, notes, and calendar events due today, with independent opt-in per reminder type
 - A Numi-style smart calculator with variables, a running total, unit and currency conversion via live exchange rates, loan payment and compound interest math, and flexible natural-language input ("10k x 9%," "$300k loan at 4.5% for 30 years"); state persists across navigation
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
 - An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, scheduling an event, or setting a budget, always behind an explicit confirm step before anything is saved
