@@ -390,11 +390,76 @@
             }
         );
 
+        // Step 3.75 — loan payments and compound interest ("300000 loan at
+        // 4.5% for 30 years", "10000 at 5% compounded monthly for 10 years").
+        line = convertLoanInterestPhrases(line);
+
         // Step 4 — variable assignment is handled natively by
         // math.evaluate(line, scope) below, no separate transform needed.
 
         // Step 5 — strip $ signs
         line = line.replace(/\$/g, "");
+
+        return line;
+    }
+
+    // Recognizes two finance phrases and replaces each with its computed
+    // plain number, same "resolve in JS, substitute the number back in"
+    // approach as convertCurrencyPhrases() below — an amortization/
+    // compound-interest formula is far simpler to compute directly than to
+    // build as a math.js expression string.
+    //
+    // "<principal> loan at <rate>% for <term> years|months" — the standard
+    // amortized monthly payment: M = P*r*(1+r)^n / ((1+r)^n - 1), where r
+    // is the monthly rate and n the number of monthly payments. r === 0
+    // (a 0% loan) would divide by zero in that formula, so it short-
+    // circuits to the plain P/n a 0% loan actually is.
+    //
+    // Runs before the compound-interest pattern below and requires the
+    // literal word "loan" right after the principal, so it fully consumes
+    // a loan phrase before the more general pattern ever sees that text
+    // (which in turn requires "at" immediately after the principal, so it
+    // can't match a "... loan at ..." phrase either way — the ordering
+    // isn't actually load-bearing, it just mirrors this file's existing
+    // "most specific pattern first" convention, e.g. convertCurrencyPhrases's
+    // two amount/code-order passes).
+    function convertLoanInterestPhrases(line) {
+        line = line.replace(
+            /(\d+(?:\.\d+)?)\s*loan\s+at\s+(\d+(?:\.\d+)?)\s*%\s+for\s+(\d+(?:\.\d+)?)\s*(years?|months?)\b/gi,
+            function (match, principalStr, rateStr, termStr, unit) {
+                var principal = parseFloat(principalStr);
+                var months = /^year/i.test(unit) ? parseFloat(termStr) * 12 : parseFloat(termStr);
+                var r = (parseFloat(rateStr) / 100) / 12;
+                var payment = r === 0
+                    ? principal / months
+                    : (principal * r * Math.pow(1 + r, months)) / (Math.pow(1 + r, months) - 1);
+                return String(payment);
+            }
+        );
+
+        // "<principal> at <rate>% [compounded daily|monthly|quarterly|
+        // annually] for <term> years|months [compounded ...]" — future
+        // value: FV = P * (1 + r/k)^(k*t), k = compounds per year (defaults
+        // to annually, the everyday-language default when no compounding
+        // frequency is said out loud). The compounding clause is accepted
+        // either right after the rate ("at 5% compounded monthly for 10
+        // years", arguably the more natural order) or after the term ("at
+        // 5% for 10 years compounded monthly") — same reasoning as
+        // convertCurrencyPhrases() accepting both "100 usd to eur" and
+        // "usd 100 to eur", people don't all reach for one fixed word order.
+        var COMPOUNDS_PER_YEAR = { daily: 365, monthly: 12, quarterly: 4, annually: 1 };
+        line = line.replace(
+            /(\d+(?:\.\d+)?)\s*at\s+(\d+(?:\.\d+)?)\s*%\s*(?:compounded\s+(daily|monthly|quarterly|annually)\s+)?for\s+(\d+(?:\.\d+)?)\s*(years?|months?)(?:\s+compounded\s+(daily|monthly|quarterly|annually))?\b/gi,
+            function (match, principalStr, rateStr, compoundBefore, termStr, unit, compoundAfter) {
+                var compound = compoundBefore || compoundAfter;
+                var principal = parseFloat(principalStr);
+                var years = /^year/i.test(unit) ? parseFloat(termStr) : parseFloat(termStr) / 12;
+                var k = COMPOUNDS_PER_YEAR[(compound || "annually").toLowerCase()];
+                var annualRate = parseFloat(rateStr) / 100;
+                var futureValue = principal * Math.pow(1 + annualRate / k, k * years);
+                return String(futureValue);
+            }
+        );
 
         return line;
     }
