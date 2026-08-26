@@ -19,6 +19,7 @@ psycopg2-binary==2.9.10
 pywebpush==2.3.0
 python-dotenv==1.1.1
 requests==2.34.2
+resend==2.40.2
 SQLAlchemy==2.0.36
 typing_extensions==4.15.0
 Werkzeug==3.1.3

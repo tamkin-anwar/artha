@@ -1,6 +1,7 @@
 import pytest
 
 from artha import create_app
+from artha.config import TestingConfig
 from artha.extensions import db as _db
 from artha.extensions import limiter
 from artha.models import User
@@ -60,3 +61,26 @@ def auth_client(client, user):
     """A test client already logged in as `user` (password: password123)."""
     client.post("/login", data={"username": user.username, "password": "password123"})
     return client
+
+
+@pytest.fixture()
+def rate_limited_client(monkeypatch):
+    """A separate app+client with rate limiting actually turned on.
+
+    Flask-Limiter reads RATELIMIT_ENABLED once, inside init_app() at app
+    creation time — mutating app.config afterward (which is what the
+    shared `app` fixture would require, since TestingConfig disables it
+    by default) has no effect, so this builds its own app from a
+    monkeypatched config instead of trying to flip the flag post-hoc.
+    """
+    monkeypatch.setattr(TestingConfig, "RATELIMIT_ENABLED", True)
+    app = create_app("testing")
+    with app.app_context():
+        _db.create_all()
+        try:
+            limiter.reset()
+        except AssertionError:
+            pass
+        yield app.test_client()
+        _db.session.remove()
+        _db.drop_all()

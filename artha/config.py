@@ -41,6 +41,13 @@ class Config:
     )
     VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "tamkinanwar7@gmail.com")
 
+    # Password-reset email (Resend). No dev-only fallback here, unlike
+    # VAPID above — there's no fake key that would actually send mail, so
+    # an unset RESEND_API_KEY just means email_service logs and skips
+    # instead of sending, which is fine for local dev.
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+    RESET_EMAIL_FROM = os.environ.get("RESET_EMAIL_FROM")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

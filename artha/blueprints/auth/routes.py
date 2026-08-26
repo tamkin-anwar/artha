@@ -1,14 +1,45 @@
 import logging
 from datetime import datetime, timezone
 
-from flask import render_template, redirect, url_for, request, flash
+from flask import current_app, render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ...extensions import db, limiter
 from ...models import User
+from ...services.email_service import send_password_reset_email
 from . import auth_bp
 
 log = logging.getLogger(__name__)
+
+# 1 hour — long enough that a reset email arriving a few minutes late still
+# works, short enough that a stale, unused link isn't a lingering risk.
+RESET_TOKEN_MAX_AGE = 3600
+
+
+def _reset_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="password-reset")
+
+
+def _generate_reset_token(user: User) -> str:
+    """Signs {user_id, a fragment of the CURRENT password hash}. The hash
+    fragment is what makes a token single-use with no token table: once
+    the password actually changes (this reset or a later one), the
+    fragment embedded in any older link stops matching and it's rejected
+    — see _verify_reset_token."""
+    return _reset_serializer().dumps({"uid": user.id, "pwf": user.password_hash[-16:]})
+
+
+def _verify_reset_token(token: str) -> User | None:
+    try:
+        data = _reset_serializer().loads(token, max_age=RESET_TOKEN_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+
+    user = db.session.get(User, data.get("uid"))
+    if user is None or user.password_hash[-16:] != data.get("pwf"):
+        return None
+    return user
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
@@ -86,6 +117,63 @@ def login():
         return redirect(url_for("auth.login"))
 
     return render_template("login.html")
+
+
+@auth_bp.route("/forgot_password", methods=["GET", "POST"])
+@limiter.limit("3 per hour", methods=["POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        if email:
+            user = User.query.filter_by(email=email).first()
+            if user is not None:
+                token = _generate_reset_token(user)
+                reset_url = url_for("auth.reset_password", token=token, _external=True)
+                send_password_reset_email(user, reset_url)
+
+        # Identical message whether or not the email matched an account —
+        # never let this form be used to check which emails are registered.
+        flash("If that email has an account, a reset link is on its way.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("forgot_password.html")
+
+
+@auth_bp.route("/reset_password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    user = _verify_reset_token(token)
+    if user is None:
+        flash("That reset link is invalid or has expired. Request a new one.", "error")
+        return redirect(url_for("auth.forgot_password"))
+
+    if request.method == "POST":
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not new_password or not confirm_password:
+            flash("Both password fields are required.", "error")
+            return redirect(url_for("auth.reset_password", token=token))
+
+        if len(new_password) < 8:
+            flash("New password must be at least 8 characters.", "error")
+            return redirect(url_for("auth.reset_password", token=token))
+
+        if new_password != confirm_password:
+            flash("New passwords do not match.", "error")
+            return redirect(url_for("auth.reset_password", token=token))
+
+        try:
+            user.set_password(new_password)
+            db.session.commit()
+            flash("Password reset. You can now log in with your new password.", "success")
+            return redirect(url_for("auth.login"))
+        except Exception as e:
+            db.session.rollback()
+            log.error("Error resetting password: %s", e, exc_info=True)
+            flash("Error resetting password.", "error")
+            return redirect(url_for("auth.reset_password", token=token))
+
+    return render_template("reset_password.html", token=token)
 
 
 @auth_bp.route("/logout")
