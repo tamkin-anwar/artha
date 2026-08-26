@@ -35,7 +35,9 @@ from anthropic import (
     APITimeoutError,
 )
 
+from ..blueprints.dashboard.routes import EVENT_COLORS, EVENT_RECURRENCES
 from ..blueprints.finance.routes import TRANSACTION_CATEGORIES
+from ..blueprints.notes.routes import NOTE_COLORS
 from ..models import Transaction
 
 log = logging.getLogger(__name__)
@@ -67,11 +69,13 @@ You are talking to {first_name}. Today is {today}.
 - You can help with budgeting, spending analysis, financial planning, \
 goal setting, and general productivity.
 - Never use em dashes (—). Use a period, comma, or colon instead.
-- Use the add_transaction tool only when {first_name} clearly wants a real \
-transaction logged (e.g. "log a $12 coffee expense"), never for hypothetical \
-questions or questions about past spending. The tool shows a confirmation \
-card with the full details, so keep your own reply to one short sentence \
-instead of repeating them.
+- Use add_transaction, create_note, or create_event only when {first_name} \
+clearly wants that real thing logged, written down, or scheduled, never for \
+hypotheticals, brainstorming out loud, or questions about existing data. \
+Each tool shows a confirmation card with the full details, so keep your own \
+reply to one short sentence instead of repeating them.
+- For create_event, always give start and end as real YYYY-MM-DDTHH:MM:SS \
+values worked out from today's date, never a vague phrase like "tomorrow."
 """
 
 # ---------------------------------------------------------------------------
@@ -101,6 +105,46 @@ _TOOLS = [
                 "date": {"type": "string", "description": "YYYY-MM-DD. Omit for today."},
             },
             "required": ["description", "amount", "type"],
+        },
+    },
+    {
+        "name": "create_note",
+        "description": (
+            "Propose creating a note. This never executes on its own: the "
+            "user sees a confirmation card and must explicitly approve it "
+            "before anything is saved. Only call this when the user "
+            "clearly wants something written down, not for brainstorming "
+            "out loud."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "content": {"type": "string"},
+                "color": {"type": "string", "enum": list(NOTE_COLORS)},
+                "due_date": {"type": "string", "description": "YYYY-MM-DD. Omit if none."},
+            },
+            "required": ["title", "content"],
+        },
+    },
+    {
+        "name": "create_event",
+        "description": (
+            "Propose creating a calendar event. This never executes on its "
+            "own: the user sees a confirmation card and must explicitly "
+            "approve it before anything is saved. Only call this when the "
+            "user clearly wants something scheduled."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "start": {"type": "string", "description": "YYYY-MM-DDTHH:MM:SS, local time, no timezone."},
+                "end": {"type": "string", "description": "YYYY-MM-DDTHH:MM:SS, local time, no timezone."},
+                "color": {"type": "string", "enum": list(EVENT_COLORS)},
+                "recurrence": {"type": "string", "enum": list(EVENT_RECURRENCES)},
+            },
+            "required": ["title", "start", "end"],
         },
     },
 ]

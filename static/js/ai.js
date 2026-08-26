@@ -170,20 +170,141 @@ function initAI() {
         document.getElementById("ai-loading-row")?.remove();
     }
 
-    // Renders an "add_transaction" proposal as a confirmation card the user
-    // must explicitly approve. Confirm submits straight to the existing
+    // Describes an "add_transaction" proposal: what the card shows, and
+    // what Confirm actually submits. Goes straight to the existing
     // /add_transaction route (same CSRF, same server-side validation as
     // the manual form) — the AI never has a path to the database itself.
-    function renderActionCard(action) {
-        if (!action || action.type !== "add_transaction") return;
-        const p = action.params || {};
-
+    function describeTransactionAction(p) {
         const description = String(p.description || "Transaction");
         const amountNum    = Number.parseFloat(p.amount);
-        const type          = p.type === "income" ? "income" : "expense";
-        const category      = typeof p.category === "string" ? p.category : "";
-        const date          = typeof p.date === "string" && p.date ? p.date : null;
+        const type         = p.type === "income" ? "income" : "expense";
+        const category     = typeof p.category === "string" ? p.category : "";
+        const date         = typeof p.date === "string" && p.date ? p.date : null;
 
+        const metaParts = [type === "income" ? "Income" : "Expense"];
+        if (category) metaParts.push(category.charAt(0).toUpperCase() + category.slice(1));
+        metaParts.push(date || "Today");
+
+        return {
+            title: description,
+            tag: {
+                text: (type === "income" ? "+" : "−") + "$" + (Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00"),
+                color: type === "income" ? "var(--emerald)" : "var(--red)",
+            },
+            meta: metaParts.join(" · "),
+            successText: "Added to your transactions",
+            execute: async () => {
+                const formData = new FormData();
+                formData.append("description", description);
+                formData.append("amount", Number.isFinite(amountNum) ? String(amountNum) : "0");
+                formData.append("type", type);
+                if (category) formData.append("category", category);
+                if (date) formData.append("date", date);
+                formData.append("csrf_token", CSRF);
+
+                const res = await fetch("/add_transaction", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": CSRF },
+                    body: formData,
+                });
+                if (res.ok) return true;
+                const data = await res.json().catch(() => null);
+                return data?.message || "Could not add the transaction.";
+            },
+        };
+    }
+
+    // Describes a "create_note" proposal. Confirm chains the same two
+    // calls the Notes page itself makes for a brand-new note: create a
+    // blank note, then save its fields.
+    function describeNoteAction(p) {
+        const title   = String(p.title || "Note");
+        const content = String(p.content || "");
+        const color   = typeof p.color === "string" ? p.color : "";
+        const dueDate = typeof p.due_date === "string" && p.due_date ? p.due_date : "";
+
+        const preview = content.length > 80 ? content.slice(0, 77) + "..." : content;
+        const metaParts = [preview || "No content"];
+        if (dueDate) metaParts.push("Due " + dueDate);
+
+        return {
+            title,
+            meta: metaParts.join(" · "),
+            successText: "Added to your notes",
+            execute: async () => {
+                const createRes = await fetch("/notes/new", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "X-CSRFToken": CSRF },
+                });
+                if (!createRes.ok) return "Could not create the note.";
+                const created = await createRes.json().catch(() => null);
+                if (!created?.id) return "Could not create the note.";
+
+                const payload = { title, content };
+                if (color) payload.color = color;
+                if (dueDate) payload.due_date = dueDate;
+
+                const updateRes = await fetch("/notes/" + created.id + "/update", {
+                    method: "PATCH",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+                    body: JSON.stringify(payload),
+                });
+                if (updateRes.ok) return true;
+                const data = await updateRes.json().catch(() => null);
+                return data?.message || "Could not save the note.";
+            },
+        };
+    }
+
+    // Describes a "create_event" proposal. Confirm submits straight to
+    // the existing /calendar/events route, same as the New Event flow.
+    function describeEventAction(p) {
+        const title      = String(p.title || "Event");
+        const start      = typeof p.start === "string" ? p.start : "";
+        const end        = typeof p.end === "string" ? p.end : "";
+        const color      = typeof p.color === "string" ? p.color : "";
+        const recurrence = typeof p.recurrence === "string" ? p.recurrence : "";
+
+        const metaParts = [formatEventRange(start, end)];
+        if (recurrence) metaParts.push(recurrence.charAt(0).toUpperCase() + recurrence.slice(1));
+
+        return {
+            title,
+            meta: metaParts.join(" · "),
+            successText: "Added to your calendar",
+            execute: async () => {
+                const res = await fetch("/calendar/events", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+                    body: JSON.stringify({ title, start, end, color: color || undefined, recurrence: recurrence || undefined }),
+                });
+                if (res.ok) return true;
+                const data = await res.json().catch(() => null);
+                return data?.message || "Could not add the event.";
+            },
+        };
+    }
+
+    function formatEventRange(start, end) {
+        const s = new Date(start);
+        if (isNaN(s.getTime())) return start || "Unknown time";
+        const e = new Date(end);
+        const dateStr   = s.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const startTime = s.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+        const endTime   = !isNaN(e.getTime()) ? e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+        return dateStr + ", " + startTime + (endTime ? " - " + endTime : "");
+    }
+
+    // Shared confirmation-card shell: renders whatever describeXAction()
+    // returned, and owns the Confirm/Cancel interaction. describe.execute()
+    // resolves to true (success), an error message string, or throws on a
+    // genuine network failure — the shell turns any of those into the
+    // right on-card feedback.
+    function buildActionCard(describe) {
         const row = document.createElement("div");
         row.className = "ai-row assistant";
 
@@ -201,26 +322,21 @@ function initAI() {
         topRow.style.cssText = "display:flex; justify-content:space-between; align-items:baseline; gap:12px;";
 
         const label = document.createElement("span");
-        label.textContent = description;
+        label.textContent = describe.title;
         label.style.cssText = "color:var(--text-primary); font-weight:600;";
-
-        const amount = document.createElement("span");
-        amount.style.cssText =
-            "font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; " +
-            "color:" + (type === "income" ? "var(--emerald)" : "var(--red)") + ";";
-        amount.textContent =
-            (type === "income" ? "+" : "−") +
-            "$" + (Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00");
-
         topRow.appendChild(label);
-        topRow.appendChild(amount);
+
+        if (describe.tag) {
+            const tag = document.createElement("span");
+            tag.textContent = describe.tag.text;
+            tag.style.cssText =
+                "font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; color:" + describe.tag.color + ";";
+            topRow.appendChild(tag);
+        }
 
         const meta = document.createElement("div");
         meta.style.cssText = "color:var(--text-secondary); font-size:13px;";
-        const metaParts = [type === "income" ? "Income" : "Expense"];
-        if (category) metaParts.push(category.charAt(0).toUpperCase() + category.slice(1));
-        metaParts.push(date || "Today");
-        meta.textContent = metaParts.join(" · ");
+        meta.textContent = describe.meta;
 
         const buttons = document.createElement("div");
         buttons.style.cssText = "display:flex; gap:8px;";
@@ -251,40 +367,20 @@ function initAI() {
             confirmBtn.disabled = true;
             cancelBtn.disabled  = true;
 
-            const formData = new FormData();
-            formData.append("description", description);
-            formData.append("amount", Number.isFinite(amountNum) ? String(amountNum) : "0");
-            formData.append("type", type);
-            if (category) formData.append("category", category);
-            if (date) formData.append("date", date);
-            formData.append("csrf_token", CSRF);
-
             try {
-                const res = await fetch("/add_transaction", {
-                    method:  "POST",
-                    credentials: "same-origin",
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                        "X-CSRFToken":       CSRF,
-                    },
-                    body: formData,
-                });
-
+                const result = await describe.execute();
                 buttons.remove();
                 meta.remove();
 
-                if (res.ok) {
-                    const done = document.createElement("div");
-                    done.style.cssText = "color:var(--emerald); font-size:13px; font-weight:600;";
-                    done.textContent = "Added to your transactions";
-                    card.appendChild(done);
+                const feedback = document.createElement("div");
+                if (result === true) {
+                    feedback.style.cssText = "color:var(--emerald); font-size:13px; font-weight:600;";
+                    feedback.textContent = describe.successText;
                 } else {
-                    const data = await res.json().catch(() => null);
-                    const errEl = document.createElement("div");
-                    errEl.style.cssText = "color:var(--red); font-size:13px;";
-                    errEl.textContent = data?.message || "Could not add the transaction.";
-                    card.appendChild(errEl);
+                    feedback.style.cssText = "color:var(--red); font-size:13px;";
+                    feedback.textContent = (typeof result === "string" && result) || "Could not complete this action.";
                 }
+                card.appendChild(feedback);
             } catch {
                 buttons.remove();
                 const errEl = document.createElement("div");
@@ -298,6 +394,22 @@ function initAI() {
         row.appendChild(card);
         messagesEl.appendChild(row);
         scrollToBottom();
+    }
+
+    // Renders whichever action type the assistant proposed. Every type is
+    // a proposal only: nothing here writes to the database, that only
+    // happens from inside describe.execute() when the user clicks Confirm.
+    function renderActionCard(action) {
+        if (!action || !action.type) return;
+        const p = action.params || {};
+
+        let describe;
+        if (action.type === "add_transaction") describe = describeTransactionAction(p);
+        else if (action.type === "create_note") describe = describeNoteAction(p);
+        else if (action.type === "create_event") describe = describeEventAction(p);
+        else return;
+
+        buildActionCard(describe);
     }
 
     function appendError(msg) {
