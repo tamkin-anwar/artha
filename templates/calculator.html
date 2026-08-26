@@ -424,8 +424,20 @@
     // "most specific pattern first" convention, e.g. convertCurrencyPhrases's
     // two amount/code-order passes).
     function convertLoanInterestPhrases(line) {
+        // Loosened after real usage showed people don't reach for one fixed
+        // skeleton: "at" or "with" before the rate, an optional bare
+        // "interest" after it, "for"/"in" before the term, and any amount
+        // of ordinary words in between ("...12% interest how much monthly
+        // payment in 60 months" — confirmed failing on the exact "loan at
+        // X% for Y" skeleton this shipped with first). The filler group
+        // only eats letters/spaces, never digits or punctuation, so it
+        // can't reach into or swallow a neighboring number. "over" is
+        // deliberately not one of the term connectors: Step 1 above
+        // already rewrites the bare word "over" to "/" (division) for
+        // every line, so "loan ... over 5 years" never reaches this regex
+        // still spelled "over" to match against.
         line = line.replace(
-            /(\d+(?:\.\d+)?)\s*loan\s+at\s+(\d+(?:\.\d+)?)\s*%\s+for\s+(\d+(?:\.\d+)?)\s*(years?|months?)\b/gi,
+            /(\d+(?:\.\d+)?)\s*loan\s*(?:with|at)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:interest)?\s*[a-z\s]*?\b(?:for|in)\s+(\d+(?:\.\d+)?)\s*(years?|months?)\b/gi,
             function (match, principalStr, rateStr, termStr, unit) {
                 var principal = parseFloat(principalStr);
                 var months = /^year/i.test(unit) ? parseFloat(termStr) * 12 : parseFloat(termStr);
@@ -437,19 +449,23 @@
             }
         );
 
-        // "<principal> at <rate>% [compounded daily|monthly|quarterly|
-        // annually] for <term> years|months [compounded ...]" — future
-        // value: FV = P * (1 + r/k)^(k*t), k = compounds per year (defaults
-        // to annually, the everyday-language default when no compounding
-        // frequency is said out loud). The compounding clause is accepted
-        // either right after the rate ("at 5% compounded monthly for 10
-        // years", arguably the more natural order) or after the term ("at
-        // 5% for 10 years compounded monthly") — same reasoning as
-        // convertCurrencyPhrases() accepting both "100 usd to eur" and
-        // "usd 100 to eur", people don't all reach for one fixed word order.
+        // "<principal> at|with <rate>% [interest] [compounded daily|
+        // monthly|quarterly|annually] for|in <term> years|months
+        // [compounded ...]" — future value: FV = P * (1 + r/k)^(k*t),
+        // k = compounds per year (defaults to annually, the everyday-
+        // language default when no compounding frequency is said out
+        // loud). The compounding clause is accepted either right after the
+        // rate ("at 5% compounded monthly for 10 years", arguably the more
+        // natural order) or after the term ("at 5% for 10 years compounded
+        // monthly") — same reasoning as convertCurrencyPhrases() accepting
+        // both "100 usd to eur" and "usd 100 to eur", people don't all
+        // reach for one fixed word order. Same "at"/"with"/"interest"/
+        // filler tolerance as the loan pattern above, for the same reason,
+        // and "over" is excluded from the term connectors for the same
+        // reason too (Step 1 already claims that word for division).
         var COMPOUNDS_PER_YEAR = { daily: 365, monthly: 12, quarterly: 4, annually: 1 };
         line = line.replace(
-            /(\d+(?:\.\d+)?)\s*at\s+(\d+(?:\.\d+)?)\s*%\s*(?:compounded\s+(daily|monthly|quarterly|annually)\s+)?for\s+(\d+(?:\.\d+)?)\s*(years?|months?)(?:\s+compounded\s+(daily|monthly|quarterly|annually))?\b/gi,
+            /(\d+(?:\.\d+)?)\s*(?:at|with)\s+(\d+(?:\.\d+)?)\s*%\s*(?:interest)?\s*(?:compounded\s+(daily|monthly|quarterly|annually)\s*)?[a-z\s]*?\b(?:for|in)\s+(\d+(?:\.\d+)?)\s*(years?|months?)(?:\s+compounded\s+(daily|monthly|quarterly|annually))?\b/gi,
             function (match, principalStr, rateStr, compoundBefore, termStr, unit, compoundAfter) {
                 var compound = compoundBefore || compoundAfter;
                 var principal = parseFloat(principalStr);
@@ -538,11 +554,35 @@
     //       both unit words stripped and broken before math.js ever saw it
     // Not a full NLP parser — simple label-before-number cases work,
     // nothing more is promised.
+    //
+    // (c) has a sharp edge: math.js's own top-level API carries plain
+    // English words as method/utility names — 'on'/'off' (its event-
+    // emitter mixin), 'and'/'or', 'help', 'chain', 'config', 'import',
+    // 'create', 'factory', 'format', 'clone', 'filter', 'sort', 'concat',
+    // 'apply', 'index' all satisfy `token in math` (confirmed directly:
+    // every one of those is a real property on the math object). A
+    // natural sentence built around a supported phrase very easily
+    // contains one as ordinary filler ("...monthly payment ON a $250,000
+    // loan...") — (c) then wrongly treats it as a real reference instead
+    // of stripping it, math.evaluate() chokes on the leftover bare word,
+    // and the whole line silently fails despite (c)'s intent being about
+    // callable math functions/constants (pi, sin, sqrt), never these.
+    // ENGLISH_FILLER_OVERRIDES makes the ones actually observed to cause
+    // this take priority over (c) regardless of the math.js collision.
+    // 'to' is deliberately excluded: math.js's own unit/currency grammar
+    // ("5 lbs to kg") depends on that exact word reaching math.evaluate()
+    // unstripped.
+    var ENGLISH_FILLER_OVERRIDES = {
+        on: 1, off: 1, and: 1, or: 1, help: 1, chain: 1, config: 1, import: 1,
+        create: 1, factory: 1, format: 1, clone: 1, filter: 1, sort: 1,
+        concat: 1, apply: 1, index: 1,
+    };
     function stripMemoWords(line, scope) {
         return line.replace(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g, function (token, offset, fullString) {
             var rest = fullString.slice(offset + token.length);
             if (/^\s*=(?!=)/.test(rest)) return token;
             if (Object.prototype.hasOwnProperty.call(scope, token)) return token;
+            if (Object.prototype.hasOwnProperty.call(ENGLISH_FILLER_OVERRIDES, token.toLowerCase())) return "";
             if (token in math) return token;
             if (math.Unit.isValuelessUnit(token)) return token;
             return "";
