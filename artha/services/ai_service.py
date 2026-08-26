@@ -69,11 +69,12 @@ You are talking to {first_name}. Today is {today}.
 - You can help with budgeting, spending analysis, financial planning, \
 goal setting, and general productivity.
 - Never use em dashes (—). Use a period, comma, or colon instead.
-- Use add_transaction, create_note, or create_event only when {first_name} \
-clearly wants that real thing logged, written down, or scheduled, never for \
-hypotheticals, brainstorming out loud, or questions about existing data. \
-Each tool shows a confirmation card with the full details, so keep your own \
-reply to one short sentence instead of repeating them.
+- Use add_transaction, create_note, create_event, or set_budget only when \
+{first_name} clearly wants that real thing logged, written down, scheduled, \
+or capped, never for hypotheticals, brainstorming out loud, or questions \
+about existing data. Each tool shows a confirmation card with the full \
+details, so keep your own reply to one short sentence instead of repeating \
+them.
 - For create_event, always give start and end as real YYYY-MM-DDTHH:MM:SS \
 values worked out from today's date, never a vague phrase like "tomorrow."
 """
@@ -145,6 +146,29 @@ _TOOLS = [
                 "recurrence": {"type": "string", "enum": list(EVENT_RECURRENCES)},
             },
             "required": ["title", "start", "end"],
+        },
+    },
+    {
+        "name": "set_budget",
+        "description": (
+            "Propose a monthly spending budget, either overall or for one "
+            "category. This never executes on its own: the user sees a "
+            "confirmation card and must explicitly approve it before "
+            "anything is saved. Only call this when the user clearly wants "
+            "a budget cap set, not for questions about existing budgets "
+            "or spending."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "Positive monthly cap."},
+                "category": {
+                    "type": "string",
+                    "enum": [key for key in TRANSACTION_CATEGORIES if key != "income"],
+                    "description": "Omit for the overall monthly budget, not one category.",
+                },
+            },
+            "required": ["amount"],
         },
     },
 ]

@@ -1801,7 +1801,10 @@ def set_budget():
     try:
         cap = _validate_amount(raw) if raw else Decimal("0")
     except ValidationError as exc:
-        flash(str(exc), "error")
+        msg = str(exc)
+        if is_ajax_request():
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
     row = Budget.query.filter_by(user_id=current_user.id).first()
@@ -1813,11 +1816,17 @@ def set_budget():
 
     try:
         db.session.commit()
-        flash("Budget updated." if cap > 0 else "Budget cleared.", "success")
+        msg = "Budget updated." if cap > 0 else "Budget cleared."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 200
+        flash(msg, "success")
     except Exception as e:
         db.session.rollback()
         log.error("Error saving budget: %s", e, exc_info=True)
-        flash("Error saving budget.", "error")
+        msg = "Error saving budget."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 500
+        flash(msg, "error")
 
     return redirect(url_for("finance.finance_page"))
 
@@ -1830,18 +1839,27 @@ def set_category_budget():
     not replacing it."""
     category = (request.form.get("category") or "").strip()
     if category not in TRANSACTION_CATEGORIES or category == "income":
-        flash("Choose a valid category to budget.", "error")
+        msg = "Choose a valid category to budget."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
     raw = (request.form.get("monthly_cap") or "").strip()
     try:
         cap = _validate_amount(raw) if raw else Decimal("0")
     except ValidationError as exc:
-        flash(str(exc), "error")
+        msg = str(exc)
+        if is_ajax_request():
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
     if cap <= 0:
-        flash("Enter an amount greater than zero.", "error")
+        msg = "Enter an amount greater than zero."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
     row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
@@ -1853,11 +1871,17 @@ def set_category_budget():
 
     try:
         db.session.commit()
-        flash(f"{TRANSACTION_CATEGORIES[category]['label']} budget saved.", "success")
+        msg = f"{TRANSACTION_CATEGORIES[category]['label']} budget saved."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 200
+        flash(msg, "success")
     except Exception as e:
         db.session.rollback()
         log.error("Error saving category budget: %s", e, exc_info=True)
-        flash("Error saving budget.", "error")
+        msg = "Error saving budget."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 500
+        flash(msg, "error")
 
     return redirect(url_for("finance.finance_page"))
 

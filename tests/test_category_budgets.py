@@ -74,6 +74,30 @@ def test_category_budget_requires_login(client):
     assert resp.status_code in (302, 401)
 
 
+def test_set_category_budget_ajax_returns_json_on_success(auth_client, user):
+    resp = auth_client.post(
+        "/finance/category-budget",
+        data={"category": "dining", "monthly_cap": "300"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["message"]
+    row = CategoryBudget.query.filter_by(user_id=user.id, category="dining").first()
+    assert row is not None
+    assert row.monthly_cap == Decimal("300")
+
+
+def test_set_category_budget_ajax_returns_json_error_for_invalid_category(auth_client, user):
+    resp = auth_client.post(
+        "/finance/category-budget",
+        data={"category": "income", "monthly_cap": "300"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["message"]
+    assert CategoryBudget.query.filter_by(user_id=user.id).count() == 0
+
+
 def test_finance_page_shows_over_tier_for_category(auth_client, user):
     _add_expense(user, "80", category="dining")
     auth_client.post("/finance/category-budget", data={"category": "dining", "monthly_cap": "50"})

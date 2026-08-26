@@ -289,6 +289,38 @@ function initAI() {
         };
     }
 
+    // Describes a "set_budget" proposal. Confirm submits straight to the
+    // existing /finance/budget or /finance/category-budget route (same
+    // validation as the manual Finance-page forms), picking whichever one
+    // based on whether a category was proposed.
+    function describeBudgetAction(p) {
+        const amountNum = Number.parseFloat(p.amount);
+        const category  = typeof p.category === "string" ? p.category : "";
+        const amountStr = Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00";
+
+        return {
+            title: category ? (category.charAt(0).toUpperCase() + category.slice(1) + " budget") : "Monthly budget",
+            meta: "$" + amountStr + " / month",
+            successText: "Budget saved",
+            execute: async () => {
+                const formData = new FormData();
+                formData.append("monthly_cap", Number.isFinite(amountNum) ? String(amountNum) : "0");
+                if (category) formData.append("category", category);
+                formData.append("csrf_token", CSRF);
+
+                const res = await fetch(category ? "/finance/category-budget" : "/finance/budget", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": CSRF },
+                    body: formData,
+                });
+                if (res.ok) return true;
+                const data = await res.json().catch(() => null);
+                return data?.message || "Could not save the budget.";
+            },
+        };
+    }
+
     function formatEventRange(start, end) {
         const s = new Date(start);
         if (isNaN(s.getTime())) return start || "Unknown time";
@@ -407,6 +439,7 @@ function initAI() {
         if (action.type === "add_transaction") describe = describeTransactionAction(p);
         else if (action.type === "create_note") describe = describeNoteAction(p);
         else if (action.type === "create_event") describe = describeEventAction(p);
+        else if (action.type === "set_budget") describe = describeBudgetAction(p);
         else return;
 
         buildActionCard(describe);

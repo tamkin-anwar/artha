@@ -49,6 +49,28 @@ def test_budget_requires_login(client):
     assert resp.status_code in (302, 401)
 
 
+def test_set_budget_ajax_returns_json_on_success(auth_client, user):
+    resp = auth_client.post(
+        "/finance/budget",
+        data={"monthly_cap": "2000"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["message"]
+    assert Budget.query.filter_by(user_id=user.id).first().monthly_cap == Decimal("2000")
+
+
+def test_set_budget_ajax_returns_json_error_on_invalid_amount(auth_client, user):
+    resp = auth_client.post(
+        "/finance/budget",
+        data={"monthly_cap": "not-a-number"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["message"]
+    assert Budget.query.filter_by(user_id=user.id).first() is None
+
+
 def test_finance_page_shows_warning_tier_at_90_percent(auth_client, user):
     _add_expense(user, "1800")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})

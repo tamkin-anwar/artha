@@ -1,7 +1,10 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from artha.models import Event, Note, Transaction
+from artha.models.budget import Budget
+from artha.models.category_budget import CategoryBudget
 
 
 def _fake_response(blocks, input_tokens=10, output_tokens=5):
@@ -199,3 +202,72 @@ def test_confirming_a_proposed_event_creates_it(mock_get_client, auth_client, us
     assert event is not None
     assert event.title == "Dinner with Sarah"
     assert event.recurrence == "weekly"
+
+
+@patch("artha.services.ai_service._get_client")
+def test_chat_returns_pending_budget_action_without_writing_anything(mock_get_client, auth_client):
+    mock_get_client.return_value.messages.create.return_value = _fake_response([
+        _tool_use_block("set_budget", {"amount": 400.0, "category": "dining"}),
+    ])
+
+    resp = auth_client.post(
+        "/api/ai/chat",
+        json={"message": "set my dining budget to $400", "history": []},
+    )
+
+    assert resp.status_code == 200
+    action = resp.get_json()["pending_actions"][0]
+    assert action["type"] == "set_budget"
+    assert action["params"]["amount"] == 400.0
+    assert action["params"]["category"] == "dining"
+    assert Budget.query.count() == 0
+    assert CategoryBudget.query.count() == 0
+
+
+@patch("artha.services.ai_service._get_client")
+def test_confirming_a_proposed_category_budget_creates_it(mock_get_client, auth_client, user):
+    mock_get_client.return_value.messages.create.return_value = _fake_response([
+        _tool_use_block("set_budget", {"amount": 400.0, "category": "dining"}),
+    ])
+
+    chat_resp = auth_client.post(
+        "/api/ai/chat",
+        json={"message": "set my dining budget to $400", "history": []},
+    )
+    params = chat_resp.get_json()["pending_actions"][0]["params"]
+
+    confirm_resp = auth_client.post(
+        "/finance/category-budget",
+        data={"monthly_cap": params["amount"], "category": params["category"]},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+
+    assert confirm_resp.status_code == 200
+    row = CategoryBudget.query.filter_by(user_id=user.id, category="dining").first()
+    assert row is not None
+    assert row.monthly_cap == Decimal("400.00")
+
+
+@patch("artha.services.ai_service._get_client")
+def test_confirming_a_proposed_overall_budget_creates_it(mock_get_client, auth_client, user):
+    mock_get_client.return_value.messages.create.return_value = _fake_response([
+        _tool_use_block("set_budget", {"amount": 2000.0}),
+    ])
+
+    chat_resp = auth_client.post(
+        "/api/ai/chat",
+        json={"message": "set my monthly budget to $2000", "history": []},
+    )
+    params = chat_resp.get_json()["pending_actions"][0]["params"]
+    assert "category" not in params
+
+    confirm_resp = auth_client.post(
+        "/finance/budget",
+        data={"monthly_cap": params["amount"]},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+
+    assert confirm_resp.status_code == 200
+    row = Budget.query.filter_by(user_id=user.id).first()
+    assert row is not None
+    assert row.monthly_cap == Decimal("2000.00")
