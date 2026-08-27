@@ -4,7 +4,6 @@ artha/blueprints/ai/routes.py
 HTTP layer for all AI features.
 
 Endpoints:
-  GET  /api/ai/conversation      — the current conversation's messages
   POST /api/ai/conversation/new  — start a fresh conversation (Clear button)
   POST /api/ai/chat              — single or multi-turn chat (JSON in / JSON out)
   POST /api/ai/insights          — auto-generate financial health report
@@ -16,17 +15,27 @@ CSRF:
   (CSRF_TOKEN is already injected into all templates via inject_csrf_token.)
 
 Conversation history contract:
-  The server owns history now (Conversation/Message models), not the
-  client — required for the same conversation to actually follow a user
-  across devices, which a client-held array never could. /chat's request
-  body is just {"message": "..."}; the route loads the current
-  conversation's recent messages from the DB before calling AIService,
-  and persists both sides of the turn after. "The current conversation"
-  is simply the most recently created Conversation row for that user —
-  see models/conversation.py for why that needs no separate status flag.
-  /chat/stream still accepts a client-supplied "history" the old way;
-  it's not wired into any UI (see its own docstring), so it wasn't worth
-  carrying the same rework for code nothing calls.
+  The server persists history (Conversation/Message models), but the
+  frontend never rehydrates it — every fresh page load of /ai starts
+  showing the empty state, including just navigating to another page
+  (Notes, Finance, ...) and back. That's a deliberate choice, not a
+  missing feature: this isn't a general-purpose chatbot people file
+  conversations away in, and a page that always starts fresh is simpler
+  than one that sometimes drags in a stale exchange from an earlier visit.
+
+  What the DB persistence is actually for: _get_or_create_conversation()
+  keeps appending to the same conversation as long as it's been active
+  within _CONVERSATION_IDLE_MINUTES, so the model still has real
+  short-term memory for a quick back-and-forth (including a brief detour
+  to another tab and back) — it just isn't shown on screen. Go quiet for
+  longer than that and the next message starts a genuinely fresh
+  conversation, with no old context carried in either visibly or to the
+  model. /chat's request body is just {"message": "..."}; the route loads
+  the current conversation's recent messages from the DB before calling
+  AIService, and persists both sides of the turn after. /chat/stream
+  still accepts a client-supplied "history" the old way; it's not wired
+  into any UI (see its own docstring), so it wasn't worth carrying the
+  same rework for code nothing calls.
 
 Error shape:
   All errors return JSON: { "error": "<human-readable message>" }
@@ -36,6 +45,7 @@ Error shape:
 
 import json
 import logging
+from datetime import datetime, timedelta
 
 from flask import Response, jsonify, render_template, request, stream_with_context
 from flask_login import current_user, login_required
@@ -46,6 +56,13 @@ from ...services.ai_service import AIService
 from . import ai_bp
 
 log = logging.getLogger(__name__)
+
+# How long a conversation can go quiet before the next message starts a
+# fresh one instead of continuing it. Long enough that a quick detour to
+# another tab and back doesn't lose the thread; short enough that coming
+# back later doesn't drag in a stale, invisible exchange the model would
+# reference but the page never shows.
+_CONVERSATION_IDLE_MINUTES = 30
 
 
 # ---------------------------------------------------------------------------
@@ -91,11 +108,36 @@ def _current_conversation() -> Conversation | None:
 
 
 def _get_or_create_conversation() -> Conversation:
+    """The conversation a new message/insights report should be appended
+    to. Starts a fresh one if there's no current conversation yet, or if
+    the current one's last message is older than _CONVERSATION_IDLE_MINUTES
+    — see module docstring for why that's the actual memory boundary now,
+    not "did the user navigate away and come back"."""
     conversation = _current_conversation()
+
+    if conversation is not None:
+        last_message = (
+            Message.query
+            .filter_by(conversation_id=conversation.id)
+            .order_by(Message.id.desc())
+            .first()
+        )
+        if last_message is not None:
+            # datetime.utcnow() (naive), not datetime.now(timezone.utc):
+            # DateTime columns round-trip through SQLite as naive values
+            # regardless of the aware default used at insert time, so
+            # comparing against an aware "now" would raise on subtraction.
+            # Matches the same naive-UTC convention cli.py's trash purge
+            # already uses for this exact kind of "how long ago" check.
+            idle_for = datetime.utcnow() - last_message.created_at
+            if idle_for > timedelta(minutes=_CONVERSATION_IDLE_MINUTES):
+                conversation = None
+
     if conversation is None:
         conversation = Conversation(user_id=current_user.id)
         db.session.add(conversation)
         db.session.flush()  # assigns conversation.id for the Messages below
+
     return conversation
 
 
@@ -138,27 +180,6 @@ def _save_turn(conversation: Conversation, user_message: str, reply: str) -> Non
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
-
-@ai_bp.get("/conversation")
-@login_required
-def get_conversation():
-    """
-    The current conversation's messages, oldest first — what the frontend
-    rehydrates the chat window from on every page load.
-
-    Response (JSON): { "messages": [{"role": ..., "content": ...}, ...] }
-
-    Returns an empty list rather than 404 for a user who's never chatted;
-    doesn't create a Conversation row just from a GET.
-    """
-    conversation = _current_conversation()
-    if conversation is None:
-        return jsonify({"messages": []}), 200
-
-    rows = Message.query.filter_by(conversation_id=conversation.id).order_by(Message.id.asc()).all()
-    messages = [{"role": m.role, "content": m.content} for m in rows]
-    return jsonify({"messages": messages}), 200
-
 
 @ai_bp.post("/conversation/new")
 @login_required
@@ -233,9 +254,9 @@ def insights():
         }
 
     Saved to the current conversation as an assistant-only message (no
-    preceding user turn) — an insights report you asked for is part of
-    the conversation the same way a normal reply is, so it's still there
-    when you come back.
+    preceding user turn), same as a normal reply — feeds the same
+    short-term, not-shown-on-screen memory described in the module
+    docstring if you ask a follow-up shortly after.
     """
     result = AIService.get_financial_insights(current_user)
 

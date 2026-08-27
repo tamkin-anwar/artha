@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -12,12 +13,6 @@ def _fake_response(text, input_tokens=10, output_tokens=5):
     )
 
 
-def test_get_conversation_is_empty_for_a_user_who_has_never_chatted(auth_client):
-    resp = auth_client.get("/api/ai/conversation")
-    assert resp.status_code == 200
-    assert resp.get_json() == {"messages": []}
-
-
 @patch("artha.services.ai_service._get_client")
 def test_chat_persists_both_sides_of_the_turn(mock_get_client, auth_client, user):
     mock_get_client.return_value.messages.create.return_value = _fake_response("Hi there.")
@@ -26,17 +21,10 @@ def test_chat_persists_both_sides_of_the_turn(mock_get_client, auth_client, user
     assert resp.status_code == 200
 
     conversation = Conversation.query.filter_by(user_id=user.id).one()
-    messages = conversation.messages.order_by(Message.created_at.asc()).all()
+    messages = conversation.messages.order_by(Message.id.asc()).all()
     assert [(m.role, m.content) for m in messages] == [
         ("user", "Hello"),
         ("assistant", "Hi there."),
-    ]
-
-    # And the same turn comes back from the rehydration endpoint, in order.
-    resp = auth_client.get("/api/ai/conversation")
-    assert resp.get_json()["messages"] == [
-        {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi there."},
     ]
 
 
@@ -57,6 +45,51 @@ def test_chat_sends_prior_turns_as_context_on_the_next_call(mock_get_client, aut
 
 
 @patch("artha.services.ai_service._get_client")
+def test_a_quiet_conversation_is_not_continued_after_the_idle_window(mock_get_client, auth_client, user):
+    # A real gap in use (not just a quick tab-away) should start a
+    # genuinely fresh conversation — the model shouldn't silently carry in
+    # context from a much earlier, unrelated visit.
+    mock_get_client.return_value.messages.create.return_value = _fake_response("First reply.")
+    auth_client.post("/api/ai/chat", json={"message": "First message"})
+
+    stale_conversation = Conversation.query.filter_by(user_id=user.id).one()
+    old_message = Message.query.filter_by(conversation_id=stale_conversation.id).order_by(Message.id.desc()).first()
+    old_message.created_at = datetime.utcnow() - timedelta(minutes=31)
+    db.session.commit()
+
+    mock_get_client.return_value.messages.create.return_value = _fake_response("Second reply.")
+    auth_client.post("/api/ai/chat", json={"message": "Second message"})
+
+    second_call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
+    # Just the new message — no stale context carried in from the old conversation.
+    assert second_call_kwargs["messages"] == [{"role": "user", "content": "Second message"}]
+
+    assert Conversation.query.filter_by(user_id=user.id).count() == 2
+
+
+@patch("artha.services.ai_service._get_client")
+def test_a_recently_active_conversation_is_continued_within_the_idle_window(mock_get_client, auth_client, user):
+    mock_get_client.return_value.messages.create.return_value = _fake_response("First reply.")
+    auth_client.post("/api/ai/chat", json={"message": "First message"})
+
+    stale_conversation = Conversation.query.filter_by(user_id=user.id).one()
+    old_message = Message.query.filter_by(conversation_id=stale_conversation.id).order_by(Message.id.desc()).first()
+    old_message.created_at = datetime.utcnow() - timedelta(minutes=5)
+    db.session.commit()
+
+    mock_get_client.return_value.messages.create.return_value = _fake_response("Second reply.")
+    auth_client.post("/api/ai/chat", json={"message": "Second message"})
+
+    second_call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
+    assert second_call_kwargs["messages"] == [
+        {"role": "user", "content": "First message"},
+        {"role": "assistant", "content": "First reply."},
+        {"role": "user", "content": "Second message"},
+    ]
+    assert Conversation.query.filter_by(user_id=user.id).count() == 1
+
+
+@patch("artha.services.ai_service._get_client")
 def test_clearing_starts_a_fresh_conversation_without_deleting_the_old_one(mock_get_client, auth_client, user):
     mock_get_client.return_value.messages.create.return_value = _fake_response("Old reply.")
     auth_client.post("/api/ai/chat", json={"message": "Old message"})
@@ -65,8 +98,10 @@ def test_clearing_starts_a_fresh_conversation_without_deleting_the_old_one(mock_
     assert resp.status_code == 201
 
     # The new current conversation has nothing in it yet.
-    resp = auth_client.get("/api/ai/conversation")
-    assert resp.get_json() == {"messages": []}
+    mock_get_client.return_value.messages.create.return_value = _fake_response("New reply.")
+    auth_client.post("/api/ai/chat", json={"message": "New message"})
+    call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
+    assert call_kwargs["messages"] == [{"role": "user", "content": "New message"}]
 
     # But the old conversation and its messages are still in the DB.
     assert Conversation.query.filter_by(user_id=user.id).count() == 2

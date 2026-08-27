@@ -23,9 +23,11 @@ function initAI() {
             </div>
         </div>`;
 
-    // History now lives on the server (Conversation/Message) so the same
-    // conversation follows the account across devices — this file only
-    // renders it and sends new messages, it doesn't track a copy anymore.
+    // History lives on the server now (Conversation/Message), not a copy
+    // in this file — but this page never asks for it back. Every fresh
+    // page load starts empty, on purpose: see artha/blueprints/ai/routes.py's
+    // module docstring for why that's simpler than trying to restore a
+    // conversation you might not even remember starting.
     let busy = false;
 
     // -----------------------------------------------------------------------
@@ -557,32 +559,6 @@ function initAI() {
     }
 
     // -----------------------------------------------------------------------
-    // Rehydrate on load
-    // -----------------------------------------------------------------------
-
-    // Replays whatever's already in the current conversation, so leaving
-    // the page and coming back (even on a different device) shows it
-    // exactly as it was, instead of the empty state every time. Pending
-    // action cards from a past reply aren't restored — only the text is
-    // (see models/message.py for why).
-    async function rehydrateConversation() {
-        try {
-            const res = await fetch("/api/ai/conversation", { credentials: "same-origin" });
-            if (!res.ok) return;
-            const data = await res.json();
-            const messages = data.messages || [];
-            if (!messages.length) return;
-
-            for (const m of messages) {
-                appendMessage(m.role === "user" ? "user" : "assistant", m.content);
-            }
-        } catch {
-            // Worst case the conversation just doesn't rehydrate this load —
-            // sending a new message still works either way.
-        }
-    }
-
-    // -----------------------------------------------------------------------
     // Clear conversation
     // -----------------------------------------------------------------------
 
@@ -657,6 +633,4 @@ function initAI() {
             sendMessage("What's my savings rate?");
         }
     });
-
-    rehydrateConversation();
 }
