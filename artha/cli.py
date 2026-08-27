@@ -19,7 +19,7 @@ schedule until someone noticed and updated it there too.
 """
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import click
 from flask import current_app
@@ -174,3 +174,32 @@ def register_cli(app):
             db.session.delete(note)
         db.session.commit()
         click.echo(f"Purged {count} note(s) from trash.")
+
+    @app.cli.command("purge-expired-accounts")
+    def purge_expired_accounts():
+        """Permanently delete accounts whose requested deletion passed
+        ACCOUNT_DELETION_GRACE_DAYS ago.
+
+        Not strictly required: blueprints.auth.routes._purge_expired_deleted_accounts
+        already does this lazily on every /login page load, so the 30-day
+        promise holds on its own site-wide traffic alone. This command
+        exists for the same reason purge-expired-trash does — a daily
+        Render Cron Job (`flask purge-expired-accounts`) gives a hard
+        guarantee that doesn't depend on someone else happening to load
+        /login. Unlike purge-expired-trash's bulk delete, this deletes
+        User rows one at a time (db.session.delete(), not Query.delete())
+        so every ORM-level cascade="all, delete-orphan" relationship on
+        User actually fires — a bulk delete would bypass all of them and
+        orphan a user's transactions, notes, events, and everything else.
+        """
+        from .blueprints.auth.routes import ACCOUNT_DELETION_GRACE_DAYS
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=ACCOUNT_DELETION_GRACE_DAYS)
+        expired = User.query.filter(
+            User.deleted_at.isnot(None), User.deleted_at < cutoff
+        ).all()
+        count = len(expired)
+        for user in expired:
+            db.session.delete(user)
+        db.session.commit()
+        click.echo(f"Purged {count} account(s) past their deletion grace period.")

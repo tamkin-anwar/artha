@@ -25,7 +25,15 @@ class Feedback(db.Model):
     status = db.Column(db.String(10), nullable=False, default="new", index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    author = db.relationship("User", backref=db.backref("feedback_items", lazy="dynamic"))
+    # cascade set explicitly: without it, deleting a User leaves Feedback
+    # rows behind with a dangling user_id, the same orphan-on-delete gap
+    # already found and fixed for Event/PushSubscription/Scenario/Budget/
+    # CategoryBudget. A bug report disappearing with the account that
+    # filed it is a deliberate choice (consistent with every other piece
+    # of user data), not a side effect.
+    author = db.relationship(
+        "User", backref=db.backref("feedback_items", lazy="dynamic", cascade="all, delete-orphan")
+    )
 
     def __repr__(self) -> str:
         return f"<Feedback {self.id} {self.category} {self.status}>"

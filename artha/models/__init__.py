@@ -12,8 +12,9 @@ from .category_budget import CategoryBudget
 from .push_subscription import PushSubscription
 from .conversation import Conversation
 from .message import Message
+from .recovery_code import RecoveryCode
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
-    "Conversation", "Message",
+    "Conversation", "Message", "RecoveryCode",
 ]

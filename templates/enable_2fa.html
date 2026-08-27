@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% set hide_app_shell = true %}
+{% block title %}Set up two-factor authentication{% endblock %}
+
+{% block content %}
+<main class="min-h-screen flex items-center justify-center px-4 py-14 auth-bg" role="main">
+    <div class="w-full max-w-md">
+
+        <div class="flex items-center justify-center gap-2 mb-6">
+            <span class="inline-flex items-center justify-center w-[66px] h-[66px]">
+                <img
+                    src="{{ url_for('static', filename='icons/artha-logo.png') }}"
+                    alt="Artha logo"
+                    class="w-full h-full object-contain drop-shadow-md"
+                    loading="eager"
+                />
+            </span>
+
+            <div style="font-family:'Fraunces',serif; font-size:2.25rem; font-weight:600; color:var(--gold);">
+                Artha
+            </div>
+        </div>
+
+        <section class="rounded-2xl p-8 shadow-xl auth-card" aria-label="Set up two-factor authentication">
+            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold text-white mb-2">
+                Set up two-factor authentication
+            </h1>
+            <p class="text-center text-sm text-slate-300 mb-6">
+                Scan this with an authenticator app: Google Authenticator, Authy, or 1Password all work.
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <script type="module">
+                        import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+                        document.addEventListener('DOMContentLoaded', function () {
+                            {% for category, message in messages %}
+                                showToast({{ message|tojson }}, {{ category|tojson }});
+                            {% endfor %}
+                        });
+                    </script>
+                {% endif %}
+            {% endwith %}
+
+            <div style="background:#fff; border-radius:12px; padding:16px; margin:0 auto 18px; max-width:220px;">
+                {{ qr_svg | safe }}
+            </div>
+
+            <p class="text-center text-xs text-slate-400 mb-1">Can't scan it? Enter this key manually:</p>
+            <p class="text-center mb-6" style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--gold); word-break:break-all;">
+                {{ secret }}
+            </p>
+
+            <form method="POST" action="{{ url_for('auth.enable_2fa') }}" class="space-y-4" role="form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label for="code" class="sr-only">Confirmation code</label>
+                <input
+                    id="code"
+                    name="code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    placeholder="Enter the 6-digit code to confirm"
+                    class="w-full px-4 py-3 rounded-lg auth-input text-center"
+                    style="font-family:'JetBrains Mono',monospace; letter-spacing:0.2em;"
+                    maxlength="6"
+                    required
+                    autofocus
+                />
+
+                <button type="submit" class="w-full py-3 rounded-lg font-semibold auth-button">
+                    Confirm and enable
+                </button>
+            </form>
+
+            <p class="text-center text-sm mt-5 text-slate-300">
+                <a href="{{ url_for('auth.edit_profile') }}" class="auth-link">
+                    Cancel
+                </a>
+            </p>
+        </section>
+    </div>
+</main>
+{% endblock %}

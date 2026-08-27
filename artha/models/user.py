@@ -65,6 +65,36 @@ class User(UserMixin, db.Model):
     scenarios = db.relationship(
         "Scenario", backref="user", lazy="dynamic", cascade="all, delete-orphan"
     )
+    # Same gap as the three above, found while designing account deletion
+    # (2026-08-27): Budget and CategoryBudget had a user_id FK but no
+    # relationship declared anywhere, so they orphaned on delete same as
+    # Event/PushSubscription/Scenario did. Budget is one row per user (see
+    # its own docstring) hence uselist=False — user.budget is a single
+    # object or None, not a query. Feedback already declares its own
+    # relationship from the child side (see feedback.py) with cascade
+    # added there instead of duplicated here.
+    budget = db.relationship(
+        "Budget", backref="user", uselist=False, cascade="all, delete-orphan"
+    )
+    category_budgets = db.relationship(
+        "CategoryBudget", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    # Cleared and re-set the moment a login succeeds against this account —
+    # see login() in blueprints/auth/routes.py. Logging back in during the
+    # 30-day window is the undo for a deletion request, so nothing else
+    # needs to touch this column.
+    deleted_at = db.Column(db.DateTime, nullable=True)
+
+    # Both null/False until a user actually enables 2FA (blueprints/auth
+    # /routes.py, /account/2fa/enable) — this is the same table the
+    # password hash lives in, a mild risk a dedicated writeup on this
+    # exact feature calls out explicitly; not worth a separate table at
+    # this app's scale, but noted rather than overlooked.
+    otp_secret = db.Column(db.String(32), nullable=True)
+    otp_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    recovery_codes = db.relationship(
+        "RecoveryCode", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

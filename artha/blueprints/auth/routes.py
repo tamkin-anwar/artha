@@ -1,14 +1,19 @@
 import logging
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from zoneinfo import available_timezones
 
-from flask import current_app, render_template, redirect, url_for, request, flash, jsonify
+import pyotp
+import qrcode
+import qrcode.image.svg
+from flask import current_app, render_template, redirect, url_for, request, flash, jsonify, session
 from flask_login import login_user, logout_user, login_required, current_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from ...extensions import db, limiter
-from ...models import User
-from ...services.email_service import send_password_reset_email
+from ...models import User, RecoveryCode
+from ...services.email_service import send_password_reset_email, send_account_deletion_email
 from . import auth_bp
 
 log = logging.getLogger(__name__)
@@ -16,6 +21,12 @@ log = logging.getLogger(__name__)
 # 1 hour — long enough that a reset email arriving a few minutes late still
 # works, short enough that a stale, unused link isn't a lingering risk.
 RESET_TOKEN_MAX_AGE = 3600
+
+# Matches Notes' own TRASH_RETENTION_DAYS precedent exactly (same 30-day
+# shape GDPR Article 17 and most real products converge on) rather than
+# inventing a different number for a conceptually identical "give people a
+# window to change their mind" mechanism.
+ACCOUNT_DELETION_GRACE_DAYS = 30
 
 
 def _reset_serializer() -> URLSafeTimedSerializer:
@@ -41,6 +52,71 @@ def _verify_reset_token(token: str) -> User | None:
     if user is None or user.password_hash[-16:] != data.get("pwf"):
         return None
     return user
+
+
+def _totp_qr_svg(uri: str) -> str:
+    """Renders a TOTP provisioning URI as inline SVG markup — no separate
+    /qrcode image route to expose or add no-cache headers to (the usual
+    pattern for this, e.g. Miguel Grinberg's reference Flask/2FA writeup),
+    since the markup is embedded directly in the setup page's own response
+    instead of being a second, independently-fetchable resource. Uses
+    qrcode's SVG image factory specifically to avoid also needing Pillow
+    at runtime — this app's only other use of qrcode-adjacent imagery
+    (pdfplumber's PDF parsing) already pulls Pillow in lazily and
+    separately; this path doesn't need to."""
+    img = qrcode.make(uri, image_factory=qrcode.image.svg.SvgPathImage)
+    from io import BytesIO
+    buf = BytesIO()
+    img.save(buf)
+    return buf.getvalue().decode("utf-8")
+
+
+def _verify_totp_or_recovery_code(user: User, code: str) -> bool:
+    """True if `code` is either a currently-valid TOTP value for `user`, or
+    an unused recovery code (marked consumed on match). Tried in that
+    order since a real login overwhelmingly presents a TOTP code, and
+    checking it first avoids hashing every unused recovery code against a
+    code that was never going to match one anyway."""
+    code = (code or "").strip()
+    if not code:
+        return False
+
+    if user.otp_secret and pyotp.TOTP(user.otp_secret).verify(code, valid_window=1):
+        return True
+
+    for rc in user.recovery_codes.filter_by(used_at=None).all():
+        if check_password_hash(rc.code_hash, code):
+            rc.used_at = datetime.now(timezone.utc)
+            db.session.commit()
+            return True
+    return False
+
+
+def _purge_expired_deleted_accounts() -> None:
+    """Global sweep for accounts whose ACCOUNT_DELETION_GRACE_DAYS window
+    has passed — not scoped to current_user the way Notes'
+    _purge_expired_trash is scoped to whoever's browsing, since an account
+    that's actually expired by definition isn't the one loading this page.
+    Called opportunistically from login()'s GET path (the one page every
+    user, deleted or not, eventually hits), mirrored by the
+    purge-expired-accounts CLI command below for a deliberate daily
+    Render Cron Job.
+
+    Deliberately deletes User rows one at a time via db.session.delete(),
+    never Query.delete() — a bulk delete executes as one SQL statement and
+    bypasses every ORM-level cascade="all, delete-orphan" relationship
+    entirely, which would silently orphan a user's transactions, notes,
+    events, and everything else cascade-deletion is supposed to catch.
+    Notes' own bulk delete is safe only because Note has no children to
+    cascade; User now has many."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=ACCOUNT_DELETION_GRACE_DAYS)
+    expired = User.query.filter(
+        User.deleted_at.isnot(None), User.deleted_at < cutoff
+    ).all()
+    for user in expired:
+        db.session.delete(user)
+    if expired:
+        db.session.commit()
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
@@ -109,15 +185,71 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            # Logging back in during the grace window *is* the undo for a
+            # pending account deletion — no separate token/link needed.
+            # Checked before the 2FA branch below so a deletion-pending
+            # account with 2FA enabled still has to clear both, not skip
+            # one because of the other.
+            deletion_canceled = user.deleted_at is not None
+            if deletion_canceled:
+                user.deleted_at = None
+
+            if user.otp_enabled:
+                db.session.commit()
+                session["pending_2fa_user_id"] = user.id
+                session["pending_2fa_remember"] = remember
+                if deletion_canceled:
+                    flash("Account deletion canceled. Finish signing in below.", "success")
+                return redirect(url_for("auth.verify_2fa"))
+
             user.last_login_at = datetime.now(timezone.utc)
             db.session.commit()
             login_user(user, remember=remember)
+            if deletion_canceled:
+                flash("Account deletion canceled. Welcome back.", "success")
             return redirect(url_for("dashboard.index"))
 
         flash("Invalid credentials", "error")
         return redirect(url_for("auth.login"))
 
+    # Cheap, opportunistic global sweep — see _purge_expired_deleted_accounts's
+    # own docstring for why this page specifically, and why it can't just
+    # mirror Notes' current-user-scoped lazy sweep.
+    _purge_expired_deleted_accounts()
     return render_template("login.html")
+
+
+@auth_bp.route("/login/verify-2fa", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
+def verify_2fa():
+    """The second login step for an account with 2FA enabled. Reached only
+    via login()'s own redirect (never directly, and never skippable) —
+    pending_2fa_user_id in the session is what proves the password step
+    already passed."""
+    user_id = session.get("pending_2fa_user_id")
+    if user_id is None:
+        return redirect(url_for("auth.login"))
+
+    user = db.session.get(User, user_id)
+    if user is None or not user.otp_enabled:
+        session.pop("pending_2fa_user_id", None)
+        session.pop("pending_2fa_remember", None)
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "")
+        if _verify_totp_or_recovery_code(user, code):
+            remember = session.pop("pending_2fa_remember", False)
+            session.pop("pending_2fa_user_id", None)
+            user.last_login_at = datetime.now(timezone.utc)
+            db.session.commit()
+            login_user(user, remember=remember)
+            return redirect(url_for("dashboard.index"))
+
+        flash("Invalid code.", "error")
+        return redirect(url_for("auth.verify_2fa"))
+
+    return render_template("verify_2fa.html")
 
 
 @auth_bp.route("/forgot_password", methods=["GET", "POST"])
@@ -228,7 +360,7 @@ def edit_profile():
             flash("Error updating profile.", "error")
             return redirect(url_for("auth.edit_profile"))
 
-    return render_template("edit_profile.html")
+    return render_template("edit_profile.html", account_deletion_grace_days=ACCOUNT_DELETION_GRACE_DAYS)
 
 
 @auth_bp.route("/change_password", methods=["GET", "POST"])
@@ -271,6 +403,110 @@ def change_password():
             return redirect(url_for("auth.change_password"))
 
     return render_template("change_password.html")
+
+
+@auth_bp.route("/account/2fa/enable", methods=["GET", "POST"])
+@login_required
+def enable_2fa():
+    if current_user.otp_enabled:
+        flash("Two-factor authentication is already enabled.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    if request.method == "POST":
+        secret = session.get("pending_otp_secret")
+        code = request.form.get("code", "")
+
+        if not secret:
+            flash("That setup session expired. Start again.", "error")
+            return redirect(url_for("auth.enable_2fa"))
+
+        if not pyotp.TOTP(secret).verify(code, valid_window=1):
+            flash("That code didn't match. Check the time on your phone and try again.", "error")
+            return redirect(url_for("auth.enable_2fa"))
+
+        current_user.otp_secret = secret
+        current_user.otp_enabled = True
+        session.pop("pending_otp_secret", None)
+
+        # Generated once, here, and never again — losing the phone this
+        # was scanned with is exactly what these are for. Shown once on
+        # the confirmation page below; only the hash is ever persisted.
+        raw_codes = [secrets.token_hex(4) for _ in range(10)]
+        for raw in raw_codes:
+            db.session.add(RecoveryCode(user_id=current_user.id, code_hash=generate_password_hash(raw)))
+        db.session.commit()
+
+        return render_template("recovery_codes.html", codes=raw_codes)
+
+    # A fresh secret per GET only if one isn't already pending — reloading
+    # the setup page (or coming back to it) shouldn't invalidate a QR code
+    # someone already scanned but hasn't confirmed yet.
+    secret = session.get("pending_otp_secret")
+    if not secret:
+        secret = pyotp.random_base32()
+        session["pending_otp_secret"] = secret
+
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=current_user.email or current_user.username, issuer_name="Artha"
+    )
+    return render_template("enable_2fa.html", secret=secret, qr_svg=_totp_qr_svg(uri))
+
+
+@auth_bp.route("/account/2fa/disable", methods=["POST"])
+@login_required
+def disable_2fa():
+    password = request.form.get("password", "")
+    code = request.form.get("code", "")
+
+    if not current_user.check_password(password):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    if not _verify_totp_or_recovery_code(current_user, code):
+        flash("Invalid code.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    current_user.otp_enabled = False
+    current_user.otp_secret = None
+    RecoveryCode.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    flash("Two-factor authentication disabled.", "success")
+    return redirect(url_for("auth.edit_profile"))
+
+
+@auth_bp.route("/account/delete", methods=["POST"])
+@login_required
+@limiter.limit("5 per minute", methods=["POST"])
+def delete_account():
+    password = request.form.get("password", "")
+    confirm_username = request.form.get("confirm_username", "").strip()
+
+    if not current_user.check_password(password):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    if confirm_username != current_user.username:
+        flash("Type your username exactly to confirm.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    if current_user.is_admin and User.query.filter_by(is_admin=True).count() == 1:
+        flash("You're the only admin. This account can't be deleted while that's true.", "error")
+        return redirect(url_for("auth.edit_profile"))
+
+    purge_date = datetime.now(timezone.utc) + timedelta(days=ACCOUNT_DELETION_GRACE_DAYS)
+    purge_date_str = purge_date.strftime("%B %d, %Y")
+
+    current_user.deleted_at = datetime.now(timezone.utc)
+    db.session.commit()
+    send_account_deletion_email(current_user, purge_date_str)
+
+    logout_user()
+    flash(
+        f"Your account is scheduled for deletion on {purge_date_str}. "
+        "Log back in before then to cancel.",
+        "success",
+    )
+    return redirect(url_for("auth.login"))
 
 
 # Matches CURRENCY_PRESETS in static/js/currency.js — the closed set of

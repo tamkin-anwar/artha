@@ -16,8 +16,10 @@ MarkupSafe==3.0.2
 packaging==26.1
 pdfplumber==0.11.10
 psycopg2-binary==2.9.10
+pyotp==2.10.0
 pywebpush==2.3.0
 python-dotenv==1.1.1
+qrcode==8.2
 requests==2.34.2
 resend==2.40.2
 SQLAlchemy==2.0.36

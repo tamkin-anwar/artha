@@ -80,3 +80,55 @@ def send_password_reset_email(user, reset_url: str) -> bool:
     except Exception as e:
         log.error("Error sending password reset email to %s: %s", user.email, e, exc_info=True)
         return False
+
+
+def send_account_deletion_email(user, purge_date_str: str) -> bool:
+    """Sends the account-deletion confirmation to `user` — purely
+    informational, not a clickable action link. Logging back in during the
+    30-day window is what actually cancels the deletion (see login() in
+    blueprints/auth/routes.py), so there's no token to embed here, unlike
+    the password-reset email above."""
+    api_key = current_app.config.get("RESEND_API_KEY")
+    from_address = current_app.config.get("RESET_EMAIL_FROM")
+
+    if not api_key or not from_address:
+        log.warning(
+            "RESEND_API_KEY/RESET_EMAIL_FROM not configured — skipping account deletion email to %s",
+            user.email,
+        )
+        return False
+
+    import resend
+
+    resend.api_key = api_key
+
+    first_name = user.first_name or user.username
+    text_body = (
+        f"Hi {first_name},\n\n"
+        "Your Artha account is scheduled for deletion. Your data will be "
+        f"permanently removed on {purge_date_str}.\n\n"
+        "If this wasn't you, or you changed your mind, just log back in "
+        "before then and the deletion will be canceled automatically. "
+        "After that date, this can't be undone."
+    )
+    html_body = f"""
+        <p>Hi {first_name},</p>
+        <p>Your Artha account is scheduled for deletion. Your data will be
+        permanently removed on <strong>{purge_date_str}</strong>.</p>
+        <p>If this wasn't you, or you changed your mind, just log back in
+        before then and the deletion will be canceled automatically.
+        After that date, this can't be undone.</p>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": from_address,
+            "to": user.email,
+            "subject": "Your Artha account is scheduled for deletion",
+            "html": html_body,
+            "text": text_body,
+        })
+        return True
+    except Exception as e:
+        log.error("Error sending account deletion email to %s: %s", user.email, e, exc_info=True)
+        return False
