@@ -131,7 +131,7 @@ function initCompareModal() {
 
         body.innerHTML = `
             <button type="button" id="compare-back-btn" style="background:none; border:none; color:var(--gold); font-size:13px; cursor:pointer; padding:0; margin-bottom:14px;">&larr; Change selection</button>
-            <div style="display:flex; gap:12px; overflow-x:auto; padding-bottom:4px;">${cols}</div>
+            <div class="scrollbar-hidden" style="display:flex; gap:12px; overflow-x:auto; padding-bottom:4px;">${cols}</div>
         `;
         document.getElementById("compare-back-btn").addEventListener("click", renderPicker);
     }

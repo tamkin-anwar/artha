@@ -18,7 +18,7 @@
 <div class="eyebrow" style="margin-bottom:8px;">FINANCE</div>
 <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
 
-<div class="fp-toptabs" role="tablist" aria-label="Finance views">
+<div class="fp-toptabs scrollbar-hidden" role="tablist" aria-label="Finance views">
     <button type="button" id="fp-tab-transactions" class="fp-toptab fp-toptab-active" data-fp-tab="transactions" role="tab" aria-selected="true" aria-controls="fp-pane-transactions" tabindex="0">Transactions</button>
     <button type="button" id="fp-tab-spending" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false" aria-controls="fp-pane-spending" tabindex="-1">Spending</button>
     <button type="button" id="fp-tab-income" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false" aria-controls="fp-pane-income" tabindex="-1">Income</button>
@@ -33,7 +33,7 @@
         &larr;
     </button>
 
-    <div id="month-tab-row" class="month-tab-row" style="display:flex; gap:6px; overflow-x:auto; flex:1;">
+    <div id="month-tab-row" class="month-tab-row scrollbar-hidden" style="display:flex; gap:6px; overflow-x:auto; flex:1;">
         <a
             href="{{ url_for('finance.finance_page', month='all') }}"
             class="month-tab-pill {{ 'month-tab-active' if all_time }}"
@@ -395,7 +395,7 @@
     {% endif %}
     </div>
 
-    <ul id="tx-list" class="space-y-3">
+    <ul id="tx-list" class="space-y-3 scrollbar-thin">
         {% set ns = namespace(last_date=None) %}
         {% for tx in transactions %}
             {% set tx_date = tx.timestamp.strftime('%Y-%m-%d') %}
@@ -748,7 +748,7 @@
         <div id="csv-import-step-preview" class="csv-import-step-preview" hidden>
             <p id="csv-import-summary" class="csv-import-summary"></p>
             <div class="csv-import-table-wrap">
-                <div class="csv-import-table-scroll">
+                <div class="csv-import-table-scroll scrollbar-thin">
                     <table class="csv-import-table">
                         <thead>
                             <tr>
