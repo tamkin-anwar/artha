@@ -182,10 +182,12 @@ function initAI() {
         const type         = p.type === "income" ? "income" : "expense";
         const category     = typeof p.category === "string" ? p.category : "";
         const date         = typeof p.date === "string" && p.date ? p.date : null;
+        const isRecurring  = p.is_recurring === true;
 
         const metaParts = [type === "income" ? "Income" : "Expense"];
         if (category) metaParts.push(category.charAt(0).toUpperCase() + category.slice(1));
         metaParts.push(date || "Today");
+        if (isRecurring) metaParts.push("Recurring monthly");
 
         return {
             title: description,
@@ -202,6 +204,10 @@ function initAI() {
                 formData.append("type", type);
                 if (category) formData.append("category", category);
                 if (date) formData.append("date", date);
+                // Matches the manual form's checkbox exactly (name=is_recurring,
+                // value=1) — the route only checks truthiness, but same value
+                // keeps this one obviously equivalent to a human filling it in.
+                if (isRecurring) formData.append("is_recurring", "1");
                 formData.append("csrf_token", CSRF);
 
                 const res = await fetch("/add_transaction", {

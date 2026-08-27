@@ -90,6 +90,33 @@ def test_chat_returns_pending_action_for_tool_use_without_writing_anything(mock_
 
 
 @patch("artha.services.ai_service._get_client")
+def test_chat_can_propose_a_recurring_transaction(mock_get_client, auth_client):
+    mock_get_client.return_value.messages.create.return_value = _fake_response([
+        _text_block("Here's that rent payment to confirm."),
+        _tool_use_block("add_transaction", {
+            "description": "Rent",
+            "amount": 1500.0,
+            "type": "expense",
+            "category": "housing",
+            "is_recurring": True,
+        }),
+    ])
+
+    resp = auth_client.post(
+        "/api/ai/chat",
+        json={"message": "log my $1500 rent, it's due every month"},
+    )
+
+    assert resp.status_code == 200
+    action = resp.get_json()["pending_actions"][0]
+    assert action["params"]["is_recurring"] is True
+
+    # Still just a proposal — nothing written until the frontend's Confirm
+    # click submits to the real /add_transaction route.
+    assert Transaction.query.count() == 0
+
+
+@patch("artha.services.ai_service._get_client")
 def test_confirming_a_proposed_action_creates_the_transaction(mock_get_client, auth_client, user):
     mock_get_client.return_value.messages.create.return_value = _fake_response([
         _tool_use_block("add_transaction", {

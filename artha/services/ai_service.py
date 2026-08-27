@@ -102,6 +102,13 @@ details, so keep your own reply to one short sentence instead of repeating \
 them.
 - For create_event, always give start and end as real YYYY-MM-DDTHH:MM:SS \
 values worked out from today's date, never a vague phrase like "tomorrow."
+- You have no calculator tool: any math beyond simple arithmetic (a loan \
+payment, compound interest, amortization) is you reasoning it out, not a \
+verified computation. For that kind of math, show the formula and the \
+numbers you plugged in rather than stating just the final result, so a \
+wrong number is easy to catch instead of invisible. For anything the \
+user wants to be sure is exactly right, point them to the Calculator \
+page, which computes it directly instead of reasoning about it.
 """
 
 # ---------------------------------------------------------------------------
@@ -129,6 +136,16 @@ _TOOLS = [
                 "type": {"type": "string", "enum": ["income", "expense"]},
                 "category": {"type": "string", "enum": list(TRANSACTION_CATEGORIES.keys())},
                 "date": {"type": "string", "description": "YYYY-MM-DD. Omit for today."},
+                "is_recurring": {
+                    "type": "boolean",
+                    "description": (
+                        "True only if the user describes this as an ongoing bill or "
+                        "income that repeats every month (rent, a subscription, a "
+                        "paycheck) — never for a one-off purchase. Recurs monthly on "
+                        "this transaction's own day of month; there's no other "
+                        "cadence to choose. Omit (defaults to false) if unsure."
+                    ),
+                },
             },
             "required": ["description", "amount", "type"],
         },
