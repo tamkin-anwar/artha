@@ -1,8 +1,9 @@
 import calendar
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from html.parser import HTMLParser
+from zoneinfo import ZoneInfo
 
 from flask import request
 
@@ -12,6 +13,35 @@ def is_ajax_request() -> bool:
     xrw = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     accept_json = "application/json" in (request.headers.get("Accept") or "")
     return xrw or accept_json or request.path.startswith("/api/")
+
+
+def user_now(user) -> datetime:
+    """The current moment in this user's own timezone, not the server's.
+
+    User.timezone is an IANA name detected client-side (static/js/settings.js
+    posts it once per session); it's None until that first report comes in,
+    or for a user who's never loaded an authenticated page since this
+    shipped. Either way this falls back to UTC — the same clock every
+    "today" in this app used before user timezones existed — so nothing
+    regresses for a user we don't know yet, it just stops being silently
+    wrong for one we do: without this, the server's own UTC "today" rolls
+    over hours before or after the user's actual midnight, so anything
+    computed from a bare `datetime.now(timezone.utc)` — the AI Assistant
+    resolving "tomorrow," a bill judged "due today" — can land a whole day
+    off for anyone not physically in UTC."""
+    tz_name = getattr(user, "timezone", None)
+    if tz_name:
+        try:
+            return datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            pass
+    return datetime.now(timezone.utc)
+
+
+def user_today(user) -> date:
+    """The user's own local calendar date. See user_now() for why this
+    isn't just `date.today()`."""
+    return user_now(user).date()
 
 
 def next_due_date(template_tx, from_date: date) -> date | None:

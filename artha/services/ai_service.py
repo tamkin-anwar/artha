@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Generator
 
@@ -39,6 +38,7 @@ from ..blueprints.dashboard.routes import EVENT_COLORS, EVENT_RECURRENCES
 from ..blueprints.finance.routes import TRANSACTION_CATEGORIES
 from ..blueprints.notes.routes import NOTE_COLORS
 from ..models import Transaction
+from ..utils import user_now
 
 log = logging.getLogger(__name__)
 
@@ -262,7 +262,10 @@ def _assemble_financial_context(user) -> str:
 
 def _build_system_prompt(user) -> str:
     first_name        = user.first_name or user.username
-    today             = datetime.now(timezone.utc).strftime("%A, %B %d, %Y")
+    # The user's own local date, not the server's — otherwise "tomorrow"
+    # can resolve a full day off for anyone not physically in UTC (see
+    # utils.user_now()'s docstring for exactly how that drifts).
+    today             = user_now(user).strftime("%A, %B %d, %Y")
     financial_context = _assemble_financial_context(user)
     return _SYSTEM_PROMPT_TEMPLATE.format(
         first_name=first_name,

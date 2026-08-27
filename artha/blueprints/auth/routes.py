@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from zoneinfo import available_timezones
 
 from flask import current_app, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
@@ -292,3 +293,30 @@ def set_currency():
     current_user.preferred_currency = code
     db.session.commit()
     return jsonify({"message": "Currency updated"}), 200
+
+
+# Computed once at import — every IANA zone name Python's own tzdata knows,
+# the same set Intl.DateTimeFormat().resolvedOptions().timeZone in the
+# browser will always resolve to one of.
+_VALID_TIMEZONES = available_timezones()
+
+
+@auth_bp.route("/set_timezone", methods=["POST"])
+@login_required
+def set_timezone():
+    """Records the browser's own IANA timezone against the account, so the
+    server can compute "today" the same way the user's own clock does —
+    see utils.user_now() for what silently goes wrong without this.
+    static/js/settings.js posts here once per page load whenever the
+    browser's detected zone doesn't match what's already stored, so this
+    stays current if the user travels; a device just visiting doesn't
+    change anything the user would notice, so no confirmation UI needed."""
+    data = request.get_json(silent=True) or {}
+    tz_name = (data.get("timezone") or "").strip()
+    if tz_name not in _VALID_TIMEZONES:
+        return jsonify({"message": "Invalid timezone"}), 400
+
+    if current_user.timezone != tz_name:
+        current_user.timezone = tz_name
+        db.session.commit()
+    return jsonify({"message": "Timezone updated"}), 200

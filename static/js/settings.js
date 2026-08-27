@@ -52,6 +52,33 @@ function bindCurrencySelect(selectEl) {
     });
 }
 
+// Detected fact about where the browser is, not a user preference — so
+// unlike currency there's nothing to ask the user or show a control for.
+// Runs once per page load; the server only writes on an actual change
+// (set_timezone), so a device that already matches costs one cheap no-op
+// request, not a write every time.
+function syncTimezoneToAccount() {
+    let detected;
+    try {
+        detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+        return;
+    }
+    if (!detected) return;
+
+    const known = document.body.dataset.userTimezone || "";
+    if (detected === known) return;
+
+    fetch("/set_timezone", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ timezone: detected }),
+    })
+        .then(() => { document.body.dataset.userTimezone = detected; })
+        .catch(() => {});
+}
+
 function initCurrency() {
     // A brand-new device (nothing saved in this browser yet) inherits
     // whatever the account last saved, instead of defaulting to USD — an
@@ -73,6 +100,11 @@ function initCurrency() {
     bindCurrencySelect(document.getElementById("currency-select-mobile"));
 
     applyCurrencyEverywhere();
+
+    // Only present in the settings dropdown for a logged-in user — piggybacks
+    // on that as the "are we authenticated" check, same as everything else
+    // in this function already implicitly does.
+    if (document.getElementById("currency-select")) syncTimezoneToAccount();
 }
 
 if (document.readyState === "loading") {

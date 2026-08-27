@@ -2,9 +2,11 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from artha.extensions import db
 from artha.models import Event, Note, Transaction
 from artha.models.budget import Budget
 from artha.models.category_budget import CategoryBudget
+from artha.utils import user_now
 
 
 def _fake_response(blocks, input_tokens=10, output_tokens=5):
@@ -37,6 +39,25 @@ def test_chat_plain_reply_has_no_pending_actions(mock_get_client, auth_client):
     data = resp.get_json()
     assert data["reply"] == "You spent $42 on dining last month."
     assert data["pending_actions"] == []
+
+
+@patch("artha.services.ai_service._get_client")
+def test_system_prompt_uses_the_users_own_timezone_not_utc(mock_get_client, auth_client, user):
+    # A user in a timezone far from UTC (Los Angeles) still gets "today"
+    # resolved against their own clock, not the server's — otherwise
+    # "tomorrow" can land a whole day off. See utils.user_now().
+    user.timezone = "America/Los_Angeles"
+    db.session.commit()
+
+    mock_get_client.return_value.messages.create.return_value = _fake_response(
+        [_text_block("Sure.")]
+    )
+
+    auth_client.post("/api/ai/chat", json={"message": "What day is it?", "history": []})
+
+    system_prompt = mock_get_client.return_value.messages.create.call_args.kwargs["system"]
+    expected_today = user_now(user).strftime("%A, %B %d, %Y")
+    assert expected_today in system_prompt
 
 
 @patch("artha.services.ai_service._get_client")

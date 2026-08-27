@@ -33,6 +33,16 @@ class User(UserMixin, db.Model):
     # then has nothing to inherit and falls back to USD, same as today.
     preferred_currency = db.Column(db.String(3), nullable=True)
 
+    # An IANA zone name (e.g. "America/Los_Angeles"), detected client-side
+    # from the browser and silently kept in sync (static/js/settings.js).
+    # None until the first authenticated page load reports one. Every
+    # "today" the server computes for this user (the AI Assistant's system
+    # prompt, "due today" reminders) should go through utils.user_today()/
+    # user_now() rather than a bare UTC clock, or it silently drifts a day
+    # for anyone not physically in UTC once the two dates roll over at
+    # different real-world moments.
+    timezone = db.Column(db.String(64), nullable=True)
+
     notes = db.relationship(
         "Note", backref="author", lazy="dynamic", cascade="all, delete-orphan"
     )
