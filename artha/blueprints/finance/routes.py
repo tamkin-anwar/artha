@@ -66,34 +66,49 @@ _CATEGORY_KEYWORDS = {
         "electric", "electricity", "water bill", "gas bill", "internet",
         "comcast", "xfinity", "verizon", "at&t", "att bill", "t-mobile",
         "utility", "utilities",
+        # Non-US telecoms/utilities — a keyword list can never keep pace
+        "vodafone", "grameenphone", "robi", "airtel", "banglalink",
+        "jio", "bsnl", "bt group", "sky broadband", "telstra", "optus",
     ],
     "groceries": [
         "grocery", "groceries", "supermarket", "walmart", "target",
         "safeway", "kroger", "whole foods", "trader joe", "costco",
         "aldi", "publix",
+        "tesco", "sainsbury", "asda", "morrisons", "waitrose", "lidl",
+        "carrefour", "big bazaar", "shwapno", "meena bazar", "agora",
+        "coles", "woolworths",
     ],
     "dining": [
         "restaurant", "starbucks", "coffee", "mcdonald", "chipotle",
         "doordash", "uber eats", "ubereats", "grubhub", "pizza", "cafe",
         "diner", "bar & grill",
+        "foodpanda", "zomato", "swiggy", "deliveroo", "kfc", "burger king",
+        "domino",
     ],
     "transport": [
         "uber", "lyft", "gas station", "shell", "chevron", "exxon",
         "parking", "transit", "metro", "dmv", "auto insurance",
+        "grab", "careem", "ola", "bolt", "pathao", "bp fuel", "petrol",
+        "toll", "railway", "train ticket",
     ],
     "subscriptions": [
         "netflix", "spotify", "hulu", "disney+", "disney plus",
         "amazon prime", "subscription", "apple.com/bill", "icloud",
         "youtube premium", "playstation plus", "xbox game pass",
     ],
-    "shopping": ["amazon", "ebay", "best buy", "clothing", "mall", "ikea"],
+    "shopping": [
+        "amazon", "ebay", "best buy", "clothing", "mall", "ikea",
+        "aliexpress", "shein", "daraz", "flipkart", "myntra", "asos",
+    ],
     "health": [
         "pharmacy", "cvs", "walgreens", "doctor", "clinic", "hospital",
         "dental", "vision", "urgent care",
+        "boots pharmacy", "apollo pharmacy", "lazz pharma",
     ],
     "entertainment": [
         "movie", "cinema", "amc", "concert", "ticketmaster", "steam",
         "playstation store", "xbox live",
+        "star cineplex", "bookmyshow", "cineworld",
     ],
     "debt": ["loan payment", "credit card payment", "student loan"],
 }
@@ -1751,6 +1766,47 @@ def _parse_statement_pdf_with_ai(pages_text: list[str]) -> tuple[list[dict], lis
     return rows, warnings
 
 
+# Bounds one categorize_transactions call — a very large statement's tail
+# just keeps whatever _guess_category already gave it (None, most likely)
+# rather than this growing into an unbounded-cost call. Comfortably above
+# what any normal single statement's uncategorized count looks like in
+# practice; there mainly for the pathological case.
+_CATEGORIZE_MAX_ITEMS = 200
+
+
+def _fill_uncategorized_via_ai(rows: list[dict]) -> None:
+    """
+    Mutates `rows` in place, filling in `category` for expense rows
+    _guess_category's keyword match left as None — called from
+    import_preview() for both CSV and PDF imports alike (the same gap
+    hits either source: a keyword list is necessarily finite, and some
+    statements never print a merchant name at all). Degrades silently on
+    any failure, same as _parse_statement_pdf_with_ai — an import that
+    can't reach the AI service still works, just with whatever
+    _guess_category already found.
+    """
+    uncategorized_idx = [
+        i for i, r in enumerate(rows)
+        if r.get("type") == "expense" and r.get("category") is None
+    ][:_CATEGORIZE_MAX_ITEMS]
+    if not uncategorized_idx:
+        return
+
+    from ...services.ai_service import AIService  # local: see the matching
+    # comment in _parse_statement_pdf_with_ai — same circular-import reason.
+
+    result = AIService.categorize_transactions(
+        [rows[i]["description"] for i in uncategorized_idx]
+    )
+    if "error" in result:
+        log.warning("AI import categorization failed: %s", result["error"])
+        return
+
+    for i, category in zip(uncategorized_idx, result.get("categories", [])):
+        if category is not None:
+            rows[i]["category"] = category
+
+
 def _csv_formula_safe(value: str) -> str:
     """
     Neutralizes CSV/formula injection: a description starting with
@@ -1863,6 +1919,8 @@ def import_preview():
         rows, warnings = _parse_statement_csv(file.stream)
     if not rows:
         return jsonify({"message": warnings[0] if warnings else "No transactions found in file."}), 400
+
+    _fill_uncategorized_via_ai(rows)
 
     # Flag rows that look like they're already in Artha (same date,
     # description, amount, and type) so the preview can leave them

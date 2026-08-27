@@ -346,21 +346,34 @@ def test_preview_falls_back_to_ai_when_date_and_amount_are_on_separate_lines(aut
         "5 0.00 12,064.37 70,316.99",
     ])
 
+    def route_by_tool(**kwargs):
+        # import_preview() also runs the categorization fallback afterward
+        # (the extracted expense row has no keyword-matched category) — one
+        # mock has to answer both the extraction and the categorization
+        # calls correctly, routed by which tool was actually requested.
+        tool_name = kwargs["tool_choice"]["name"]
+        if tool_name == "record_transactions":
+            return _fake_tool_response([
+                {
+                    "date": "2026-07-27",
+                    "description": "VISA-POS purchase with card no: 463767******8450",
+                    "amount": 2640.00,
+                    "type": "expense",
+                },
+                {
+                    "date": "2026-07-29",
+                    "description": "NPSB-Ibft Remittance from TRUST BANK LTD.",
+                    "amount": 12064.37,
+                    "type": "income",
+                },
+            ])
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="tool_use", name="assign_categories", input={"categories": [None]})],
+            usage=SimpleNamespace(input_tokens=20, output_tokens=5),
+        )
+
     with patch("artha.services.ai_service._get_client") as mock_get_client:
-        mock_get_client.return_value.messages.create.return_value = _fake_tool_response([
-            {
-                "date": "2026-07-27",
-                "description": "VISA-POS purchase with card no: 463767******8450",
-                "amount": 2640.00,
-                "type": "expense",
-            },
-            {
-                "date": "2026-07-29",
-                "description": "NPSB-Ibft Remittance from TRUST BANK LTD.",
-                "amount": 12064.37,
-                "type": "income",
-            },
-        ])
+        mock_get_client.return_value.messages.create.side_effect = route_by_tool
         resp = _upload_pdf(auth_client, pdf)
 
     assert resp.status_code == 200
@@ -376,11 +389,13 @@ def test_preview_falls_back_to_ai_when_date_and_amount_are_on_separate_lines(aut
     assert income["date"] == "2026-07-29"
     assert income["amount"] == 12064.37
 
-    # The forced-tool call actually happened with this document's text —
-    # not a coincidental empty-input no-op.
-    call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
-    assert call_kwargs["tool_choice"] == {"type": "tool", "name": "record_transactions"}
-    assert "VISA-POS" in call_kwargs["messages"][0]["content"]
+    # The forced extraction tool call actually happened with this document's
+    # text — not a coincidental empty-input no-op.
+    extraction_call = next(
+        c for c in mock_get_client.return_value.messages.create.call_args_list
+        if c.kwargs["tool_choice"]["name"] == "record_transactions"
+    )
+    assert "VISA-POS" in extraction_call.kwargs["messages"][0]["content"]
 
 
 def test_preview_does_not_call_ai_when_regex_parsing_already_succeeds(auth_client):
@@ -504,3 +519,105 @@ def test_preview_recovers_a_page_break_corrupted_row_via_ai_without_duplicating(
 
     visa_rows = [r for r in rows if "VISA" in r["description"]]
     assert len(visa_rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# AI-assisted categorization — for whatever _guess_category's fixed keyword
+# list didn't recognize (a real merchant name it doesn't happen to include,
+# or a statement whose card-purchase lines never print a merchant name at
+# all, common outside the US).
+# ---------------------------------------------------------------------------
+
+def test_preview_categorizes_transactions_the_keyword_list_misses(auth_client):
+    """Regex parsing succeeds on its own (no date/amount recovery needed)
+    — this is purely about filling in the category column afterward for
+    a merchant _CATEGORY_KEYWORDS was never going to recognize."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 GRAMEENPHONE LTD BILL PAY -650.00",
+        "06/06/2026 SHWAPNO SUPERSHOP LTD -3200.00",
+    ])
+
+    def route_by_tool(**kwargs):
+        assert kwargs["tool_choice"]["name"] == "assign_categories"
+        descriptions = kwargs["messages"][0]["content"]
+        n = descriptions.count("\n") + 1
+        assert n == 2
+        return SimpleNamespace(
+            content=[SimpleNamespace(
+                type="tool_use", name="assign_categories",
+                input={"categories": ["utilities", "groceries"]},
+            )],
+            usage=SimpleNamespace(input_tokens=30, output_tokens=8),
+        )
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.side_effect = route_by_tool
+        resp = _upload_pdf(auth_client, pdf)
+
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert len(rows) == 2
+
+    phone = next(r for r in rows if "GRAMEENPHONE" in r["description"])
+    assert phone["category"] == "utilities"
+
+    grocer = next(r for r in rows if "SHWAPNO" in r["description"])
+    assert grocer["category"] == "groceries"
+
+
+def test_preview_leaves_a_transaction_uncategorized_when_ai_has_no_signal(auth_client):
+    """The AI is explicitly told to return null rather than guess when a
+    description gives no real signal (a masked-card purchase with no
+    merchant name) — that null must survive as an uncategorized row, not
+    get coerced into some category by the merge logic."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 PT P29 VISA-POS Pos(Others) purchase card 46**8450 -640.00",
+    ])
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(
+                type="tool_use", name="assign_categories", input={"categories": [None]}
+            )],
+            usage=SimpleNamespace(input_tokens=20, output_tokens=5),
+        )
+        resp = _upload_pdf(auth_client, pdf)
+
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["category"] is None
+
+
+def test_preview_does_not_categorize_income_rows_or_already_matched_ones(auth_client):
+    """Income never goes through keyword/AI categorization at all — its
+    category is always literally "income" — and a row the free keyword
+    pass already matched shouldn't be re-sent to the AI call."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 SALARY PAYMENT DIRECT DEPOSIT 2500.00",
+        "06/06/2026 WALMART GROCERY STORE -84.20",
+    ])
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        resp = _upload_pdf(auth_client, pdf)
+        mock_get_client.assert_not_called()
+
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    salary = next(r for r in rows if r["type"] == "income")
+    assert salary["category"] == "income"
+    walmart = next(r for r in rows if r["type"] == "expense")
+    assert walmart["category"] == "groceries"
+
+
+def test_preview_categorization_degrades_silently_without_api_key(auth_client, monkeypatch):
+    """Same contract as the extraction fallback: no configured API key
+    means the row stays uncategorized (exactly today's behavior), not an
+    error surfaced to the user."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr("artha.services.ai_service._client", None)
+    pdf = _make_statement_pdf([
+        "05/06/2026 PT P29 VISA-POS Pos(Others) purchase card 46**8450 -640.00",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows[0]["category"] is None

@@ -77,6 +77,16 @@ _STATEMENT_MAX_TOKENS = 8192
 # pathological upload rather than to ever actually bind in practice.
 _STATEMENT_MAX_CHARS = 60_000
 
+# categorize_transactions: one short category string per description, so
+# nowhere near _STATEMENT_MAX_TOKENS worth of output is ever needed even
+# for a large batch.
+_CATEGORIZE_MAX_TOKENS = 4096
+# The caller (import_preview) also caps how many uncategorized rows it
+# ever sends in one call — see _CATEGORIZE_MAX_ITEMS in
+# blueprints/finance/routes.py — this is just this module's own
+# independent ceiling on output size, kept in the same spot as the
+# statement-extraction constants above for one place to look.
+
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are Artha AI, an intelligent personal assistant built into Artha, \
 a personal finance and productivity OS.
@@ -295,6 +305,67 @@ _STATEMENT_TOOL = {
             },
         },
         "required": ["transactions"],
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Statement-import categorization — fills in the category for whatever an
+# import left uncategorized. The fixed keyword list in
+# blueprints/finance/routes.py (_CATEGORY_KEYWORDS) is free, instant, and
+# handles the common-merchant case fine, but it's necessarily a finite list
+# of (mostly US) brand names — it can't keep pace with every merchant in
+# every country, and it has genuinely nothing to work with on a statement
+# that never prints a merchant name at all (a masked-card "POS purchase"
+# line, common outside the US). An LLM's broader pattern recognition picks
+# up real merchant names the fixed list doesn't happen to include, and can
+# at least recognize a transaction's *type* (a bank transfer, a fee) even
+# with no merchant name — see the "null" instruction below for what it's
+# told to do when even that isn't inferable, which is the common case for
+# a masked-card line and is treated as a correct outcome, not a shortfall.
+# ---------------------------------------------------------------------------
+
+_CATEGORIZE_SYSTEM_PROMPT = """\
+You assign a spending category to each bank/card transaction description \
+below, from this fixed list only: {categories}
+
+Rules:
+- One category per transaction, or null if you genuinely can't tell.
+- Recognize real merchants/services by name even in abbreviated, \
+non-English, or unfamiliar-brand form — a keyword list can't keep up \
+with every merchant worldwide, which is why you're being asked instead.
+- A transaction can carry real signal even with no merchant name: a bank \
+transfer, remittance, wire, or account-to-account move; a bank fee, \
+service charge, or annual card fee; an ATM withdrawal. None of these map \
+to a specific spending category (you have no idea what an ATM \
+withdrawal was actually spent on), so use "other" for them — that's a \
+real classification, distinct from null.
+- Use null only when the description gives no signal at all beyond \
+"a card was used somewhere" — a masked-card POS/purchase line with no \
+merchant name anywhere in it (common on statements that mask the \
+merchant for privacy) is the standard case. Guessing a specific category \
+from zero information would make someone's spending breakdown wrong, \
+which is worse than leaving it blank for them to fill in themselves.
+"""
+
+_CATEGORIZE_TOOL = {
+    "name": "assign_categories",
+    "description": (
+        "Assign a category to each transaction, in the same order given, "
+        "or null for any with no real signal to go on."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "categories": {
+                "type": "array",
+                "description": "Same length and order as the input list.",
+                "items": {
+                    "type": ["string", "null"],
+                    "enum": [key for key in TRANSACTION_CATEGORIES if key != "income"] + [None],
+                },
+            },
+        },
+        "required": ["categories"],
     },
 }
 
@@ -856,3 +927,80 @@ class AIService:
         transactions = tool_call.input.get("transactions", []) if tool_call else []
 
         return {"transactions": transactions, "truncated": truncated}
+
+    # ------------------------------------------------------------------
+    # Import categorization  (fallback for whatever _guess_category missed)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def categorize_transactions(cls, descriptions: list[str]) -> dict:
+        """
+        Best-effort category for each description, called from
+        blueprints/finance/routes.py's import_preview() only for the rows
+        _guess_category's keyword match already left uncategorized — same
+        "don't cost anything for the common case" shape as
+        extract_pdf_transactions.
+
+        Args:
+            descriptions: Transaction descriptions, in order. Capped by
+                          the caller (see _CATEGORIZE_MAX_ITEMS) — a very
+                          long statement's tail just stays uncategorized
+                          rather than this call growing unbounded.
+
+        Returns:
+            {"categories": [str | None, ...]} — same length and order as
+            `descriptions`; None where the model had nothing real to go
+            on (see _CATEGORIZE_SYSTEM_PROMPT for what that means).
+            {"error": str}
+        """
+        if not descriptions:
+            return {"categories": []}
+
+        try:
+            client = _get_client()
+        except RuntimeError as exc:
+            log.error("AI client init failed for categorization: %s", exc)
+            return {"error": str(exc)}
+
+        category_list = ", ".join(k for k in TRANSACTION_CATEGORIES if k != "income")
+        numbered = "\n".join(f"{i + 1}. {d}" for i, d in enumerate(descriptions))
+
+        try:
+            resp = client.messages.create(
+                model=_get_model(),
+                max_tokens=_CATEGORIZE_MAX_TOKENS,
+                system=_CATEGORIZE_SYSTEM_PROMPT.format(categories=category_list),
+                messages=[{"role": "user", "content": numbered}],
+                tools=[_CATEGORIZE_TOOL],
+                tool_choice={"type": "tool", "name": "assign_categories"},
+            )
+        except APITimeoutError:
+            log.warning("Anthropic timeout during import categorization.")
+            return {"error": "Request timed out. Please try again."}
+        except APIConnectionError as exc:
+            log.error("Anthropic connection error during categorization: %s", exc)
+            return {"error": "Could not reach AI service. Check connectivity."}
+        except APIStatusError as exc:
+            log.error("Anthropic status error %s during categorization: %s", exc.status_code, exc.message)
+            return {"error": f"AI service error ({exc.status_code}). Please try again."}
+        except Exception as exc:
+            log.exception("Unexpected error during import categorization: %s", exc)
+            return {"error": "An unexpected error occurred."}
+
+        tool_call = next(
+            (block for block in resp.content if block.type == "tool_use"), None
+        )
+        categories = tool_call.input.get("categories", []) if tool_call else []
+
+        # A misaligned-length response can't be trusted to line up with the
+        # input by position — safer to return nothing than risk silently
+        # mislabeling one transaction as another's category.
+        if len(categories) != len(descriptions):
+            log.warning(
+                "Categorization response length mismatch: got %d for %d descriptions.",
+                len(categories), len(descriptions),
+            )
+            return {"categories": [None] * len(descriptions)}
+
+        valid = set(TRANSACTION_CATEGORIES) - {"income"}
+        return {"categories": [c if c in valid else None for c in categories]}
