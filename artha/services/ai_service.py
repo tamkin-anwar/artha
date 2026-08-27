@@ -9,18 +9,23 @@ Architecture decisions:
   - Class-based with classmethods: no instantiation boilerplate at call sites.
   - HTTP-agnostic: all public methods return plain dicts, never Flask responses.
     Routes own HTTP concerns; this service owns AI concerns.
-  - Client-owned history: conversation history is sent by the client on every
-    request and sanitized here. Server stays stateless — no session bloat.
+  - Server-owned history: Conversation/Message (artha/models/) hold it now,
+    not the client — needed for the same conversation to follow a user
+    across devices. This module's own chat()/stream_chat() are unaware of
+    that: the route layer (blueprints/ai/routes.py) loads history from the
+    DB and passes it in the same {"role", "content"} shape a client used to.
   - Financial context injected into system prompt on every request. Simple and
     correct for a personal app at this data scale; no RAG needed yet.
   - Streaming via generator: routes own SSE framing; service yields text chunks.
 
 Model choice:
-  claude-sonnet-5 — Artha now has real users depending on the assistant
-  actually being right, not just fast: Haiku answered instantly but missed
-  budget/note/event/scenario context it was never given and reasoned
-  shallowly on real financial questions. Override with ARTHA_AI_MODEL env
-  var (e.g. back to a Haiku tier) if cost ever needs to trump quality.
+  claude-haiku-4-5 — cost over quality, deliberately: at Artha's current
+  usage a much pricier model isn't worth it. The context it gets was
+  widened regardless (budgets, upcoming notes/events, active scenarios,
+  not just a raw transaction list) since a smaller model benefits more,
+  not less, from being handed the right data instead of having to infer
+  it. Override with ARTHA_AI_MODEL env var (e.g. up to claude-sonnet-5) if
+  quality ever needs to trump cost.
 """
 
 from __future__ import annotations
@@ -53,7 +58,7 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MODEL = "claude-sonnet-5"
+_DEFAULT_MODEL = "claude-haiku-4-5"
 _MAX_TOKENS = 2048
 _MAX_CONTEXT_TRANSACTIONS = 50  # caps context window size and cost
 _MAX_HISTORY_TURNS = 20         # max conversation turns accepted from client
