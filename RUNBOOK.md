@@ -74,20 +74,29 @@ Set in Render's dashboard (Environment tab), never committed here.
 
 ## Continuity risk
 
-The single biggest risk to Artha staying online isn't the code, it's
-account access. As of this writing, one person holds every credential this
-depends on: the GitHub account, the Render dashboard, the domain, and the
-API billing accounts (Anthropic, Resend). None of that is written down
-here on purpose — a public repo is not the place for who has access to
-what — but the risk itself is worth stating plainly: if that one person is
-unreachable, nobody else can currently deploy a fix, rotate a leaked key,
-or even see why something broke.
+Code access and account access are two separate risks here, and they don't
+carry the same weight.
 
-The fix isn't code. It's making sure a trusted person has emergency access
-to the credentials (most password managers, including 1Password, have a
-built-in way to do this), and that at least one other person has been
-added with real access to the GitHub repo and the Render dashboard, before
-either is actually needed.
+**Repo access is intentionally solo.** Only one person has push access to
+this codebase, by choice — nobody else can commit or push a code change,
+ever, not just in an emergency. That's a real limitation (nothing gets
+fixed at the code level if that person is unreachable), but it's not the
+risk that determines whether Artha stays *online*: a hosted app keeps
+serving its already-deployed code with zero GitHub access at all.
+
+**Account access is what actually keeps the app alive**, and that's the
+real single point of failure: one person currently holds every credential
+this depends on — Render, the domain, and the API billing accounts
+(Anthropic, Resend). None of that is written down here on purpose (a
+public repo is not the place for who has access to what), but the risk is
+worth stating plainly: if that person is unreachable, nobody else can
+currently renew the domain, respond to a Render outage, or rotate a leaked
+API key, regardless of who can see the code.
+
+The fix for that part isn't code, and doesn't require adding anyone to
+GitHub — it's making sure a trusted person has emergency access to those
+specific credentials (most password managers, including 1Password, have a
+built-in way to do this) before it's actually needed.
 
 ## Running locally / running tests
 
