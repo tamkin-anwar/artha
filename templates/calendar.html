@@ -255,6 +255,15 @@
 <div style="display:grid; grid-template-columns:65% 35%; gap:24px; align-items:start;" class="cal-layout">
     <!-- LEFT: month grid -->
     <div class="glass-card cal-month-card" style="padding:20px; background:var(--bg-surface);">
+        <!-- What the dots mean — nothing else on the grid explains this,
+             and unlike an event's own color (a free personal choice, no
+             fixed meaning to label), income/expense/recurring are a fixed
+             mapping worth spelling out once. -->
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; font-size:11px; color:var(--text-muted); flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--emerald);"></span>Income</span>
+            <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--red);"></span>Expense</span>
+            <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--gold);"></span>Recurring bill due</span>
+        </div>
         <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-bottom:4px;">
             {% for name in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
                 <div style="text-align:center; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); padding:6px 0;">
@@ -267,7 +276,7 @@
                 <button type="button"
                     class="cal-day-cell {{ 'cal-day-weekend' if d.is_weekend }} {{ 'cal-day-out-of-month' if not d.in_month }} {{ 'cal-day-is-today' if d.is_today }} {{ 'cal-day-selected' if d.date == today_value }}"
                     data-date="{{ d.date }}"
-                    aria-label="{{ d.date }}{{ ' · notes due' if d.note_dot }}"
+                    aria-label="{{ d.date }}{{ ', today' if d.is_today }}{{ ', has income' if d.income_dot }}{{ ', has expenses' if d.expense_dot }}{{ ', recurring bill due' if d.recurring_dot }}{{ ', notes due' if d.note_dot }}{{ ', has events' if d.event_colors }}"
                 >
                     <span class="cal-day-number">{{ d.day }}</span>
                     {% if d.note_dot %}<i data-lucide="file-text" class="cal-note-marker" aria-hidden="true"></i>{% endif %}

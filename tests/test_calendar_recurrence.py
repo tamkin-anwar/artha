@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
+from unittest.mock import patch
 
 from artha.extensions import db
 from artha.models import Event, EventException
@@ -12,6 +13,24 @@ def _make_anchor(user, start, end, cadence="weekly", title="Team sync", color="s
     db.session.add(event)
     db.session.commit()
     return event
+
+
+def test_visiting_dashboard_generates_todays_recurring_occurrence(app, auth_client, user):
+    # A daily series starting well before the mocked "today" below, so
+    # today's occurrence is real but nothing has materialized it yet —
+    # nobody in this test has visited /calendar, which is the only other
+    # place that call happens.
+    anchor = _make_anchor(user, datetime(2026, 1, 1, 9, 0), datetime(2026, 1, 1, 9, 30), cadence="daily")
+
+    with patch("artha.blueprints.dashboard.routes.user_today", return_value=date(2026, 3, 15)):
+        resp = auth_client.get("/")
+
+    assert resp.status_code == 200
+    assert "Team sync" in resp.get_data(as_text=True)
+    generated = Event.query.filter_by(
+        recurrence_parent_id=anchor.id, start=datetime(2026, 3, 15, 9, 0)
+    ).first()
+    assert generated is not None
 
 
 def test_viewing_calendar_generates_occurrences(app, auth_client, user):

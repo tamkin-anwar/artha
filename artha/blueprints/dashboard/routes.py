@@ -12,7 +12,7 @@ from ...extensions import db
 from ...models import Note, Transaction, Event, EventException
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates
-from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date
+from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today
 from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
 
@@ -60,7 +60,15 @@ def index():
         return redirect(url_for("dashboard.index"))
 
     uid = current_user.id
-    today = date.today()
+    # The user's own local date, not the server's — otherwise the "Today"
+    # panel, greeting summary, and renewals-this-week can all disagree
+    # with the viewer's own calendar near a timezone boundary. Calendar
+    # solves the same problem client-side (see calendar.html's own
+    # localTodayString() correction); here the account already has
+    # User.timezone on hand (auto-detected the same way, see
+    # static/js/settings.js), so there's no need to duplicate that
+    # redirect-and-patch dance — this is just right on first render.
+    today = user_today(current_user)
 
     notes = (
         Note.query.filter_by(user_id=uid, archived=False)
@@ -116,6 +124,15 @@ def index():
     # ------------------------------------------------------------------
     today_start_dt = datetime(today.year, today.month, today.day)
     today_end_dt = today_start_dt + timedelta(days=1)
+
+    # A recurring event series only gets real Event rows for whatever
+    # window someone actually queries (see _generate_recurring_events's
+    # own docstring) — normally that's /calendar loading. Without this,
+    # today's occurrence of a recurring event silently wouldn't show up
+    # here if nobody's opened Calendar recently enough to have already
+    # materialized it, even though it's a real, correct occurrence that
+    # would show up there.
+    _generate_recurring_events(uid, today_start_dt, today_end_dt)
 
     def _fmt_time(dt: datetime) -> str:
         hour12 = dt.hour % 12 or 12
@@ -337,7 +354,12 @@ def _generate_recurring_events(uid: int, window_start: datetime, window_end: dat
 @login_required
 def calendar_page():
     uid = current_user.id
-    today = date.today()
+    # Right on first render for the common case (an account with a known
+    # timezone) instead of relying only on this page's own client-side
+    # correction (see calendar.html's localTodayString() logic) to patch
+    # it after the fact — that JS correction stays as a safety net for a
+    # brand-new account that hasn't reported a timezone yet.
+    today = user_today(current_user)
 
     month_param = (request.args.get("month") or "").strip()
     month_was_explicit = bool(month_param)
