@@ -52,6 +52,19 @@ class User(UserMixin, db.Model):
     conversations = db.relationship(
         "Conversation", backref="user", lazy="dynamic", cascade="all, delete-orphan"
     )
+    # Same "delete the user, delete their rows" contract as notes/transactions
+    # above. These are ORM-only cascades (the FK constraints have no DB-level
+    # ON DELETE CASCADE, matching every other relationship here) — without
+    # them, deleting a User orphans these rows with a dangling user_id.
+    events = db.relationship(
+        "Event", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    push_subscriptions = db.relationship(
+        "PushSubscription", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    scenarios = db.relationship(
+        "Scenario", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
