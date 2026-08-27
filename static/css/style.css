@@ -614,6 +614,18 @@ select.field-input {
     scroll-behavior: smooth;
 }
 
+/* Below the row's own sm: breakpoint (templates/partials/transaction_row.html),
+   each row stacks its fields into 5-6 full-width lines instead of one — 3-5x
+   taller than the desktop row the 360px cap was sized for. Left as-is, that
+   leaves barely one row visible before the list's own internal scrollbar
+   kicks in, forcing a cramped nested-scroll box on exactly the screens where
+   scrolling a small inner region under a thumb is most fiddly. */
+@media (max-width: 640px) {
+    #tx-list {
+        max-height: 70vh;
+    }
+}
+
 /* #tx-list and #ai-messages get their scroll thumb from the shared
    .scrollbar-thin class (see near .scrollbar-hidden above) instead of
    their own copy of the same five rules — added directly on those
@@ -876,6 +888,15 @@ select.field-input {
     }
     .dashboard-row {
         grid-template-columns: 1fr !important;
+    }
+    /* The scenario title is a fixed 28px regardless of viewport (it's set
+       inline, not in a responsive type scale), so single-line truncate — a
+       no-op on the wide desktop panel it was written for — clips even an
+       ordinary-length title on a phone-width card. Let it wrap instead. */
+    .scenario-detail-title.truncate {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
     }
 }
 

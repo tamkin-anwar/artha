@@ -13,6 +13,11 @@ const GROUPS = [
 
 function initGlobalSearch() {
     const trigger = document.getElementById("global-search-trigger");
+    // The desktop trigger sits inline in the top bar's centered search box,
+    // which is hidden below the sm: breakpoint to make room there — so
+    // mobile gets its own icon-only trigger next to the hamburger instead
+    // of losing search entirely below 640px.
+    const mobileTrigger = document.getElementById("global-search-trigger-mobile");
     const backdrop = document.getElementById("global-search-backdrop");
     const input = document.getElementById("global-search-input");
     const resultsEl = document.getElementById("global-search-results");
@@ -138,10 +143,14 @@ function initGlobalSearch() {
         backdrop.hidden = true;
         clearTimeout(debounceTimer);
         currentRequestId++;
-        trigger.focus();
+        // Whichever trigger is actually visible at the current viewport
+        // width gets focus back — the other one is display:none and a
+        // focus() call on it is a silent no-op, so this can't double-focus.
+        (mobileTrigger && mobileTrigger.offsetParent ? mobileTrigger : trigger).focus();
     }
 
     trigger.addEventListener("click", openSearch);
+    if (mobileTrigger) mobileTrigger.addEventListener("click", openSearch);
 
     backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) closeSearch();

@@ -585,6 +585,17 @@
         .csv-import-backdrop { padding:10px; }
         .csv-import-modal { padding:16px 14px; border-radius:16px; }
     }
+    /* Below the form's own sm: breakpoint, #tx-date-input shares a 2-column
+       row with the Amount field instead of getting its own full row, which
+       leaves it under 130px wide. At that width, 14px padding on both sides
+       plus the browser's native calendar-icon glyph doesn't leave room for
+       "MM/DD/YYYY" without clipping the last digit under the icon.
+       !important: the element also carries an inline padding:10px 14px —
+       the highest specificity short of !important, so a plain override
+       here would never win regardless of selector. */
+    @media (max-width:640px) {
+        #tx-date-input { padding-left:8px !important; padding-right:6px !important; }
+    }
     .csv-import-table { width:100%; border-collapse:collapse; font-size:12.5px; }
     .csv-import-table th {
         position:sticky; top:0; background:var(--bg-surface); text-align:left;
@@ -1601,10 +1612,14 @@ if (scrollRow && leftBtn && rightBtn) {
     rightBtn.addEventListener("click", function () {
         scrollRow.scrollBy({ left: 220, behavior: "smooth" });
     });
-    // Land on the selected tab, not the start of the row.
+    // Land on the selected tab, not the start of the row. "nearest" (not
+    // "center") because the selected tab is usually the current month —
+    // i.e. the last one in the row — and centering an edge item against a
+    // narrow mobile viewport has nothing to center against on one side,
+    // leaving the tab itself clipped instead of just scrolled into view.
     var activeTab = scrollRow.querySelector(".month-tab-active");
     if (activeTab) {
-        activeTab.scrollIntoView({ inline: "center", block: "nearest" });
+        activeTab.scrollIntoView({ inline: "nearest", block: "nearest" });
     }
 }
 

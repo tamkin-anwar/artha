@@ -197,7 +197,8 @@
                             <i data-lucide="menu" aria-hidden="true" style="width:22px; height:22px; stroke-width:1.5;"></i>
                         </button>
 
-                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap;" id="top-date"></div>
+                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
+                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date-mobile" class="sm:hidden"></div>
                     </div>
 
                     <div style="width:360px; max-width:100%;" class="hidden sm:block">
@@ -212,6 +213,17 @@
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px; justify-self:end;">
+                        <div class="sm:hidden">
+                            <button
+                                type="button"
+                                id="global-search-trigger-mobile"
+                                aria-label="Search"
+                                style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;"
+                            >
+                                <i data-lucide="search" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
+                            </button>
+                        </div>
+
                         {% block topbar_action %}{% endblock %}
 
                         <div style="position:relative;" class="hidden md:block">
@@ -439,8 +451,21 @@
         </div>
 
         <script>
+            // The full weekday+month spelling ("Thursday, August 27, 2026")
+            // has nowhere near enough room next to the hamburger button and
+            // the mobile search icon on a phone-width top bar — abbreviate
+            // there. Two elements toggled by the same hidden/sm:block CSS
+            // classes used everywhere else in this top bar, rather than a
+            // window.innerWidth check made once at load time: a real phone
+            // rotates and a real browser window resizes, and CSS media
+            // queries track that continuously where a one-shot JS read
+            // would just go stale (min-width:0 + ellipsis above is still a
+            // safety net for whatever doesn't fit either format).
             const d = new Date();
-            document.getElementById('top-date').textContent = d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+            document.getElementById('top-date').textContent =
+                d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+            document.getElementById('top-date-mobile').textContent =
+                d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
         </script>
 
         <script type="module">
