@@ -426,6 +426,14 @@ select.field-input {
    transaction list, search results, a day's hour-by-hour schedule),
    where knowing roughly how much more there is, and where you are in
    it, is worth a visible-but-quiet scroll thumb.
+
+   Chrome/Safari/Edge get the pixel-precise ::-webkit-scrollbar rules
+   below unconditionally. The standard scrollbar-width/scrollbar-color
+   properties are Firefox's only way to draw a thin scrollbar (it has
+   no ::-webkit-scrollbar support), so they're scoped to browsers that
+   lack ::-webkit-scrollbar — otherwise Chrome's own "thin" native
+   rendering wins over our custom thumb once scrollbar-width is set,
+   turning the intended 8px rgba thumb into a generic ~13px system one.
    ------------------------------------------------------------------- */
 .scrollbar-hidden {
   scrollbar-width: none;
@@ -434,10 +442,6 @@ select.field-input {
   display: none;
 }
 
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(139, 149, 168, 0.35) transparent;
-}
 .scrollbar-thin::-webkit-scrollbar { width: 8px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb {
@@ -446,6 +450,12 @@ select.field-input {
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 149, 168, 0.55);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 149, 168, 0.35) transparent;
+  }
 }
 
 /* Recurring transaction toggle pill */
@@ -614,15 +624,17 @@ select.field-input {
    not something to browse, so it should recede even further. Still the
    same underlying idea (a quiet thumb, no visible track), just turned
    down a notch, which is why it isn't just .scrollbar-thin again. */
-.app-sidebar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(139, 149, 168, 0.25) transparent;
-}
 .app-sidebar::-webkit-scrollbar { width: 6px; }
 .app-sidebar::-webkit-scrollbar-track { background: transparent; }
 .app-sidebar::-webkit-scrollbar-thumb {
     background: rgba(139, 149, 168, 0.25);
     border-radius: 9999px;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .app-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 149, 168, 0.25) transparent;
+  }
 }
 
 /* Transaction row polish */
