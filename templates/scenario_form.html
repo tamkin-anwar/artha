@@ -2,15 +2,17 @@
 {% block title %}{{ "Edit Scenario" if mode == "edit" else "New Scenario" }}{% endblock %}
 {% block content %}
 
+{# Presets pre-fill the category, cost type, and tone (risk/emotional defaults,
+   description) for a common life decision — never a dollar amount. A guessed
+   number is worse than a blank one: it looks considered, is wrong for almost
+   everyone, and is easy to forget to overwrite before checking the verdict. #}
 {% set whatif_presets = {
-    'vacation':  {'title': 'Vacation', 'category': 'Trip / Vacation', 'one_time_cost': '2500.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 3, 'emotional_value': 8, 'description': 'A getaway trip: flights, hotel, food, the works.'},
-    'dinner':    {'title': 'Expensive dinner', 'category': 'Food & Dining', 'one_time_cost': '200.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 1, 'emotional_value': 6, 'description': 'A nice night out to celebrate or just because.'},
-    'car':       {'title': 'Buy a car', 'category': 'Transport', 'one_time_cost': '30000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 6, 'emotional_value': 7, 'description': 'New wheels, the purchase price.'},
-    'invest':    {'title': 'Invest $500/mo more', 'category': 'Investment', 'one_time_cost': '0.00', 'monthly_cost': '0.00', 'monthly_savings': '500.00', 'financial_risk': 4, 'emotional_value': 6, 'description': 'Redirect more of your paycheck into long-term investments.'},
-    'wedding':   {'title': 'Save for wedding', 'category': 'Savings Goal', 'one_time_cost': '0.00', 'monthly_cost': '0.00', 'monthly_savings': '800.00', 'financial_risk': 3, 'emotional_value': 9, 'description': 'Setting aside money each month for the big day.'},
-    'debt':      {'title': 'Pay off debt early', 'category': 'Debt Payoff', 'one_time_cost': '5000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 2, 'emotional_value': 7, 'description': 'An extra lump-sum payment to close out a loan sooner and cut future interest.'},
-    'move':      {'title': 'Move apartments', 'category': 'Housing', 'one_time_cost': '2000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 4, 'emotional_value': 6, 'description': 'Deposit, moving costs, and the hassle of a new place.'},
-    'business':  {'title': 'Start a side business', 'category': 'Career Change', 'one_time_cost': '1000.00', 'monthly_cost': '0.00', 'monthly_savings': '0.00', 'financial_risk': 6, 'emotional_value': 8, 'description': 'Startup costs to get it off the ground.'},
+    'vacation':  {'title': 'Vacation', 'category': 'Trip / Vacation', 'cost_type': 'one_time_cost', 'financial_risk': 3, 'emotional_value': 8, 'description': 'A getaway trip: flights, hotel, food, the works.'},
+    'car':       {'title': 'Buy a car', 'category': 'Transport', 'cost_type': 'one_time_cost', 'financial_risk': 6, 'emotional_value': 7, 'description': 'New wheels, the purchase price.'},
+    'debt':      {'title': 'Pay off debt early', 'category': 'Debt Payoff', 'cost_type': 'one_time_cost', 'financial_risk': 2, 'emotional_value': 7, 'description': 'An extra lump-sum payment to close out a loan sooner and cut future interest.'},
+    'move':      {'title': 'Move apartments', 'category': 'Housing', 'cost_type': 'one_time_cost', 'financial_risk': 4, 'emotional_value': 6, 'description': 'Deposit, moving costs, and the hassle of a new place.'},
+    'business':  {'title': 'Start a side business', 'category': 'Career Change', 'cost_type': 'one_time_cost', 'financial_risk': 6, 'emotional_value': 8, 'description': 'Startup costs to get it off the ground.'},
+    'goal':      {'title': 'Save toward a goal', 'category': 'Savings Goal', 'cost_type': 'monthly_savings', 'financial_risk': 3, 'emotional_value': 7, 'description': 'Redirect part of your paycheck toward something you are saving up for.'},
 } %}
 {% set preset = whatif_presets.get(request.args.get('preset')) if not scenario else None %}
 
@@ -21,22 +23,22 @@
     {% set init_one_time = scenario.one_time_cost %}
     {% set init_monthly_cost = scenario.monthly_cost %}
     {% set init_monthly_savings = scenario.monthly_savings %}
-{% elif preset %}
-    {% set init_one_time = preset.one_time_cost %}
-    {% set init_monthly_cost = preset.monthly_cost %}
-    {% set init_monthly_savings = preset.monthly_savings %}
 {% else %}
     {% set init_one_time = '0.00' %}
     {% set init_monthly_cost = '0.00' %}
     {% set init_monthly_savings = '0.00' %}
 {% endif %}
 
-{% if init_monthly_savings|float > 0 %}
-    {% set initial_cost_tab = 'monthly_savings' %}
-{% elif init_monthly_cost|float > 0 %}
-    {% set initial_cost_tab = 'monthly_cost' %}
+{% if scenario %}
+    {% if init_monthly_savings|float > 0 %}
+        {% set initial_cost_tab = 'monthly_savings' %}
+    {% elif init_monthly_cost|float > 0 %}
+        {% set initial_cost_tab = 'monthly_cost' %}
+    {% else %}
+        {% set initial_cost_tab = 'one_time_cost' %}
+    {% endif %}
 {% else %}
-    {% set initial_cost_tab = 'one_time_cost' %}
+    {% set initial_cost_tab = preset.cost_type if preset else 'one_time_cost' %}
 {% endif %}
 
 <div class="max-w-2xl mx-auto">
