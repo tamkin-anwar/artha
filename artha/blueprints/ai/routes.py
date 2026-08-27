@@ -4,9 +4,11 @@ artha/blueprints/ai/routes.py
 HTTP layer for all AI features.
 
 Endpoints:
-  POST /api/ai/chat           — single or multi-turn chat (JSON in / JSON out)
-  POST /api/ai/insights       — auto-generate financial health report
-  POST /api/ai/chat/stream    — SSE streaming chat
+  GET  /api/ai/conversation      — the current conversation's messages
+  POST /api/ai/conversation/new  — start a fresh conversation (Clear button)
+  POST /api/ai/chat              — single or multi-turn chat (JSON in / JSON out)
+  POST /api/ai/insights          — auto-generate financial health report
+  POST /api/ai/chat/stream       — SSE streaming chat
 
 CSRF:
   All POST endpoints are protected by Flask-WTF via the X-CSRFToken header.
@@ -14,9 +16,17 @@ CSRF:
   (CSRF_TOKEN is already injected into all templates via inject_csrf_token.)
 
 Conversation history contract:
-  The client owns and maintains history. On every request, send the full
-  prior conversation as "history": [{"role": ..., "content": ...}, ...].
-  The service sanitizes and caps it; the server never stores it.
+  The server owns history now (Conversation/Message models), not the
+  client — required for the same conversation to actually follow a user
+  across devices, which a client-held array never could. /chat's request
+  body is just {"message": "..."}; the route loads the current
+  conversation's recent messages from the DB before calling AIService,
+  and persists both sides of the turn after. "The current conversation"
+  is simply the most recently created Conversation row for that user —
+  see models/conversation.py for why that needs no separate status flag.
+  /chat/stream still accepts a client-supplied "history" the old way;
+  it's not wired into any UI (see its own docstring), so it wasn't worth
+  carrying the same rework for code nothing calls.
 
 Error shape:
   All errors return JSON: { "error": "<human-readable message>" }
@@ -30,6 +40,8 @@ import logging
 from flask import Response, jsonify, render_template, request, stream_with_context
 from flask_login import current_user, login_required
 
+from ...extensions import db
+from ...models import Conversation, Message
 from ...services.ai_service import AIService
 from . import ai_bp
 
@@ -56,9 +68,110 @@ def _parse_body() -> tuple[str | None, list]:
     return message, history
 
 
+def _parse_message() -> str | None:
+    """Extract and lightly validate just the message from a JSON body —
+    /chat no longer accepts client-supplied history (see module docstring)."""
+    data = request.get_json(silent=True) or {}
+    return (data.get("message") or "").strip() or None
+
+
+def _current_conversation() -> Conversation | None:
+    """The user's most recently created conversation, or None if they've
+    never chatted (or just hit Clear and haven't sent anything since).
+    Ordered by id, not created_at — two Conversation rows created back to
+    back (Clear immediately followed by the next page load's GET) could
+    otherwise land on the same timestamp at typical datetime resolution;
+    the auto-incrementing primary key can't tie."""
+    return (
+        Conversation.query
+        .filter_by(user_id=current_user.id)
+        .order_by(Conversation.id.desc())
+        .first()
+    )
+
+
+def _get_or_create_conversation() -> Conversation:
+    conversation = _current_conversation()
+    if conversation is None:
+        conversation = Conversation(user_id=current_user.id)
+        db.session.add(conversation)
+        db.session.flush()  # assigns conversation.id for the Messages below
+    return conversation
+
+
+def _load_history(conversation: Conversation) -> list[dict]:
+    """The conversation's messages, oldest first, capped the same way
+    AIService's own _sanitize_history() caps client-supplied history —
+    just applied at load time now that the DB is the source of truth.
+    Ordered by id, not created_at — see models/conversation.py.
+
+    Queries Message directly rather than through conversation.messages:
+    that relationship already carries its own baked-in ascending
+    order_by, and Query.order_by() on a dynamic relationship *appends* to
+    an existing order rather than replacing it — chaining .desc() there
+    silently no-ops instead of reversing anything.
+    """
+    rows = (
+        Message.query
+        .filter_by(conversation_id=conversation.id)
+        .order_by(Message.id.desc())
+        .limit(AIService.MAX_HISTORY_MESSAGES)
+        .all()
+    )
+    rows.reverse()
+    return [{"role": m.role, "content": m.content} for m in rows]
+
+
+def _save_turn(conversation: Conversation, user_message: str, reply: str) -> None:
+    # Flushed separately, not both added then committed together: a single
+    # flush of two same-table inserts doesn't reliably assign ids in the
+    # order they were added (see models/conversation.py's own note on why
+    # ordering by id rather than created_at matters) — flushing the user
+    # message first guarantees it actually gets the lower id.
+    db.session.add(Message(conversation_id=conversation.id, role="user", content=user_message))
+    db.session.flush()
+    if reply and reply.strip():
+        db.session.add(Message(conversation_id=conversation.id, role="assistant", content=reply))
+    db.session.commit()
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@ai_bp.get("/conversation")
+@login_required
+def get_conversation():
+    """
+    The current conversation's messages, oldest first — what the frontend
+    rehydrates the chat window from on every page load.
+
+    Response (JSON): { "messages": [{"role": ..., "content": ...}, ...] }
+
+    Returns an empty list rather than 404 for a user who's never chatted;
+    doesn't create a Conversation row just from a GET.
+    """
+    conversation = _current_conversation()
+    if conversation is None:
+        return jsonify({"messages": []}), 200
+
+    rows = Message.query.filter_by(conversation_id=conversation.id).order_by(Message.id.asc()).all()
+    messages = [{"role": m.role, "content": m.content} for m in rows]
+    return jsonify({"messages": messages}), 200
+
+
+@ai_bp.post("/conversation/new")
+@login_required
+def new_conversation():
+    """
+    Starts a fresh conversation (the Clear button). Older conversations
+    are kept, just no longer "current" — see models/conversation.py.
+    """
+    conversation = Conversation(user_id=current_user.id)
+    db.session.add(conversation)
+    db.session.commit()
+    return jsonify({"message": "Started a new conversation"}), 201
+
 
 @ai_bp.post("/chat")
 @login_required
@@ -66,7 +179,7 @@ def chat():
     """
     Non-streaming chat.
 
-    Request  (JSON): { "message": "...", "history": [...] }
+    Request  (JSON): { "message": "..." }
     Response (JSON): { "reply": "...", "pending_actions": [...],
                         "usage": { "input_tokens": N, "output_tokens": N } }
                   or { "error": "..." }
@@ -76,18 +189,24 @@ def chat():
     is not allowed to execute itself: the frontend renders a confirmation
     card, and only a user click submits it to the real write route.
 
-    The client appends the reply to its local history and sends the updated
-    history on the next request. The server is fully stateless.
+    History is loaded from and persisted to the current conversation
+    server-side (see module docstring) — the frontend no longer sends or
+    tracks it.
     """
-    message, history = _parse_body()
+    message = _parse_message()
     if not message:
         return _bad_request("message is required and cannot be empty.")
+
+    conversation = _get_or_create_conversation()
+    history = _load_history(conversation)
 
     result = AIService.chat(current_user, message, history)
 
     if "error" in result:
         log.error("AIService.chat error (user=%d): %s", current_user.id, result["error"])
         return _service_error(result["error"])
+
+    _save_turn(conversation, message, result.get("reply", ""))
 
     return jsonify(result), 200
 
@@ -112,12 +231,21 @@ def insights():
           },
           "usage": { "input_tokens": N, "output_tokens": N }
         }
+
+    Saved to the current conversation as an assistant-only message (no
+    preceding user turn) — an insights report you asked for is part of
+    the conversation the same way a normal reply is, so it's still there
+    when you come back.
     """
     result = AIService.get_financial_insights(current_user)
 
     if "error" in result:
         log.error("AIService.insights error (user=%d): %s", current_user.id, result["error"])
         return _service_error(result["error"])
+
+    conversation = _get_or_create_conversation()
+    db.session.add(Message(conversation_id=conversation.id, role="assistant", content=result["insights"]))
+    db.session.commit()
 
     return jsonify(result), 200
 

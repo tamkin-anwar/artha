@@ -16,14 +16,18 @@ Architecture decisions:
   - Streaming via generator: routes own SSE framing; service yields text chunks.
 
 Model choice:
-  claude-haiku-4-5-20251001 — fast and cost-effective for a 2-person personal
-  app. Override with ARTHA_AI_MODEL env var for experimentation.
+  claude-sonnet-5 — Artha now has real users depending on the assistant
+  actually being right, not just fast: Haiku answered instantly but missed
+  budget/note/event/scenario context it was never given and reasoned
+  shallowly on real financial questions. Override with ARTHA_AI_MODEL env
+  var (e.g. back to a Haiku tier) if cost ever needs to trump quality.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Generator
 
@@ -37,7 +41,10 @@ from anthropic import (
 from ..blueprints.dashboard.routes import EVENT_COLORS, EVENT_RECURRENCES
 from ..blueprints.finance.routes import TRANSACTION_CATEGORIES
 from ..blueprints.notes.routes import NOTE_COLORS
-from ..models import Transaction
+from ..models import Event, Note, Transaction
+from ..models.budget import Budget
+from ..models.category_budget import CategoryBudget
+from ..models.scenario import Scenario
 from ..utils import user_now
 
 log = logging.getLogger(__name__)
@@ -46,8 +53,8 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-_MAX_TOKENS = 1024
+_DEFAULT_MODEL = "claude-sonnet-5"
+_MAX_TOKENS = 2048
 _MAX_CONTEXT_TRANSACTIONS = 50  # caps context window size and cost
 _MAX_HISTORY_TURNS = 20         # max conversation turns accepted from client
 _MAX_MESSAGE_LEN = 4000         # character limit per user message
@@ -61,9 +68,22 @@ You are talking to {first_name}. Today is {today}.
 ## Financial Snapshot
 {financial_context}
 
+## Budgets
+{budget_context}
+
+## Coming Up
+{upcoming_context}
+
+## Active Scenarios
+{scenario_context}
+
 ## Behaviour
 - Be concise, warm, and direct. Cut filler and generic advice.
-- Reference real numbers from the snapshot whenever relevant.
+- Reference real numbers from the Financial Snapshot, Budgets, Coming Up, \
+and Active Scenarios sections above whenever relevant, not just the raw \
+transaction list. If asked whether something is affordable or on track, \
+check it against the actual budget and scenario numbers you have instead \
+of a generic estimate.
 - Format all currency as $X,XXX.XX.
 - If data is missing or a question is outside your knowledge, say so honestly.
 - You can help with budgeting, spending analysis, financial planning, \
@@ -257,6 +277,145 @@ def _assemble_financial_context(user) -> str:
         sign = "+" if tx.type == "income" else "−"
         lines.append(f"  {ts}  {sign}${tx.amount:,.2f}  {tx.description}")
 
+    # This-month-by-category, using the *user's* local month boundary
+    # (user_now, not a bare UTC/server date.today()) so "this month" agrees
+    # with what the Finance page itself would show them right now — without
+    # this the model can only eyeball category totals from the flat list
+    # above, which is slow and error-prone even for a strong model.
+    now = user_now(user)
+    month_start = datetime(now.year, now.month, 1)
+    next_month_start = (
+        datetime(now.year + 1, 1, 1) if now.month == 12
+        else datetime(now.year, now.month + 1, 1)
+    )
+    this_month_expenses = [
+        t for t in expense_txs
+        if t.timestamp and month_start <= t.timestamp.replace(tzinfo=None) < next_month_start
+    ]
+    if this_month_expenses:
+        totals_by_category: dict[str, Decimal] = {}
+        for t in this_month_expenses:
+            key = t.category or "uncategorized"
+            totals_by_category[key] = totals_by_category.get(key, zero) + t.amount
+        lines += ["", f"This month's spending by category (as of {now.strftime('%b %d')}):"]
+        for key, amount in sorted(totals_by_category.items(), key=lambda kv: kv[1], reverse=True):
+            label = TRANSACTION_CATEGORIES.get(key, {}).get("label", key.title())
+            lines.append(f"  {label}: ${amount:,.2f}")
+
+    return "\n".join(lines)
+
+
+def _assemble_budget_context(user) -> str:
+    """Overall + per-category monthly caps, each against what's actually
+    been spent so far this month — so the model can answer "am I over
+    budget" instead of just knowing a cap exists with nothing to compare
+    it to."""
+    now = user_now(user)
+    month_start = datetime(now.year, now.month, 1)
+    next_month_start = (
+        datetime(now.year + 1, 1, 1) if now.month == 12
+        else datetime(now.year, now.month + 1, 1)
+    )
+    this_month_expenses = Transaction.query.filter(
+        Transaction.user_id == user.id,
+        Transaction.type == "expense",
+        Transaction.timestamp >= month_start,
+        Transaction.timestamp < next_month_start,
+    ).all()
+    spent_by_category: dict[str, Decimal] = {}
+    total_spent = Decimal("0")
+    for t in this_month_expenses:
+        key = t.category or "uncategorized"
+        spent_by_category[key] = spent_by_category.get(key, Decimal("0")) + t.amount
+        total_spent += t.amount
+
+    lines = []
+
+    overall = Budget.query.filter_by(user_id=user.id).first()
+    if overall and overall.monthly_cap > 0:
+        lines.append(
+            f"Overall monthly budget: ${overall.monthly_cap:,.2f}, "
+            f"${total_spent:,.2f} spent so far this month "
+            f"({total_spent / overall.monthly_cap * 100:.0f}%)."
+        )
+
+    category_budgets = CategoryBudget.query.filter_by(user_id=user.id).all()
+    for cb in category_budgets:
+        label = TRANSACTION_CATEGORIES.get(cb.category, {}).get("label", cb.category.title())
+        spent = spent_by_category.get(cb.category, Decimal("0"))
+        pct = (spent / cb.monthly_cap * 100) if cb.monthly_cap else Decimal("0")
+        lines.append(f"{label} budget: ${cb.monthly_cap:,.2f}, ${spent:,.2f} spent ({pct:.0f}%).")
+
+    return "\n".join(lines) if lines else "No budgets set."
+
+
+def _assemble_upcoming_context(user) -> str:
+    """Notes due soon and calendar events coming up — the same "what's
+    coming due" question the dashboard already answers, just made
+    available to the model too instead of only living in a different tab
+    it has no visibility into."""
+    now = user_now(user)
+    today = now.date()
+
+    lines = []
+
+    notes_due_soon = (
+        Note.query.filter(
+            Note.user_id == user.id,
+            Note.archived.is_(False),
+            Note.deleted_at.is_(None),
+            Note.due_date.isnot(None),
+            Note.due_date >= today,
+            Note.due_date <= today + timedelta(days=14),
+        )
+        .order_by(Note.due_date.asc())
+        .all()
+    )
+    if notes_due_soon:
+        lines.append("Notes due in the next 14 days:")
+        for n in notes_due_soon:
+            title = n.title or (n.preview[:40] if n.preview else "Untitled note")
+            lines.append(f"  {n.due_date.strftime('%b %d')}: {title}")
+
+    window_end = datetime(today.year, today.month, today.day) + timedelta(days=7)
+    events_soon = (
+        Event.query.filter(
+            Event.user_id == user.id,
+            Event.start >= datetime(today.year, today.month, today.day),
+            Event.start < window_end,
+        )
+        .order_by(Event.start.asc())
+        .all()
+    )
+    if events_soon:
+        if lines:
+            lines.append("")
+        lines.append("Calendar events in the next 7 days:")
+        for e in events_soon:
+            lines.append(f"  {e.start.strftime('%b %d %I:%M %p')}: {e.title}")
+
+    return "\n".join(lines) if lines else "Nothing due or scheduled in the near future."
+
+
+def _assemble_scenario_context(user) -> str:
+    """Active what-if scenarios, so a question like "should I move" can
+    reference the one the user already modeled instead of starting from
+    nothing."""
+    active = (
+        Scenario.query.filter_by(user_id=user.id, status="active")
+        .order_by(Scenario.created_at.desc())
+        .all()
+    )
+    if not active:
+        return "No active scenarios."
+
+    lines = []
+    for s in active:
+        net_monthly = s.monthly_savings - s.monthly_cost
+        lines.append(
+            f"{s.title} ({s.category}): one-time ${s.one_time_cost:,.2f}, "
+            f"net ${net_monthly:,.2f}/mo, priority {s.priority}."
+        )
     return "\n".join(lines)
 
 
@@ -267,10 +426,16 @@ def _build_system_prompt(user) -> str:
     # utils.user_now()'s docstring for exactly how that drifts).
     today             = user_now(user).strftime("%A, %B %d, %Y")
     financial_context = _assemble_financial_context(user)
+    budget_context    = _assemble_budget_context(user)
+    upcoming_context  = _assemble_upcoming_context(user)
+    scenario_context  = _assemble_scenario_context(user)
     return _SYSTEM_PROMPT_TEMPLATE.format(
         first_name=first_name,
         today=today,
         financial_context=financial_context,
+        budget_context=budget_context,
+        upcoming_context=upcoming_context,
+        scenario_context=scenario_context,
     )
 
 
@@ -306,6 +471,13 @@ class AIService:
       - Return a plain dict — never an HTTP Response or exception.
       - Return {"error": "<human-readable message>"} on any failure.
     """
+
+    # How many prior messages the route layer should load from the
+    # Conversation/Message tables before calling chat()/stream_chat() —
+    # same cap _sanitize_history() applies, exposed here so
+    # blueprints/ai/routes.py has one source of truth for it instead of
+    # a second hardcoded number.
+    MAX_HISTORY_MESSAGES = _MAX_HISTORY_TURNS * 2
 
     # ------------------------------------------------------------------
     # Non-streaming chat  (primary endpoint for Render Starter tier)

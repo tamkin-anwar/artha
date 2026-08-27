@@ -10,7 +10,10 @@ from .feedback import Feedback
 from .budget import Budget
 from .category_budget import CategoryBudget
 from .push_subscription import PushSubscription
+from .conversation import Conversation
+from .message import Message
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
+    "Conversation", "Message",
 ]

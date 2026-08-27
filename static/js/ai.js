@@ -23,10 +23,10 @@ function initAI() {
             </div>
         </div>`;
 
-    // Client-owned conversation history — sent with every request,
-    // never stored on the server.
-    let history = [];
-    let busy    = false;
+    // History now lives on the server (Conversation/Message) so the same
+    // conversation follows the account across devices — this file only
+    // renders it and sends new messages, it doesn't track a copy anymore.
+    let busy = false;
 
     // -----------------------------------------------------------------------
     // Rendering
@@ -492,8 +492,6 @@ function initAI() {
         if (busy || !message.trim()) return;
 
         appendMessage("user", message);
-        const historySnapshot = [...history];
-        history.push({ role: "user", content: message });
         setBusy(true);
 
         try {
@@ -503,7 +501,7 @@ function initAI() {
                     "Content-Type": "application/json",
                     "X-CSRFToken":  CSRF,
                 },
-                body: JSON.stringify({ message, history: historySnapshot }),
+                body: JSON.stringify({ message }),
             });
 
             const data = await res.json();
@@ -511,19 +509,16 @@ function initAI() {
 
             if (!res.ok || data.error) {
                 appendError(data.error || "Something went wrong. Please try again.");
-                history.pop();
                 return;
             }
 
             appendMessage("assistant", data.reply, () => {
                 (data.pending_actions || []).forEach(renderActionCard);
             });
-            history.push({ role: "assistant", content: data.reply });
 
         } catch {
             setBusy(false);
             appendError("Network error. Check your connection.");
-            history.pop();
         }
     }
 
@@ -554,7 +549,6 @@ function initAI() {
             }
 
             appendMessage("assistant", data.insights);
-            history.push({ role: "assistant", content: data.insights });
 
         } catch {
             setBusy(false);
@@ -563,14 +557,52 @@ function initAI() {
     }
 
     // -----------------------------------------------------------------------
+    // Rehydrate on load
+    // -----------------------------------------------------------------------
+
+    // Replays whatever's already in the current conversation, so leaving
+    // the page and coming back (even on a different device) shows it
+    // exactly as it was, instead of the empty state every time. Pending
+    // action cards from a past reply aren't restored — only the text is
+    // (see models/message.py for why).
+    async function rehydrateConversation() {
+        try {
+            const res = await fetch("/api/ai/conversation", { credentials: "same-origin" });
+            if (!res.ok) return;
+            const data = await res.json();
+            const messages = data.messages || [];
+            if (!messages.length) return;
+
+            for (const m of messages) {
+                appendMessage(m.role === "user" ? "user" : "assistant", m.content);
+            }
+        } catch {
+            // Worst case the conversation just doesn't rehydrate this load —
+            // sending a new message still works either way.
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Clear conversation
     // -----------------------------------------------------------------------
 
-    function clearConversation() {
+    async function clearConversation() {
         if (busy) return;
-        history = [];
         messagesEl.innerHTML = EMPTY_STATE_HTML;
         clearBtn.style.display = "none";
+
+        // Awaited, not fire-and-forget: the next message must land in the
+        // new conversation, not get appended to the one just cleared.
+        try {
+            await fetch("/api/ai/conversation/new", {
+                method: "POST",
+                headers: { "X-CSRFToken": CSRF },
+            });
+        } catch {
+            // Worst case the next message continues the old conversation
+            // instead of starting a new one — not worth surfacing an error
+            // for what's otherwise a purely cosmetic reset.
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -625,4 +657,6 @@ function initAI() {
             sendMessage("What's my savings rate?");
         }
     });
+
+    rehydrateConversation();
 }
