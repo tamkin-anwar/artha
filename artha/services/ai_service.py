@@ -182,7 +182,18 @@ _client: Anthropic | None = None
 
 
 def _get_client() -> Anthropic:
-    """Return the shared Anthropic client, initializing on first call."""
+    """Return the shared Anthropic client, initializing on first call.
+
+    Explicit timeout: the SDK's own default is 10 minutes. On a deploy with
+    only one or two sync Gunicorn workers, a single call that stalls that
+    long (a network blip, an Anthropic-side slowdown) ties up a worker for
+    the whole 10 minutes — during which every other request, from any user,
+    just queues behind it with no free worker to answer. max_tokens here is
+    only 1024, so a real reply normally finishes in a few seconds; a much
+    shorter timeout lets a stalled call fail fast into the existing
+    APITimeoutError handling (a clean "Request timed out" to the user)
+    instead of quietly freezing the whole app for everyone.
+    """
     global _client
     if _client is None:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -191,8 +202,12 @@ def _get_client() -> Anthropic:
                 "ANTHROPIC_API_KEY is not set. "
                 "Add it in Render → Environment Variables."
             )
-        _client = Anthropic(api_key=api_key)
-        log.info("Anthropic client initialized (model=%s).", _get_model())
+        timeout_seconds = float(os.environ.get("ARTHA_AI_TIMEOUT_SECONDS", "45"))
+        _client = Anthropic(api_key=api_key, timeout=timeout_seconds)
+        log.info(
+            "Anthropic client initialized (model=%s, timeout=%ss).",
+            _get_model(), timeout_seconds,
+        )
     return _client
 
 
