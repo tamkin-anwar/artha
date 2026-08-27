@@ -562,6 +562,15 @@
 
     .csv-import-summary { font-size:13px; color:var(--text-secondary); margin:0 0 12px; flex-shrink:0; }
     .csv-import-summary strong { color:var(--text-primary); }
+    /* Distinct from .csv-import-summary's plain "N rows skipped" phrasing —
+       this is a heads-up that rows came from AI-assisted reading rather
+       than direct parsing, not a sign anything failed, so it gets its own
+       gold-toned note instead of blending into that sentence. */
+    .csv-import-notice {
+        font-size:12.5px; color:var(--gold); background:var(--amber-dim);
+        border:1px solid rgba(212,168,67,0.3); border-radius:8px;
+        padding:8px 12px; margin:0 0 12px; flex-shrink:0;
+    }
     .csv-import-table-wrap { position:relative; flex:1; min-height:0; display:flex; }
     .csv-import-table-scroll { overflow-y:auto; overflow-x:auto; border:1px solid var(--border-subtle); border-radius:10px; flex:1; min-height:0; }
     /* Date/Description/Amount/Type/Category plus a checkbox column is
@@ -758,6 +767,7 @@
 
         <div id="csv-import-step-preview" class="csv-import-step-preview" hidden>
             <p id="csv-import-summary" class="csv-import-summary"></p>
+            <p id="csv-import-notice" class="csv-import-notice" hidden></p>
             <div class="csv-import-table-wrap">
                 <div class="csv-import-table-scroll scrollbar-thin">
                     <table class="csv-import-table">

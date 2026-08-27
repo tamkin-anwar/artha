@@ -1,4 +1,6 @@
 import io
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.pdfencrypt import StandardEncryption
@@ -6,6 +8,22 @@ from reportlab.pdfgen import canvas
 
 from artha.extensions import db
 from artha.models import Transaction
+
+
+def _fake_tool_response(transactions, input_tokens=200, output_tokens=80):
+    """Mirrors the Anthropic SDK response shape for a forced tool_choice
+    call — see AIService.extract_pdf_transactions, which reads exactly
+    this shape back out via resp.content[i].type == "tool_use"."""
+    return SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                name="record_transactions",
+                input={"transactions": transactions},
+            )
+        ],
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
 
 
 def _make_statement_pdf(lines, password=None):
@@ -304,3 +322,185 @@ def test_preview_parses_day_month_year_dates_with_separate_withdraw_deposit_colu
     assert deposit["date"] == "2025-01-05"
     assert deposit["type"] == "income"
     assert deposit["amount"] == 100.00
+
+
+# ---------------------------------------------------------------------------
+# AI-assisted fallback — for a layout the line-regex parser structurally
+# cannot match: a row's date+description on one line and its amounts on a
+# separate line further down with no date on it at all (Bank Asia, a
+# Bangladeshi bank, among real statements that print exactly this).
+# ---------------------------------------------------------------------------
+
+def test_preview_falls_back_to_ai_when_date_and_amount_are_on_separate_lines(auth_client):
+    """No single-line "date ... amount" regex can ever match this shape —
+    the fallback isn't a better regex, it's reading the page the way a
+    person would. Row numbering matches Bank Asia's own statement layout
+    (a bare row index precedes the amounts, not a date)."""
+    pdf = _make_statement_pdf([
+        "Debit Credit Balanced",
+        "27/07/2026 PT P29 PT 202607273 VISA-POS Pos(Others)",
+        "purchase with card no : 463767******8450",
+        "2 2,640.00 0.00 60,282.62",
+        "29/07/2026 NI DEP NPSB-Ibft Remittance from",
+        "TRUST BANK LTD. A/C:0017-5*****0411",
+        "5 0.00 12,064.37 70,316.99",
+    ])
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response([
+            {
+                "date": "2026-07-27",
+                "description": "VISA-POS purchase with card no: 463767******8450",
+                "amount": 2640.00,
+                "type": "expense",
+            },
+            {
+                "date": "2026-07-29",
+                "description": "NPSB-Ibft Remittance from TRUST BANK LTD.",
+                "amount": 12064.37,
+                "type": "income",
+            },
+        ])
+        resp = _upload_pdf(auth_client, pdf)
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["rows"]) == 2
+    assert data["notice"]  # distinct AI-assisted heads-up, not folded into warnings
+
+    expense = next(r for r in data["rows"] if r["type"] == "expense")
+    assert expense["date"] == "2026-07-27"
+    assert expense["amount"] == 2640.00
+
+    income = next(r for r in data["rows"] if r["type"] == "income")
+    assert income["date"] == "2026-07-29"
+    assert income["amount"] == 12064.37
+
+    # The forced-tool call actually happened with this document's text —
+    # not a coincidental empty-input no-op.
+    call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
+    assert call_kwargs["tool_choice"] == {"type": "tool", "name": "record_transactions"}
+    assert "VISA-POS" in call_kwargs["messages"][0]["content"]
+
+
+def test_preview_does_not_call_ai_when_regex_parsing_already_succeeds(auth_client):
+    """The fallback only fires on zero rows — a statement the regex
+    already handles shouldn't pay for an API call it doesn't need."""
+    pdf = _make_statement_pdf([
+        "05/06/2026 COFFEE SHOP -4.50",
+    ])
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        resp = _upload_pdf(auth_client, pdf)
+        mock_get_client.assert_not_called()
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["rows"]) == 1
+    assert "notice" not in data
+
+
+def test_preview_ai_fallback_degrades_silently_without_api_key(auth_client, monkeypatch):
+    """No ANTHROPIC_API_KEY configured (the normal state for a dev/test
+    environment) shouldn't surface an AI-specific error — from the user's
+    side this is just an unsupported PDF layout, same message either way."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # _get_client() caches its client in a module-level singleton once
+    # initialized — force a fresh (and here, failing) init regardless of
+    # whatever state an earlier test in the same process left behind.
+    monkeypatch.setattr("artha.services.ai_service._client", None)
+    pdf = _make_statement_pdf([
+        "27/07/2026 PT P29 PT 202607273 VISA-POS Pos(Others)",
+        "purchase with card no : 463767******8450",
+        "2 2,640.00 0.00 60,282.62",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 400
+    assert "nothing that looked like a transaction line" in resp.get_json()["message"]
+
+
+# ---------------------------------------------------------------------------
+# Row-numbered ledger layout (Bank Asia, a Bangladeshi bank, prints exactly
+# this: every line prefixed with its own row index before the date) — the
+# real reported bug. Parsed entirely deterministically, no AI involved.
+# ---------------------------------------------------------------------------
+
+def test_preview_parses_row_numbered_statement_with_correct_day_first_dates(auth_client):
+    """Two things have to both work here: the leading row-number prefix
+    ("2 27/07/2026 ...") not breaking the date match, and an ambiguous
+    date ("03/08/2026") resolving day-first purely from the unambiguous
+    dates elsewhere in the same statement — this bank spells its currency
+    out as "BDT" rather than printing the Taka symbol, so the older
+    symbol-only day-first detection would have silently misread it as
+    March 8 instead of August 3."""
+    pdf = _make_statement_pdf([
+        "Currency BDT - Bangladeshi Taka",
+        "Debit Credit Balanced",
+        "1 26/07/2026 Balance 0.00 0.00 62,922.62",
+        "2 27/07/2026 VISA-POS purchase 2,640.00 0.00 60,282.62",
+        "3 03/08/2026 NPSB-MPOS purchase 750.35 0.00 59,532.27",
+        "4 25/08/2026 Total Transaction Amount 3,390.35 0.00",
+    ])
+    resp = _upload_pdf(auth_client, pdf)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+
+    # Row 1 (0.00/0.00 opening balance) and row 4 (closing summary) are
+    # both correctly excluded — only the two real transactions remain.
+    assert len(rows) == 2
+
+    visa = next(r for r in rows if "VISA" in r["description"])
+    assert visa["date"] == "2026-07-27"
+    assert visa["type"] == "expense"
+    assert visa["amount"] == 2640.00
+
+    npsb = next(r for r in rows if "NPSB" in r["description"])
+    assert npsb["date"] == "2026-08-03"  # not 2026-03-08
+    assert npsb["type"] == "expense"
+    assert npsb["amount"] == 750.35
+
+
+def test_preview_recovers_a_page_break_corrupted_row_via_ai_without_duplicating(auth_client):
+    """A transaction landing right at a page boundary can have its own
+    date fragmented across the split (a real artifact seen in Bank Asia's
+    export: "05/08/2" ends one page, the "026" completing the year starts
+    the next). That single line fails to match any regex while everything
+    else on the statement parses fine — the AI pass should fill in just
+    that one gap, not re-import everything else a second time."""
+    pdf = _make_statement_pdf([
+        "1 26/07/2026 Balance 0.00 0.00 62,922.62",
+        "2 27/07/2026 VISA-POS purchase 2,640.00 0.00 60,282.62",
+        "3 05/08/2 WB WWL WB From Ridita 2,500.00 0.00 57,782.62",
+    ])
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.return_value = _fake_tool_response([
+            {
+                "date": "2026-08-05",
+                "description": "WB WWL WB From Ridita",
+                "amount": 2500.00,
+                "type": "expense",
+            },
+            # A real AI pass over the *whole* document also re-reads the
+            # already-correctly-parsed VISA-POS row — the merge logic
+            # needs to drop this exact duplicate, not double-import it.
+            {
+                "date": "2026-07-27",
+                "description": "VISA-POS purchase",
+                "amount": 2640.00,
+                "type": "expense",
+            },
+        ])
+        resp = _upload_pdf(auth_client, pdf)
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    rows = data["rows"]
+    assert len(rows) == 2  # not 3 — the VISA-POS duplicate was dropped
+    assert data["notice"]  # AI contributed at least one row, worth flagging
+
+    ridita = next(r for r in rows if "Ridita" in r["description"])
+    assert ridita["date"] == "2026-08-05"
+    assert ridita["amount"] == 2500.00
+
+    visa_rows = [r for r in rows if "VISA" in r["description"]]
+    assert len(visa_rows) == 1

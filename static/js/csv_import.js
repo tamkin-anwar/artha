@@ -31,6 +31,7 @@ function initCsvImport() {
     const commitBtn = document.getElementById("csv-import-commit-btn");
     const errorEl = document.getElementById("csv-import-error");
     const summaryEl = document.getElementById("csv-import-summary");
+    const noticeEl = document.getElementById("csv-import-notice");
     const tbody = document.getElementById("csv-import-tbody");
     const stepUpload = document.getElementById("csv-import-step-upload");
     const stepPreview = document.getElementById("csv-import-step-preview");
@@ -42,6 +43,8 @@ function initCsvImport() {
         stepUpload.hidden = false;
         errorEl.style.display = "none";
         errorEl.textContent = "";
+        noticeEl.hidden = true;
+        noticeEl.textContent = "";
         fileInput.value = "";
         tbody.innerHTML = "";
         previewBtn.disabled = false;
@@ -151,6 +154,14 @@ function initCsvImport() {
             if (dupeCount) summary += ` · <strong>${dupeCount}</strong> look already imported (unchecked below)`;
             if (warningCount) summary += ` · ${warningCount} row${warningCount === 1 ? "" : "s"} skipped (couldn't be read)`;
             summaryEl.innerHTML = summary;
+
+            if (data.notice) {
+                noticeEl.textContent = data.notice;
+                noticeEl.hidden = false;
+            } else {
+                noticeEl.hidden = true;
+                noticeEl.textContent = "";
+            }
 
             renderRows(parsedRows);
             stepUpload.hidden = true;

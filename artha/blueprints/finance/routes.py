@@ -1163,17 +1163,45 @@ _CREDIT_HEADER_ALIASES = {"credit", "deposit", "deposits", "money in", "cr"}
 # currency spans the US, Canada, Australia and others with no single
 # dominant order, so a $-only statement keeps the existing US-first
 # default rather than risk flipping it wrong for the far more common USD
-# case.
+# case. Only a fallback now — see _detect_day_first — since plenty of
+# banks spell the currency out as text ("BDT") rather than printing its
+# Unicode symbol, which this alone would miss entirely.
 _DAY_FIRST_CURRENCY_SYMBOLS = ("£", "€", "৳")
+_SLASH_DATE_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/\d{2,4}\b")
 
 
 def _detect_day_first(text: str) -> bool:
-    """Whole-document hint for which way to resolve an ambiguous slash
-    date, based on which currency symbol the statement actually prints —
-    the address/letterhead is not used for this because a statement can
-    legitimately show two countries (e.g. a Bangladeshi bank statement
-    mailed to a customer's US address), and the currency the transactions
-    are actually denominated in is the reliable signal."""
+    """
+    Whole-document hint for which way to resolve a genuinely ambiguous
+    slash date (both parts <=12, e.g. "03/08" — March 8 or August 3?).
+    A single statement never mixes date conventions within itself, so one
+    answer covers the whole document. Two signals, tried in order:
+
+    1. Any UNAMBIGUOUS slash date elsewhere in the same statement — one
+       where a part is 13-31, which can only ever be a day, never a
+       month. This is the strongest possible signal because it comes
+       from the statement's own data rather than a guess, and it
+       generalizes to any bank/currency without a hardcoded list —
+       critical, since a currency-symbol check alone misses every bank
+       that spells its currency out as text ("BDT") rather than
+       printing the Unicode symbol, which is what actually broke this
+       for a real Bangladeshi bank's statement (see test coverage).
+    2. A currency symbol from a day-first-writing country (see
+       _DAY_FIRST_CURRENCY_SYMBOLS) — only reached when the statement
+       has no unambiguous date to go on at all (e.g. one that happens
+       to cover only the 1st-12th of a month).
+
+    Defaults to False (US month-first) if neither signal applies.
+    """
+    for first_str, second_str in _SLASH_DATE_RE.findall(text):
+        first, second = int(first_str), int(second_str)
+        if first > 12 and second <= 12:
+            return True  # day/month/year
+        if second > 12 and first <= 12:
+            return False  # month/day/year
+        # Both <=12 (ambiguous) or both >12 (malformed) — inconclusive,
+        # keep scanning for a date elsewhere that actually settles it.
+
     return any(sym in text for sym in _DAY_FIRST_CURRENCY_SYMBOLS)
 
 
@@ -1330,15 +1358,21 @@ _MONEY = r"-?[$£€৳]?[\d,]+\.\d{2}"
 _PDF_DATE_PATTERN = (
     r"(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}-[A-Za-z]{3}-\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})"
 )
+# Some banks (Bank Asia, among others printing a numbered ledger rather than
+# a plain table) prefix every row with its own row index before the date —
+# "2 27/07/2026 VISA-POS ... 2,640.00 0.00 60,282.62" — which would
+# otherwise break the ^(date) anchor below on every single line. Optional,
+# so it's a no-op for every statement that doesn't do this.
+_PDF_ROW_NUM_PREFIX = r"(?:\d+\s+)?"
 # Tried first: some banks (Chase among them) print a running balance right
 # after the amount on every line — "... -21.30 15,937.21" — so the
 # amount/balance pair has to be matched together, or a naive "last number
 # on the line" match grabs the balance instead of the actual amount.
 _PDF_TX_LINE_WITH_BALANCE_RE = re.compile(
-    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+{_MONEY}$"
+    rf"^{_PDF_ROW_NUM_PREFIX}({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+{_MONEY}$"
 )
 _PDF_TX_LINE_RE = re.compile(
-    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})$"
+    rf"^{_PDF_ROW_NUM_PREFIX}({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})$"
 )
 # Separate withdraw/deposit columns plus a running balance — "19-Sep-2024
 # CARD ANNUAL FEE **8562 FOR 2024-25 600.00 0.00 4,400.00" — instead of one
@@ -1346,7 +1380,20 @@ _PDF_TX_LINE_RE = re.compile(
 # transaction; tried before _PDF_TX_LINE_WITH_BALANCE_RE would otherwise
 # misread the deposit column as a second "balance" and drop it.
 _PDF_TX_LINE_WITHDRAW_DEPOSIT_RE = re.compile(
-    rf"^({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+({_MONEY})\s+{_MONEY}$"
+    rf"^{_PDF_ROW_NUM_PREFIX}({_PDF_DATE_PATTERN})\s+(.+?)\s+({_MONEY})\s+({_MONEY})\s+{_MONEY}$"
+)
+# A statement's own closing summary line ("28 25/08/2026 Total Transaction
+# Amount 50,118.30 48,304.29") is shaped exactly like a real two-money
+# transaction line once the row-number prefix above is allowed — matching
+# it would silently import "Total Transaction Amount" as a $50k+ expense.
+# Also covers the opening/closing "Balance" line some banks print as row 1
+# with a real date but 0.00/0.00 either way (already excluded separately
+# for the withdraw/deposit shape, but not every bank uses that column
+# layout for it).
+_PDF_SUMMARY_ROW_RE = re.compile(
+    r"total\s+transaction|closing\s+balance|opening\s+balance|"
+    r"balance\s+brought\s+forward|balance\s+carried\s+forward|^balance$",
+    re.IGNORECASE,
 )
 
 # "June 24, 2026 through July 22, 2026" (pdfplumber often extracts this with
@@ -1418,8 +1465,17 @@ class PdfPasswordRequired(Exception):
     instead of surfacing it as a generic "corrupted file" error."""
 
 
-def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list[dict], list[str]]:
+def _parse_statement_pdf(
+    file_stream, password: str | None = None
+) -> tuple[list[dict], list[str], bool]:
     """
+    Returns (rows, warnings, ai_assisted) — ai_assisted is True only when
+    the line-regex pass below found nothing and _parse_statement_pdf_with_ai
+    (further down this file) successfully filled in instead; the route
+    layer uses it to surface a distinct "read with AI assistance, please
+    double-check" notice rather than folding that into `warnings`, which
+    it renders as "N rows skipped".
+
     Parses an uploaded bank-statement PDF by reading each page's plain
     text and matching transaction lines with a regex, rather than
     pdfplumber's table-extraction — real bank statements tested against
@@ -1470,9 +1526,9 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
     except PdfminerException as exc:
         if isinstance(exc.args[0] if exc.args else None, PDFPasswordIncorrect):
             raise PdfPasswordRequired() from None
-        return [], ["Could not read that PDF — it may be encrypted or corrupted."]
+        return [], ["Could not read that PDF — it may be encrypted or corrupted."], False
     except Exception:
-        return [], ["Could not read that PDF."]
+        return [], ["Could not read that PDF."], False
 
     with pdf:
         pages_text = [page.extract_text() or "" for page in pdf.pages]
@@ -1484,6 +1540,16 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
 
     rows: list[dict] = []
     warnings: list[str] = []
+    # Lines that read as "probably a transaction" (they carry a real money
+    # amount and some letters) but didn't match any of the three line
+    # shapes above — most often a PDF-page-break artifact that split one
+    # transaction's own date across two pages (e.g. "05/08/2" on the last
+    # line of a page, "026 ..." starting the next), which no fixed date
+    # pattern can be made to anticipate. A nonzero count here, even
+    # alongside otherwise-successful parsing, is the signal used below to
+    # also run the AI-assisted pass — not just when regex parsing found
+    # nothing at all, but when it visibly left something on the table.
+    unmatched_money_line_count = 0
 
     for text in pages_text:
         for raw_line in text.split("\n"):
@@ -1524,6 +1590,8 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
                         "its description wrapped onto another line and couldn't be matched."
                     )
                     continue
+                if _PDF_SUMMARY_ROW_RE.search(description):
+                    continue
 
                 rows.append({
                     "date": parsed_date.strftime("%Y-%m-%d"),
@@ -1555,6 +1623,8 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
                         "its description wrapped onto another line and couldn't be matched."
                     )
                     continue
+                if _PDF_SUMMARY_ROW_RE.search(description):
+                    continue
 
                 rows.append({
                     "date": parsed_date.strftime("%Y-%m-%d"),
@@ -1565,18 +1635,118 @@ def _parse_statement_pdf(file_stream, password: str | None = None) -> tuple[list
                 })
                 continue
 
+            if re.search(_MONEY, line) and any(ch.isalpha() for ch in line):
+                unmatched_money_line_count += 1
+
     if not any_text_found:
         return [], [
             "Couldn't read any text from that PDF. This works on text-based statements "
             "(the normal kind a bank emails or lets you download) — a scanned or "
             "photographed page has no extractable text and isn't supported."
+        ], False
+    if rows and not unmatched_money_line_count:
+        return rows, warnings, False
+
+    # Either the line-regex parser above found nothing at all, or it found
+    # some rows but also left visibly money-shaped lines unmatched (most
+    # often one transaction's date corrupted by a PDF page-break, mixed in
+    # with statements that otherwise parse cleanly) — try AI-assisted
+    # extraction either way. Costs nothing for the (large majority of)
+    # statements where regex parsing alone already accounts for every
+    # money-shaped line, since it only runs here.
+    ai_rows, ai_warnings = _parse_statement_pdf_with_ai(pages_text)
+
+    if rows:
+        # Merge mode: only add AI-found transactions that don't already
+        # match something the regex pass already has — same date and
+        # amount is treated as the same transaction regardless of minor
+        # description wording differences between the two passes, which
+        # is enough to avoid double-importing the rows regex already
+        # parsed correctly while still picking up whatever it missed.
+        seen = {(r["date"], f"{r['amount']:.2f}") for r in rows}
+        new_ai_rows = [
+            r for r in ai_rows if (r["date"], f"{r['amount']:.2f}") not in seen
         ]
-    if not rows:
-        return [], [
-            "Found text in that PDF, but nothing that looked like a transaction line "
-            "(a date, description, and amount together). A CSV export, if your bank "
-            "offers one, will work more reliably than a PDF."
-        ]
+        return rows + new_ai_rows, warnings, bool(new_ai_rows)
+
+    if ai_rows:
+        return ai_rows, ai_warnings, True
+
+    return [], [
+        "Found text in that PDF, but nothing that looked like a transaction line "
+        "(a date, description, and amount together). A CSV export, if your bank "
+        "offers one, will work more reliably than a PDF."
+    ], False
+
+
+def _parse_statement_pdf_with_ai(pages_text: list[str]) -> tuple[list[dict], list[str]]:
+    """
+    AI-assisted fallback for _parse_statement_pdf, called only when the
+    deterministic line-regex pass above finds zero rows. Reads the same
+    per-page extracted text a human would, so it isn't tied to any one
+    line shape — the whole point, since that's exactly what the regex
+    approach can't do for a statement that splits a row's date and its
+    amounts across separate lines.
+
+    Degrades silently on any failure (missing API key, network error,
+    malformed model output) rather than surfacing an AI-specific error —
+    the caller's existing "nothing looked like a transaction line" message
+    already covers this case appropriately, and a user pasting in a bank
+    statement shouldn't see an "AI service unavailable" message for what
+    is, from their side, just an unsupported PDF layout.
+    """
+    from ...services.ai_service import AIService  # local: ai_service imports
+    # TRANSACTION_CATEGORIES from this module, so a top-level import here
+    # would be circular — safe once both modules have finished loading.
+
+    result = AIService.extract_pdf_transactions(pages_text)
+    if "error" in result:
+        log.warning("AI statement-extraction fallback failed: %s", result["error"])
+        return [], []
+
+    rows: list[dict] = []
+    warnings: list[str] = []
+    for i, raw in enumerate(result.get("transactions") or [], start=1):
+        if not isinstance(raw, dict):
+            continue
+
+        try:
+            parsed_date = datetime.strptime(str(raw.get("date", "")), "%Y-%m-%d").date()
+        except ValueError:
+            warnings.append("Skipped a transaction: couldn't make sense of its date.")
+            continue
+
+        description = str(raw.get("description") or "").strip()
+        if not description or not any(ch.isalpha() for ch in description):
+            warnings.append(
+                f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: no usable description."
+            )
+            continue
+
+        t_type = raw.get("type")
+        if t_type not in ("income", "expense"):
+            continue
+
+        try:
+            amount = abs(float(raw.get("amount")))
+        except (TypeError, ValueError):
+            continue
+        if amount == 0:
+            continue
+
+        rows.append({
+            "date": parsed_date.strftime("%Y-%m-%d"),
+            "description": description,
+            "amount": amount,
+            "type": t_type,
+            "category": _guess_category(description, t_type),
+        })
+
+    if result.get("truncated"):
+        warnings.append(
+            "This statement was long enough that only the first part of it was read — "
+            "later transactions may be missing."
+        )
 
     return rows, warnings
 
@@ -1677,10 +1847,11 @@ def import_preview():
         return jsonify({"message": "No file uploaded"}), 400
 
     is_pdf = file.filename.lower().endswith(".pdf") or file.mimetype == "application/pdf"
+    ai_assisted = False
     if is_pdf:
         password = request.form.get("pdf_password") or None
         try:
-            rows, warnings = _parse_statement_pdf(file.stream, password=password)
+            rows, warnings, ai_assisted = _parse_statement_pdf(file.stream, password=password)
         except PdfPasswordRequired:
             message = (
                 "That PDF needs a password to open."
@@ -1705,11 +1876,22 @@ def import_preview():
         key = (row["date"], row["description"], f"{row['amount']:.2f}", row["type"])
         row["duplicate"] = key in existing
 
-    return jsonify({
+    response = {
         "rows": rows,
         "warnings": warnings,
         "categories": {key: val["label"] for key, val in TRANSACTION_CATEGORIES.items()},
-    })
+    }
+    if ai_assisted:
+        # Distinct from "warnings" (which the client renders as "N rows
+        # skipped") — this isn't a skip, it's a heads-up that these rows
+        # came from AI-assisted reading rather than direct parsing, worth
+        # a closer look before importing but not a sign anything is wrong.
+        response["notice"] = (
+            "This PDF's layout didn't match the usual pattern, so these were read "
+            "with AI assistance instead of parsed directly — double-check the "
+            "dates and amounts below before importing."
+        )
+    return jsonify(response)
 
 
 @finance_bp.route("/finance/import/commit", methods=["POST"])

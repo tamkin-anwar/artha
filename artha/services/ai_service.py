@@ -64,6 +64,19 @@ _MAX_CONTEXT_TRANSACTIONS = 50  # caps context window size and cost
 _MAX_HISTORY_TURNS = 20         # max conversation turns accepted from client
 _MAX_MESSAGE_LEN = 4000         # character limit per user message
 
+# Statement-PDF extraction (extract_pdf_transactions, called from
+# blueprints/finance/routes.py as a fallback when the deterministic
+# line-regex parser in _parse_statement_pdf finds nothing — see that
+# function's docstring for why no single deterministic approach covers
+# real-world statement layouts). A long statement can run to 100+ rows;
+# each renders as a small JSON object in the tool call, so the output cap
+# needs real headroom, not the 2048 a short chat reply gets by with.
+_STATEMENT_MAX_TOKENS = 8192
+# Roughly 10-15 pages of statement text — far past any normal single
+# monthly statement, there mainly to bound worst-case cost/latency on a
+# pathological upload rather than to ever actually bind in practice.
+_STATEMENT_MAX_CHARS = 60_000
+
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are Artha AI, an intelligent personal assistant built into Artha, \
 a personal finance and productivity OS.
@@ -214,6 +227,76 @@ _TOOLS = [
         },
     },
 ]
+
+# ---------------------------------------------------------------------------
+# Statement-PDF extraction tool — forced via tool_choice, never offered
+# alongside _TOOLS. This is a one-shot structured-extraction call (read the
+# page text, hand back transactions), not a proposal the user confirms —
+# extract_pdf_transactions()'s caller (blueprints/finance/routes.py) still
+# runs every returned row through the same preview-and-edit table a
+# regex-parsed CSV/PDF import goes through before anything is saved, so
+# this doesn't skip the existing human-review safety net.
+# ---------------------------------------------------------------------------
+
+_STATEMENT_SYSTEM_PROMPT = """\
+You read bank/card statement text extracted from a PDF and return every \
+real transaction as structured data. The text was pulled from a table \
+layout, so it often arrives jumbled: a transaction's date and description \
+may sit on one line while its amount and running balance sit on another, \
+several lines down, with no date on that line at all. Read the whole \
+document as a human reading a printed statement would, not line by line.
+
+Rules:
+- One entry per real movement of money. Never include a pure "Opening \
+Balance" / "Balance Brought Forward" / running-balance-only line that has \
+no actual debit or credit amount, and never include a totals/summary row \
+printed at the end of a statement.
+- date: always output ISO YYYY-MM-DD, converting from whatever format the \
+statement uses (DD/MM/YYYY, MM/DD/YYYY, "19 Sep 2024", etc.) — infer \
+day-first vs month-first from context (a day > 12 anywhere in the \
+document settles it; otherwise default to the format most of the \
+document's other unambiguous dates use).
+- description: the merchant/counterparty/memo text for that row, with \
+line-wrap artifacts joined into one clean line. Drop boilerplate that \
+isn't part of the description itself (page footers, "Page X of Y", the \
+bank's own disclaimer text).
+- amount: a positive number — the transaction's own magnitude, never the \
+running balance column.
+- type: "expense" for a debit/withdrawal, "income" for a credit/deposit. \
+Most statements print these as separate Debit/Credit (or \
+Withdrawal/Deposit) columns — use whichever column is non-zero. If \
+there's a single signed amount column instead, negative is expense, \
+positive is income.
+- Copy every amount and date exactly as printed, just reformatted per the \
+rules above — never estimate, round, or invent a value that isn't \
+directly in the source text.
+- If you genuinely find no transactions, call the tool with an empty list \
+rather than declining to call it.
+"""
+
+_STATEMENT_TOOL = {
+    "name": "record_transactions",
+    "description": "Record every real transaction found in the statement text.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "transactions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "YYYY-MM-DD"},
+                        "description": {"type": "string"},
+                        "amount": {"type": "number", "description": "Positive."},
+                        "type": {"type": "string", "enum": ["income", "expense"]},
+                    },
+                    "required": ["date", "description", "amount", "type"],
+                },
+            },
+        },
+        "required": ["transactions"],
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -704,3 +787,72 @@ class AIService:
             },
             "usage": result.get("usage"),
         }
+
+    # ------------------------------------------------------------------
+    # Statement-PDF extraction  (fallback for the deterministic PDF parser)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def extract_pdf_transactions(cls, pages_text: list[str]) -> dict:
+        """
+        Last-resort transaction extraction for a statement PDF the
+        deterministic line-regex parser (_parse_statement_pdf in
+        blueprints/finance/routes.py) couldn't read at all — called only
+        when that parser finds zero rows, not as the default path, so
+        this costs nothing for the statements the regex already handles.
+
+        No user object / financial context needed: this is a pure
+        text-in, transactions-out extraction, unrelated to the
+        conversational assistant's own system prompt.
+
+        Args:
+            pages_text: One string per PDF page, as returned by
+                        pdfplumber's page.extract_text().
+
+        Returns:
+            {"transactions": [{"date": "YYYY-MM-DD", "description": str,
+                                "amount": float, "type": "income"|"expense"}]}
+            {"error": str}
+        """
+        full_text = "\n".join(pages_text).strip()
+        if not full_text:
+            return {"transactions": []}
+
+        truncated = len(full_text) > _STATEMENT_MAX_CHARS
+        if truncated:
+            full_text = full_text[:_STATEMENT_MAX_CHARS]
+
+        try:
+            client = _get_client()
+        except RuntimeError as exc:
+            log.error("AI client init failed for PDF extraction: %s", exc)
+            return {"error": str(exc)}
+
+        try:
+            resp = client.messages.create(
+                model=_get_model(),
+                max_tokens=_STATEMENT_MAX_TOKENS,
+                system=_STATEMENT_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": full_text}],
+                tools=[_STATEMENT_TOOL],
+                tool_choice={"type": "tool", "name": "record_transactions"},
+            )
+        except APITimeoutError:
+            log.warning("Anthropic timeout during PDF statement extraction.")
+            return {"error": "Request timed out. Please try again."}
+        except APIConnectionError as exc:
+            log.error("Anthropic connection error during PDF extraction: %s", exc)
+            return {"error": "Could not reach AI service. Check connectivity."}
+        except APIStatusError as exc:
+            log.error("Anthropic status error %s during PDF extraction: %s", exc.status_code, exc.message)
+            return {"error": f"AI service error ({exc.status_code}). Please try again."}
+        except Exception as exc:
+            log.exception("Unexpected error during PDF statement extraction: %s", exc)
+            return {"error": "An unexpected error occurred."}
+
+        tool_call = next(
+            (block for block in resp.content if block.type == "tool_use"), None
+        )
+        transactions = tool_call.input.get("transactions", []) if tool_call else []
+
+        return {"transactions": transactions, "truncated": truncated}
