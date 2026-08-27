@@ -417,6 +417,17 @@ select.field-input {
   display: none;
 }
 
+/* Same treatment as .month-tab-row above: a horizontal row of pills
+   already shows a cut-off chip at the edge as its own "there's more"
+   cue, so a raw OS scrollbar track underneath is just visual noise on
+   top of a signal it already gives, not a second one. */
+.scenario-whatif-row {
+  scrollbar-width: none;
+}
+.scenario-whatif-row::-webkit-scrollbar {
+  display: none;
+}
+
 /* Recurring transaction toggle pill */
 .tx-recurring-toggle {
   width: 28px;
