@@ -557,7 +557,14 @@
     .csv-import-close svg, .csv-import-close i { width:18px; height:18px; }
     .csv-import-hint { font-size:13px; color:var(--text-secondary); margin:0 0 16px; line-height:1.5; }
     .csv-import-error { font-size:13px; color:var(--red); margin:0 0 14px; display:none; }
-    .csv-import-file-row { display:flex; align-items:center; gap:10px; }
+    /* Same trap as .csv-import-backdrop above, and it actually bit here:
+       an unscoped display:flex on this class beats the [hidden] attribute
+       on #csv-import-password-row (author styles always outrank the UA
+       stylesheet's [hidden]{display:none} at equal specificity), so the
+       password field rendered visible on every upload regardless of
+       whether the PDF actually needed one — confusing anyone whose file
+       had no password at all, which is the common case. */
+    .csv-import-file-row:not([hidden]) { display:flex; align-items:center; gap:10px; }
     #csv-import-file { font-size:13px; color:var(--text-secondary); flex:1; min-width:0; }
 
     .csv-import-summary { font-size:13px; color:var(--text-secondary); margin:0 0 12px; flex-shrink:0; }
@@ -761,7 +768,7 @@
                 <button type="button" id="csv-import-preview-btn" class="btn-primary" style="padding:8px 18px; font-size:13px;">Preview</button>
             </div>
             <div id="csv-import-password-row" class="csv-import-file-row" style="margin-top:10px;" hidden>
-                <input type="password" id="csv-import-password" class="field-input" placeholder="PDF password" style="flex:1; height:38px; font-size:13px;" autocomplete="off">
+                <input type="password" id="csv-import-password" class="field-input" placeholder="PDF password (shown because this file is encrypted)" style="flex:1; height:38px; font-size:13px;" autocomplete="off">
             </div>
         </div>
 
