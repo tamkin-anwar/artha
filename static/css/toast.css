@@ -153,10 +153,6 @@
     to { transform: scaleX(0); }
 }
 
-.chart-text {
-    color: var(--text-primary);
-}
-
 /* Action button inside toast (Undo, Retry, etc.) — same treatment as
    .btn-secondary everywhere else, just sized to fit inline. */
 .toast-action-btn {
