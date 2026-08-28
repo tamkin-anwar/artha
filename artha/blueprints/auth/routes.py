@@ -119,6 +119,17 @@ def _purge_expired_deleted_accounts() -> None:
         db.session.commit()
 
 
+@auth_bp.route("/privacy")
+def privacy():
+    """A plain-language explainer of how Artha handles a user's data,
+    reachable without logging in (linked from Register, so someone can
+    read it before handing over any of their own data) and from Edit
+    Profile's Security section (for people who already have an account).
+    No dynamic content — this is a static page kept in sync by hand
+    whenever the actual data-handling behavior it describes changes."""
+    return render_template("privacy.html")
+
+
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":

@@ -3,6 +3,12 @@ from artha.models import User
 from .conftest import make_user
 
 
+def test_privacy_page_is_reachable_without_logging_in(client):
+    resp = client.get("/privacy")
+    assert resp.status_code == 200
+    assert b"Privacy" in resp.data
+
+
 def test_register_creates_user(client, app):
     resp = client.post(
         "/register",

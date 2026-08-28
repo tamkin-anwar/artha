@@ -104,6 +104,12 @@
                 Security
             </h2>
 
+            <p class="text-sm mb-4">
+                <a href="{{ url_for('auth.privacy') }}" class="auth-link">
+                    How your data is stored and protected
+                </a>
+            </p>
+
             {% if current_user.otp_enabled %}
                 <p class="text-sm text-slate-300 mb-4">
                     Two-factor authentication is <strong class="text-white">on</strong>. You'll be asked for a code
