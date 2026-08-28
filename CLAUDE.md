@@ -13,10 +13,10 @@ no tracking. Live at arthaapp.com. Genuinely multi-user: roughly 8-10 real
 people (friends and family, several outside the US) each running an
 independent account with fully siloed data, not a shared household tool.
 
-Built by Tamkin Anwar, almost entirely with Claude Code. The tracked GitHub
-history starts January 2026, but an untracked offline predecessor goes back
-to June 2025 — don't describe the first git commit as "when the project
-started."
+Built by Anwar Creative Studio (Tamkin Anwar), almost entirely with Claude
+Code. The tracked GitHub history starts January 2026, but an untracked
+offline predecessor goes back to June 2025 — don't describe the first git
+commit as "when the project started."
 
 ## Product direction
 

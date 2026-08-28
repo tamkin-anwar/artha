@@ -6,6 +6,8 @@ It focuses on clarity, speed, and control: self-hosted and no tracking, with an 
 
 [Live app →](https://arthaapp.com)
 
+Built by Anwar Creative Studio.
+
 ## Features
 
 **Finance**
