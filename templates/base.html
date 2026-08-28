@@ -170,6 +170,9 @@
                         <a href="{{ url_for('auth.change_password') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
                             Change password
                         </a>
+                        <a href="{{ url_for('auth.privacy') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
+                            Privacy &amp; security
+                        </a>
                         <a href="{{ url_for('auth.logout') }}" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none; color:var(--red);" role="menuitem">
                             Logout
                         </a>
@@ -382,6 +385,10 @@
 
                         <a href="{{ url_for('auth.change_password') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
                             Change password
+                        </a>
+
+                        <a href="{{ url_for('auth.privacy') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
+                            Privacy &amp; security
                         </a>
 
                         <a href="{{ url_for('auth.logout') }}" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none; color:var(--red); border:1px solid var(--border-subtle); border-radius:8px;">
