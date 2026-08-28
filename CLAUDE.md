@@ -105,6 +105,15 @@ not a gap to fix.
   `Scenario` were missing this and silently orphaned rows on account
   deletion until it was caught and fixed (2026-08-27) — check any new
   child model for the same gap.
+- **`templates/privacy.html` (`/privacy`, linked from Register and the
+  Account menu) makes specific, checkable claims about how Artha handles
+  data** — bank statements never touch disk, the AI only sees a snapshot
+  and never writes directly, Anthropic doesn't train on API data, and so
+  on. Any change to statement import, AI context/write access, hosting,
+  or third-party services (added 2026-08-28) needs that page checked
+  against the new reality and updated in the same change, not left to go
+  stale. A wrong privacy claim users actually read is worse than no page
+  at all.
 
 ## Known traps
 
