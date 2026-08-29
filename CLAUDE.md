@@ -142,10 +142,22 @@ not a gap to fix.
 - **The dev server doesn't hot-reload Python or template changes** —
   stop and restart it after any backend/template edit before trusting a
   live check against it.
-- **PWA / Service Worker caching.** Static JS/CSS changes won't reflect
-  in a live browser check until `navigator.serviceWorker.getRegistrations()`
-  is unregistered and `caches.keys()` is cleared — the app aggressively
-  caches for offline support.
+- **PWA / Service Worker caching.** `static/service-worker.js` used a
+  cache-first strategy for static assets until 2026-08-28: since a
+  CSS/JS-only deploy never changes `service-worker.js` itself, the
+  browser had no reason to re-run its install step, so an already-
+  visiting user's Service Worker could keep serving the exact response
+  it cached the first time it ever ran, sometimes for weeks, surviving
+  even a hard reload (the Service Worker intercepts the request before
+  the browser's own cache-busting gets a say). This broke a real
+  deploy in production, not just local testing, and is now
+  network-first with a cache fallback for offline instead — routine
+  CSS/JS changes reach an already-open tab on its next load without
+  needing anything special. Still bump `CACHE_NAME` when changing
+  `ASSETS_TO_CACHE` itself (adding/removing a cached file), and for a
+  local check during this session, `navigator.serviceWorker.getRegistrations()`
+  unregistered plus `caches.keys()` cleared remains the fastest way to
+  rule the Service Worker out entirely if something still looks stale.
 
 ## Workflow for non-trivial changes
 

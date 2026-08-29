@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v26";
+const CACHE_NAME = "artha-cache-v27";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -72,9 +72,32 @@ const ASSETS_TO_CACHE = [
         return;
     }
 
-    // Static assets: cache first, fallback to network
+    // Static assets: network first, falling back to cache only when the
+    // network fetch itself fails (genuinely offline). The previous
+    // cache-first strategy shipped one real bug: the browser only
+    // re-runs this file's install step when service-worker.js itself
+    // changes byte-for-byte, so a CSS/JS-only deploy (the overwhelming
+    // majority of them) never re-triggered it, and an already-visiting
+    // user's Service Worker kept serving the exact response it cached
+    // the first time it ever ran, sometimes for weeks, surviving even a
+    // hard reload, since the Service Worker intercepts the request
+    // before the browser's own cache-busting ever gets a say. Confirmed
+    // live in production (2026-08-28): a sidebar CSS change rendered
+    // correctly once, then reverted to the old broken layout on a later
+    // reload, on the same deploy, with no code change in between.
+    // Network-first still updates the cache on every successful fetch
+    // (so the offline fallback below stays reasonably fresh), it just
+    // no longer lets a stale response win over a reachable network.
     event.respondWith(
-        caches.match(event.request).then((cached) => cached || fetch(event.request))
+        fetch(event.request)
+            .then((response) => {
+                if (response.ok) {
+                    const responseCopy = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseCopy));
+                }
+                return response;
+            })
+            .catch(() => caches.match(event.request))
     );
 });
 
