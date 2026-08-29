@@ -132,7 +132,15 @@ not a gap to fix.
   `:not([hidden])` (see `.csv-import-backdrop` in `templates/finance.html`
   for the documented pattern), or it renders regardless of the attribute.
   This has silently broken two different elements in that same file
-  before being understood as a general trap, not a one-off.
+  before being understood as a general trap, not a one-off. The same
+  family of bug shows up with Tailwind's `hidden`/`md:block` responsive
+  utility classes too: an inline `style="display:flex"` on the exact
+  element carrying those classes beats them the same way, so anything
+  meant to appear only above/below a breakpoint needs that `display`
+  moved onto a wrapper element instead (see `settings-btn`'s
+  `<div class="hidden md:block">` wrapper in `templates/base.html` for
+  the pattern, and the "What's New" top-bar icon in that same file for
+  a real instance of getting this wrong and then fixing it, 2026-08-29).
 - **`scrollbar-width` vs. `::-webkit-scrollbar` on the same element.**
   Setting both makes Chrome/Safari/Edge silently prefer their own native
   "thin" scrollbar rendering over the custom webkit thumb styling, even

@@ -236,6 +236,21 @@
 
                         {% block topbar_action %}{% endblock %}
 
+                        {% if current_user.is_authenticated %}
+                            <div class="hidden md:block">
+                                <a
+                                    href="{{ url_for('dashboard.whats_new') }}"
+                                    style="position:relative; background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; text-decoration:none; flex-shrink:0;"
+                                    title="What's new"
+                                >
+                                    <i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
+                                    {% if has_new_changelog %}
+                                        <span aria-hidden="true" style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 2px var(--bg-page);"></span>
+                                    {% endif %}
+                                </a>
+                            </div>
+                        {% endif %}
+
                         <div style="position:relative;" class="hidden md:block">
                             <button
                                 id="settings-btn"
@@ -325,6 +340,9 @@
                     <a href="{{ url_for('notes.notes_page') }}" class="nav-link {{ 'nav-active' if is_notes_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="file-text" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Notes</a>
                     <a href="{{ url_for('dashboard.calendar_page') }}" class="nav-link {{ 'nav-active' if is_calendar_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calendar" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calendar</a>
                     <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator</a>
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('dashboard.whats_new') }}" class="nav-link" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> What's new{% if has_new_changelog %}<span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:var(--gold); flex-shrink:0;"></span>{% endif %}</a>
+                    {% endif %}
                     {% if current_user.is_authenticated and current_user.is_admin %}
                         <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin<span id="admin-badge-mobile">{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</span></a>
                     {% endif %}

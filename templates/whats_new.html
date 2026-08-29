@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}What's New{% endblock %}
+{% block content %}
+
+<div class="eyebrow" style="margin-bottom:8px;">WHAT'S NEW</div>
+<h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 8px;">What's changed in Artha</h1>
+<p style="font-size:14px; color:var(--text-secondary); margin:0 0 28px; max-width:60ch;">
+    A running list of what's shipped, in plain language. For the full engineering story behind any of it, just ask.
+</p>
+
+<div style="max-width:640px; display:flex; flex-direction:column; gap:16px;">
+    {% for entry in entries %}
+        <div class="glass-card" style="padding:20px 24px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                {% if entry.category == "new" %}
+                    <span class="badge-changelog-new">New</span>
+                {% elif entry.category == "improved" %}
+                    <span class="badge-changelog-improved">Improved</span>
+                {% elif entry.category == "fixed" %}
+                    <span class="badge-changelog-fixed">Fixed</span>
+                {% endif %}
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">
+                    {{ entry.date }}
+                </span>
+            </div>
+            <h2 style="font-family:'Fraunces',serif; font-size:18px; font-weight:600; color:var(--text-primary); margin:0 0 6px;">
+                {{ entry.title }}
+            </h2>
+            <p style="font-size:14px; color:var(--text-secondary); margin:0; line-height:1.6;">
+                {{ entry.body }}
+            </p>
+        </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

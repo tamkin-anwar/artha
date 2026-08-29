@@ -1,13 +1,14 @@
 import calendar as cal
 import logging
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from flask import render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
+from ...changelog import CHANGELOG_ENTRIES
 from ...extensions import db
 from ...models import Note, Transaction, Event, EventException
 from ...models.budget import Budget
@@ -795,3 +796,35 @@ def calculator_solve():
         log.warning("Calculator AI fallback failed: %s", result["error"])
         return jsonify({"solvable": False}), 503
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# What's New — a short, plain-language changelog for users, distinct from
+# the Artha Logbook (a separate, personal document written for a different
+# audience). See artha/changelog.py for the content and the house rule on
+# what belongs in each.
+# ---------------------------------------------------------------------------
+
+@dashboard_bp.app_context_processor
+def inject_changelog_badge():
+    """Top-bar badge — same pattern as admin's inject_admin_badge:
+    registered as an app-wide context processor (not gated by
+    before_request) so it runs on every page, and an unauthenticated
+    request never pays for it."""
+    if not current_user.is_authenticated:
+        return {}
+    if not CHANGELOG_ENTRIES:
+        return {"has_new_changelog": False}
+    latest = datetime.strptime(CHANGELOG_ENTRIES[0]["date"], "%Y-%m-%d").date()
+    seen = current_user.changelog_seen_at
+    return {"has_new_changelog": seen is None or seen.date() < latest}
+
+
+@dashboard_bp.route("/whats-new")
+@login_required
+def whats_new():
+    """Visiting this page marks everything as seen, the same "opening it
+    clears the badge" convention most real changelog widgets use."""
+    current_user.changelog_seen_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return render_template("whats_new.html", entries=CHANGELOG_ENTRIES)

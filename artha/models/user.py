@@ -96,6 +96,13 @@ class User(UserMixin, db.Model):
         "RecoveryCode", backref="user", lazy="dynamic", cascade="all, delete-orphan"
     )
 
+    # Null until the user's first /whats-new visit. Compared against the
+    # newest entry in artha/changelog.py to decide whether the top-bar
+    # badge shows (see dashboard/routes.py's inject_changelog_badge) --
+    # a nullable DateTime, not a Boolean, so there's no Postgres
+    # server_default landmine to worry about here.
+    changelog_seen_at = db.Column(db.DateTime, nullable=True)
+
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
 
