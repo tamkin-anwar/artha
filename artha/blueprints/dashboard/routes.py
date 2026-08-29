@@ -760,3 +760,38 @@ def calculator_exchange_rates():
     if rates is None:
         return jsonify({"error": "unavailable"}), 503
     return jsonify(rates)
+
+
+# 300 chars is generous for a genuine calculator line (a real word problem
+# reads more like a sentence than a paragraph); mainly here to bound
+# worst-case cost/latency on a pathological paste, same spirit as
+# ai_service.py's own _STATEMENT_MAX_CHARS.
+_CALCULATOR_LINE_MAX_CHARS = 300
+
+
+@dashboard_bp.route("/calculator/solve", methods=["POST"])
+@login_required
+def calculator_solve():
+    """
+    AI fallback for one Smart Calculator line the client-side
+    deterministic pipeline (templates/calculator.html) couldn't trust —
+    see AIService.solve_calculator_line's docstring for exactly when the
+    client calls this. Debouncing, per-line caching, and the concurrency
+    cap all live client-side; this route just forwards one short line to
+    the model and back. Never called per keystroke.
+    """
+    from ...services.ai_service import AIService  # local: ai_service imports
+    # EVENT_COLORS/EVENT_RECURRENCES from this module, so a top-level
+    # import here would be circular — safe once both modules have
+    # finished loading.
+
+    data = request.get_json(silent=True) or {}
+    line = (data.get("line") or "").strip()
+    if not line or len(line) > _CALCULATOR_LINE_MAX_CHARS:
+        return jsonify({"solvable": False}), 400
+
+    result = AIService.solve_calculator_line(line)
+    if "error" in result:
+        log.warning("Calculator AI fallback failed: %s", result["error"])
+        return jsonify({"solvable": False}), 503
+    return jsonify(result)

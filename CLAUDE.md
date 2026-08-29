@@ -82,13 +82,20 @@ not a gap to fix.
   already explained in a comment directly above the code in question.
   Read that context before calling something broken, redundant, or a
   double-count in a review or audit.
-- **Calculator (`templates/calculator.html`) phrasing gaps get fixed by
-  broadening the existing regex/pattern pipeline**
+- **Calculator (`templates/calculator.html`) phrasing gaps still get fixed
+  by broadening the existing regex/pattern pipeline first**
   (`preprocess()`, `convertCurrencyPhrases()`,
-  `convertLoanInterestPhrases()`, `stripMemoWords()`), not routed to an AI
-  fallback. This was a deliberate, explicitly confirmed choice (keep the
-  calculator instant, offline, and free of per-query cost) — don't
-  revisit it without asking again first.
+  `convertLoanInterestPhrases()`, `stripMemoWords()`) — that offline path
+  stays the default for anything a pattern can plausibly cover, kept
+  instant and free. An AI fallback (`AIService.solve_calculator_line`,
+  `/calculator/solve`) was added 2026-08-28, explicitly reconfirmed after
+  the earlier no-AI decision, but only as a last resort: debounced
+  client-side (900ms after the user stops typing, never per keystroke)
+  and only for a line the deterministic pass either couldn't evaluate at
+  all or flagged as untrustworthy (see `hasUnreliableImplicitMultiply` in
+  that file). Don't widen when the AI fallback fires, or make it fire
+  more eagerly, without asking again first — "offline handles it fast,
+  AI only picks up the genuine leftovers" is the whole point.
 - **Never commit or push without an explicit instruction to do so** —
   implement, test, verify live, then offer, and wait for a clear
   "commit and push" before running either command.

@@ -31,6 +31,7 @@ Model choice:
 from __future__ import annotations
 
 import logging
+import math
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -86,6 +87,10 @@ _CATEGORIZE_MAX_TOKENS = 4096
 # blueprints/finance/routes.py — this is just this module's own
 # independent ceiling on output size, kept in the same spot as the
 # statement-extraction constants above for one place to look.
+
+# solve_calculator_line: one number plus a short formula string, nowhere
+# near a chat reply's worth of output.
+_CALCULATOR_MAX_TOKENS = 512
 
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are Artha AI, an intelligent personal assistant built into Artha, \
@@ -366,6 +371,59 @@ _CATEGORIZE_TOOL = {
             },
         },
         "required": ["categories"],
+    },
+}
+
+_CALCULATOR_SYSTEM_PROMPT = """\
+You solve one line from a personal-finance smart calculator. A fast, \
+free, deterministic parser (regex phrase-matching plus math.js) already \
+runs first and handles every ordinary expression, unit/currency \
+conversion, and known finance phrase (loan payments, compound interest) \
+— you are only ever called for a line that parser either couldn't \
+evaluate at all, or evaluated in a way that isn't trustworthy (most \
+often: an ordinary English sentence that happened to contain a word \
+matching a physical-unit symbol, like "in" for inches, which let two \
+unrelated numbers in the sentence get multiplied together into a \
+confident-looking wrong answer). Treat this as a real word problem to \
+work through, not a routine calculation the other parser would have \
+already caught.
+
+Rules:
+- Solve only genuine, answerable arithmetic or word problems: "a $60 \
+bill split 3 ways with an 18% tip", "how much is 15% off $80 twice", \
+"save $200 a month for 2 years, how much total".
+- Set solvable to false for anything that isn't actually asking to \
+compute something — an ordinary sentence that happens to contain \
+numbers ("41 men in wheelchairs need 300 cheeseburgers" isn't asking a \
+question), a request outside arithmetic, or a real question you cannot \
+answer with confidence because it's missing information it needs.
+- Never guess when solvable would be a coin flip. A wrong confident \
+number is worse than admitting this one isn't answerable.
+- When solvable, always include a short plain-arithmetic formula \
+showing the actual computation (e.g. "60 * 1.18 / 3"), not just the \
+bare result — the calculator shows both, so the number is never opaque.
+"""
+
+_CALCULATOR_TOOL = {
+    "name": "solve_line",
+    "description": "Solve one calculator line, or report that it isn't a real, answerable math question.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "solvable": {
+                "type": "boolean",
+                "description": "False if this line isn't actually a real, answerable math question.",
+            },
+            "value": {
+                "type": ["number", "null"],
+                "description": "The numeric answer, or null when solvable is false.",
+            },
+            "formula": {
+                "type": ["string", "null"],
+                "description": "A short plain-arithmetic expression showing how value was computed, or null when solvable is false.",
+            },
+        },
+        "required": ["solvable", "value", "formula"],
     },
 }
 
@@ -1004,3 +1062,92 @@ class AIService:
 
         valid = set(TRANSACTION_CATEGORIES) - {"income"}
         return {"categories": [c if c in valid else None for c in categories]}
+
+    # ------------------------------------------------------------------
+    # Smart Calculator — one-line AI fallback
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def solve_calculator_line(cls, line: str) -> dict:
+        """
+        Last-resort fallback for one Smart Calculator line
+        (templates/calculator.html) the deterministic pipeline there
+        either couldn't evaluate at all, or evaluated in a way flagged as
+        untrustworthy (see that file's hasUnreliableImplicitMultiply —
+        two unrelated numbers glued together only by a coincidental
+        surviving unit word, e.g. "41 men in wheelchairs need 300
+        cheeseburgers" evaluating to "12300 in"). Called from
+        blueprints/dashboard/routes.py's calculator_solve(), which the
+        client only ever hits after debouncing on a typing pause — never
+        per keystroke, same "don't cost anything for the common case"
+        shape as extract_pdf_transactions/categorize_transactions.
+
+        Args:
+            line: The raw line as typed, already trimmed. The route caps
+                  length before this is ever called — a genuine
+                  calculator line is never a paragraph.
+
+        Returns:
+            {"solvable": True, "value": float, "formula": str | None}
+            {"solvable": False}
+            {"error": str}
+        """
+        line = (line or "").strip()
+        if not line:
+            return {"solvable": False}
+
+        try:
+            client = _get_client()
+        except RuntimeError as exc:
+            log.error("AI client init failed for calculator fallback: %s", exc)
+            return {"error": str(exc)}
+
+        try:
+            resp = client.messages.create(
+                model=_get_model(),
+                max_tokens=_CALCULATOR_MAX_TOKENS,
+                system=_CALCULATOR_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": line}],
+                tools=[_CALCULATOR_TOOL],
+                tool_choice={"type": "tool", "name": "solve_line"},
+            )
+        except APITimeoutError:
+            log.warning("Anthropic timeout during calculator fallback.")
+            return {"error": "Request timed out."}
+        except APIConnectionError as exc:
+            log.error("Anthropic connection error during calculator fallback: %s", exc)
+            return {"error": "Could not reach AI service."}
+        except APIStatusError as exc:
+            log.error("Anthropic status error %s during calculator fallback: %s", exc.status_code, exc.message)
+            return {"error": f"AI service error ({exc.status_code})."}
+        except Exception as exc:
+            log.exception("Unexpected error during calculator fallback: %s", exc)
+            return {"error": "An unexpected error occurred."}
+
+        tool_call = next(
+            (block for block in resp.content if block.type == "tool_use"), None
+        )
+        if tool_call is None:
+            return {"solvable": False}
+
+        data = tool_call.input
+        if not data.get("solvable"):
+            return {"solvable": False}
+
+        # A malformed or non-finite value can't be trusted any more than
+        # a wrong one can — same "return nothing rather than risk
+        # something misleading" stance as categorize_transactions' length
+        # check above.
+        try:
+            value = float(data.get("value"))
+        except (TypeError, ValueError):
+            return {"solvable": False}
+        if not math.isfinite(value):
+            return {"solvable": False}
+
+        formula = data.get("formula")
+        return {
+            "solvable": True,
+            "value": value,
+            "formula": formula if isinstance(formula, str) and formula.strip() else None,
+        }

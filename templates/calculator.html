@@ -109,6 +109,29 @@
         .expr-result-line { padding: 0 8px; font-size: 12.5px; }
     }
 
+    /* AI-fallback results (see hasUnreliableImplicitMultiply and the AI
+       cache below) get their own color, distinct from the gold used for
+       the deterministic engine's own answers — same "this one's worth a
+       second look" signal the statement-import notice already uses
+       elsewhere in the app, not a color invented just for this. */
+    .expr-result-ai {
+        color: var(--text-primary);
+        cursor: help;
+    }
+    .expr-result-ai::after {
+        content: "AI";
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        color: var(--gold);
+        margin-left: 5px;
+        vertical-align: super;
+    }
+    .expr-result-ai-pending {
+        color: var(--text-secondary);
+        font-style: italic;
+    }
+
     /* Running total — sums bare-expression result lines only (not
        variable assignments), pinned below the expression editor. */
     .expr-total-row {
@@ -172,7 +195,7 @@
         <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px;">
             <div>
                 <span class="eyebrow" style="display:block; margin-bottom:4px;">Smart Calculator</span>
-                <p style="font-size:12px; color:var(--text-secondary); margin:0;">Type naturally. Convert units and currency. Assign variables.</p>
+                <p style="font-size:12px; color:var(--text-secondary); margin:0;">Type naturally. Convert units and currency. Assign variables. Real word problems get solved too, marked <span style="color:var(--gold); font-weight:600;">AI</span> when they are.</p>
             </div>
             <button type="button" id="expr-clear-btn" class="btn-secondary" style="padding:7px 14px; font-size:12px; flex-shrink:0;">Clear all</button>
         </div>
@@ -589,6 +612,32 @@
         });
     }
 
+    // Catches the one shape stripMemoWords can produce that's actively
+    // misleading rather than just incomplete: two separate numbers from
+    // the original line, connected in the stripped/preprocessed line by
+    // nothing but a bare surviving word — almost always a coincidental
+    // unit-symbol collision ("in" is both the English preposition and
+    // math.js's symbol for inches; "a"/"g"/"s"/"min" collide the same
+    // way). math.js then treats that bare word as a real unit and
+    // implicitly multiplies the two numbers together, producing a
+    // confident, wrong-looking answer for what was often an ordinary
+    // sentence, not a math expression at all ("41 men in wheelchairs
+    // need 300 cheeseburgers" -> 12300 in — the real bug report this
+    // guards against). Deliberately narrow: a real, intentional unit
+    // value ("5 kg") only ever has ONE number before the word, so this
+    // can't misfire on that; two real units joined by an operator the
+    // user actually typed ("5 kg + 3 lbs") has that operator sitting
+    // between the number groups, which this pattern requires to be
+    // absent. What this does NOT catch — and isn't meant to — is two
+    // bare numbers multiplying with nothing but whitespace between them
+    // and no surviving word at all ("2 3" -> 6, "buy 2 shirts at 15
+    // each" -> 30 once "buy"/"at"/"each" strip to nothing): that's
+    // math.js's own well-established implicit-multiplication convention,
+    // already relied on elsewhere in normal use, not this bug's shape.
+    function hasUnreliableImplicitMultiply(strippedLine) {
+        return /\d+(?:\.\d+)?\s+[a-zA-Z]+\s+\d+(?:\.\d+)?/.test(strippedLine);
+    }
+
     // A variable-assignment line ("savings = salary - rent") — used to
     // exclude these from the running Total below, since they're steps
     // toward a value, not separate line items to add up.
@@ -657,6 +706,11 @@
 
             var stripped = stripMemoWords(preprocess(line), scope);
             var result = evaluateLine(line, stripped, scope);
+            // A result flagged by hasUnreliableImplicitMultiply isn't
+            // shown on its own line either (see evaluateAll()) — folding
+            // it into the Total anyway would corrupt a number the user
+            // never actually sees corroborated.
+            if (result !== null && hasUnreliableImplicitMultiply(stripped)) return;
             // Skip physical-unit results (e.g. "5 lbs to kg") — summing a
             // Unit object with += silently coerces it to its string
             // representation instead of throwing, which would corrupt the
@@ -674,10 +728,15 @@
         return (allCurrency && __formatMoney) ? __formatMoney(sum) : formatPlainNumber(sum);
     }
 
+    function escapeAttr(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
     function evaluateAll() {
         var lines = textarea.value.split("\n");
         var scope = {};
         var html = "";
+        var aiCandidates = [];
 
         lines.forEach(function (rawLine) {
             var line = rawLine.trim();
@@ -700,10 +759,43 @@
             // Step 5 — memo words, then evaluate the preprocessed line
             var stripped = stripMemoWords(preprocess(line), scope);
             var result = evaluateLine(line, stripped, scope);
-            if (result !== null) {
-                html += '<div class="expr-result-line">' + formatResult(result, line) + '</div>';
-            } else {
-                html += '<div class="expr-result-line"></div>';
+            // hasUnreliableImplicitMultiply: a result math.js was willing
+            // to compute isn't the same as one worth showing — see that
+            // function's comment for the exact failure shape this guards
+            // against. An untrustworthy result is treated the same as no
+            // result at all below: it falls through to the AI fallback.
+            var unreliable = result !== null && hasUnreliableImplicitMultiply(stripped);
+            var displayResult = unreliable ? null : result;
+
+            if (displayResult !== null) {
+                html += '<div class="expr-result-line">' + formatResult(displayResult, line) + '</div>';
+                return;
+            }
+
+            // The deterministic pipeline came up empty (or untrustworthy)
+            // for this line — check the AI fallback cache (see
+            // scheduleAiPass below) before giving up on it entirely.
+            var aiEntry = aiCache.get(line);
+            if (aiEntry && aiEntry.status === "done") {
+                var tooltip = "Answered with AI assistance" + (aiEntry.formula ? ": " + aiEntry.formula : "") + ". Double-check.";
+                html += '<div class="expr-result-line expr-result-ai" title="' + escapeAttr(tooltip) + '">' +
+                    formatPlainNumber(aiEntry.value) + '</div>';
+                return;
+            }
+            if (aiEntry && aiEntry.status === "pending") {
+                html += '<div class="expr-result-line expr-result-ai-pending">&hellip;</div>';
+                return;
+            }
+
+            html += '<div class="expr-result-line"></div>';
+            // Not yet asked, and not disqualified: a real digit to work
+            // with, short enough to be a genuine line rather than a
+            // paste, and not a variable assignment (kept deterministic-
+            // only for now — an AI-guessed assignment target risks
+            // polluting later lines' scope with a value nothing else on
+            // the page can verify).
+            if (!aiEntry && /\d/.test(line) && line.length <= 300 && !isAssignmentLine(line)) {
+                aiCandidates.push(line);
             }
         });
 
@@ -712,6 +804,68 @@
         autoGrow();
         updateCursorLine();
         persistSmartCalc();
+        if (aiCandidates.length) scheduleAiPass(aiCandidates);
+    }
+
+    // -----------------------------------------------------------------
+    // AI fallback — one line at a time, only after the deterministic
+    // pipeline above already had its shot. Debounced off the same
+    // 'input' event evaluateAll() already listens to: every keystroke
+    // still renders instantly exactly as before (the deterministic pass
+    // never waits on this), and this only fires once the user pauses —
+    // typing itself never triggers a network call. Keyed by the exact
+    // line text, not line index, so inserting/deleting a line elsewhere
+    // never invalidates an answer already in hand, and editing a line
+    // naturally asks again once its text actually changes.
+    // -----------------------------------------------------------------
+    var AI_DEBOUNCE_MS = 900;
+    var AI_MAX_CONCURRENT = 3;
+    var aiCache = new Map(); // lineText -> {status: "pending"|"done"|"error", value, formula}
+    var aiTimer = null;
+    var aiInFlight = 0;
+
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : "";
+    }
+
+    function scheduleAiPass(candidateLines) {
+        clearTimeout(aiTimer);
+        aiTimer = setTimeout(function () { runAiPass(candidateLines); }, AI_DEBOUNCE_MS);
+    }
+
+    function runAiPass(candidateLines) {
+        var toFetch = [];
+        candidateLines.forEach(function (line) {
+            if (aiCache.has(line)) return; // resolved/queued since this pass was scheduled
+            if (aiInFlight + toFetch.length >= AI_MAX_CONCURRENT) return;
+            aiCache.set(line, { status: "pending" });
+            toFetch.push(line);
+        });
+        if (!toFetch.length) return;
+        evaluateAll(); // reflect the new pending state immediately
+
+        toFetch.forEach(function (line) {
+            aiInFlight++;
+            fetch("{{ url_for('dashboard.calculator_solve') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify({ line: line }),
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    aiInFlight--;
+                    aiCache.set(line, (data && data.solvable)
+                        ? { status: "done", value: data.value, formula: data.formula || null }
+                        : { status: "error" });
+                    evaluateAll();
+                })
+                .catch(function () {
+                    aiInFlight--;
+                    aiCache.set(line, { status: "error" });
+                    evaluateAll();
+                });
+        });
     }
 
     function autoGrow() {
