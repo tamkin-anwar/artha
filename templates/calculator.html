@@ -131,6 +131,21 @@
         color: var(--text-secondary);
         font-style: italic;
     }
+    /* A line the AI tier actually looked at and came back with nothing
+       for, whether "not a real question" or "couldn't be reached" (the
+       tooltip says which). Deliberately quiet, not an error red: staying
+       silent here reads as the app ignoring what was typed, but a loud
+       error is the wrong tone for "this genuinely isn't a math
+       question" too. A plain line with no digits at all (a note, a
+       header) never reaches this state and stays fully blank, matching
+       every other notepad calculator's convention of not flagging
+       ordinary prose as broken. */
+    .expr-result-unsure {
+        color: var(--text-muted);
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        cursor: help;
+    }
 
     /* Running total — sums bare-expression result lines only (not
        variable assignments), pinned below the expression editor. */
@@ -786,6 +801,14 @@
                 html += '<div class="expr-result-line expr-result-ai-pending">&hellip;</div>';
                 return;
             }
+            if (aiEntry && aiEntry.status === "unsolvable") {
+                html += '<div class="expr-result-line expr-result-unsure" title="Checked with AI assistance: this doesn\'t look like a real, answerable question.">n/a</div>';
+                return;
+            }
+            if (aiEntry && aiEntry.status === "failed") {
+                html += '<div class="expr-result-line expr-result-unsure" title="Couldn\'t reach AI to check this line. Try again in a moment.">n/a</div>';
+                return;
+            }
 
             html += '<div class="expr-result-line"></div>';
             // Not yet asked, and not disqualified: a real digit to work
@@ -820,7 +843,7 @@
     // -----------------------------------------------------------------
     var AI_DEBOUNCE_MS = 900;
     var AI_MAX_CONCURRENT = 3;
-    var aiCache = new Map(); // lineText -> {status: "pending"|"done"|"error", value, formula}
+    var aiCache = new Map(); // lineText -> {status: "pending"|"done"|"unsolvable"|"failed", value, formula}
     var aiTimer = null;
     var aiInFlight = 0;
 
@@ -852,17 +875,28 @@
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({ line: line }),
             })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
+                .then(function (r) {
+                    return r.json().then(function (data) { return { httpStatus: r.status, data: data }; });
+                })
+                .then(function (result) {
                     aiInFlight--;
-                    aiCache.set(line, (data && data.solvable)
-                        ? { status: "done", value: data.value, formula: data.formula || null }
-                        : { status: "error" });
+                    if (result.data && result.data.solvable) {
+                        aiCache.set(line, { status: "done", value: result.data.value, formula: result.data.formula || null });
+                    } else if (result.httpStatus === 200) {
+                        // The AI was reached and looked at this line, it just
+                        // isn't a real, answerable question — distinct from
+                        // "couldn't check" below, and shown differently, so a
+                        // real user typing something ambiguous doesn't read
+                        // silence as "the app ignored me."
+                        aiCache.set(line, { status: "unsolvable" });
+                    } else {
+                        aiCache.set(line, { status: "failed" });
+                    }
                     evaluateAll();
                 })
                 .catch(function () {
                     aiInFlight--;
-                    aiCache.set(line, { status: "error" });
+                    aiCache.set(line, { status: "failed" });
                     evaluateAll();
                 });
         });
