@@ -93,7 +93,14 @@
 
                 <!-- Logo -->
                 <div style="padding:24px 20px 16px; border-bottom:1px solid var(--border-subtle);">
-                    <a href="{{ url_for('dashboard.index') }}" style="font-family:'Fraunces',serif; font-size:22px; color:var(--text-primary); text-decoration:none;">Artha</a>
+                    <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand">
+                        <img
+                            src="{{ url_for('static', filename='icons/artha-logo.png') }}"
+                            alt=""
+                            loading="eager"
+                        />
+                        <span>Artha</span>
+                    </a>
                 </div>
 
                 <!-- Nav -->

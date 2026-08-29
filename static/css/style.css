@@ -631,6 +631,32 @@ select.field-input {
    their own copy of the same five rules — added directly on those
    elements in their templates. */
 
+/* Sidebar brand mark — the same gradient sphere used on login/register/
+   the Privacy page and as the favicon/PWA icon, paired with the wordmark
+   the same way every one of those already does. The sidebar was the one
+   place still showing "Artha" as bare text with no icon; this closes
+   that gap rather than inventing a new treatment. */
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+}
+.sidebar-brand:hover { opacity: 0.82; }
+.sidebar-brand img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.4));
+}
+.sidebar-brand span {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    color: var(--text-primary);
+}
+
 /* Sidebar nav scrollbar — deliberately thinner and more subdued than
    .scrollbar-thin's content-panel treatment: this is navigation chrome,
    not something to browse, so it should recede even further. Still the
