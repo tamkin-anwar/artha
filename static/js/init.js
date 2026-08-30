@@ -54,6 +54,8 @@ function initSettingsMenu() {
     // button anymore — see #mobile-tabbar in base.html.
     const mobileMenuBtn = document.getElementById("tabbar-more-btn");
     const mobileMenu = document.getElementById("mobile-menu");
+    const mobileMenuBackdrop = document.getElementById("mobile-menu-backdrop");
+    const mobileMenuCloseBtn = document.getElementById("mobile-menu-close-btn");
 
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
     const mobileSettingsPanel = document.getElementById("mobile-settings-panel");
@@ -115,36 +117,60 @@ function initSettingsMenu() {
         });
     }
 
-    if (mobileMenuBtn && mobileMenu) {
+    // Three ways out (X button, backdrop tap, Escape), not just the
+    // More tab toggle that used to be the only one — the drawer's own
+    // height routinely covers the More tab once it's open, which is
+    // exactly the bug a real user hit here, 2026-08-30. Research on
+    // bottom-sheet dismissal backs the X button specifically: don't
+    // rely on backdrop-tap alone, pair it with an explicit close
+    // control. Open/close is now a class toggle (.is-open), not
+    // display:none via .hidden, so the drawer/backdrop can fade and
+    // slide instead of snapping instantly — see .mobile-menu-panel
+    // and .mobile-menu-backdrop in style.css.
+    if (mobileMenuBtn && mobileMenu && mobileMenuBackdrop) {
+        const openMobileMenu = () => {
+            mobileMenu.classList.add("is-open");
+            mobileMenuBackdrop.classList.add("is-open");
+            mobileMenuBtn.setAttribute("aria-expanded", "true");
+            // The menu is a fixed overlay with its own scroll region
+            // (see #mobile-menu in style.css), not an in-flow panel —
+            // without this, scrolling inside it also scrolled the
+            // dashboard visible behind its frosted-glass background.
+            document.body.classList.add("mobile-menu-open");
+        };
+        const closeMobileMenu = () => {
+            mobileMenu.classList.remove("is-open");
+            mobileMenuBackdrop.classList.remove("is-open");
+            mobileMenuBtn.setAttribute("aria-expanded", "false");
+            document.body.classList.remove("mobile-menu-open");
+        };
+
         mobileMenuBtn.addEventListener("click", () => {
-            const isHidden = mobileMenu.classList.contains("hidden");
-            if (isHidden) {
-                mobileMenu.classList.remove("hidden");
-                mobileMenuBtn.setAttribute("aria-expanded", "true");
-                // The menu is a fixed overlay with its own scroll region
-                // (see #mobile-menu in style.css), not an in-flow panel —
-                // without this, scrolling inside it also scrolled the
-                // dashboard visible behind its frosted-glass background.
-                document.body.classList.add("mobile-menu-open");
+            if (mobileMenu.classList.contains("is-open")) {
+                closeMobileMenu();
             } else {
-                mobileMenu.classList.add("hidden");
-                mobileMenuBtn.setAttribute("aria-expanded", "false");
-                document.body.classList.remove("mobile-menu-open");
+                openMobileMenu();
             }
         });
-    }
 
-    // The feedback FAB is hidden on mobile (see .feedback-fab's media
-    // query in style.css) now that the bottom tab bar sits in the same
-    // corner. This forwards to the exact same modal by clicking the
-    // real button, rather than duplicating its open logic here.
-    if (mobileFeedbackBtn && feedbackFab && mobileMenu) {
-        mobileFeedbackBtn.addEventListener("click", () => {
-            mobileMenu.classList.add("hidden");
-            document.getElementById("tabbar-more-btn")?.setAttribute("aria-expanded", "false");
-            document.body.classList.remove("mobile-menu-open");
-            feedbackFab.click();
+        mobileMenuCloseBtn?.addEventListener("click", closeMobileMenu);
+        mobileMenuBackdrop.addEventListener("click", closeMobileMenu);
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && mobileMenu.classList.contains("is-open")) closeMobileMenu();
         });
+
+        // The feedback FAB is hidden on mobile (see .feedback-fab's
+        // media query in style.css) now that the bottom tab bar sits
+        // in the same corner. This forwards to the exact same modal
+        // by clicking the real button, rather than duplicating its
+        // open logic here.
+        if (mobileFeedbackBtn && feedbackFab) {
+            mobileFeedbackBtn.addEventListener("click", () => {
+                closeMobileMenu();
+                feedbackFab.click();
+            });
+        }
     }
 
     if (mobileSettingsBtn && mobileSettingsPanel) {

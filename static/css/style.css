@@ -1,3 +1,18 @@
+/* Cross-document view transitions: the browser cross-fades the old
+   page out and the new one in on every full-page navigation (tapping
+   a tab bar item, a sidebar link, any <a href>) instead of the usual
+   hard cut to blank-then-repaint. Purely a progressive enhancement —
+   Safari 18.2+ and Chromium both honor it, anything older just keeps
+   today's instant navigation, no fallback code needed. Server-
+   rendered pages have no other route to this; it's this simple only
+   because it's a document-level browser default, not a JS-driven
+   transition Artha has to build and maintain. Respects
+   prefers-reduced-motion automatically per spec, same as the rest of
+   this stylesheet aims to. */
+@view-transition {
+  navigation: auto;
+}
+
 /* Light theme — default (no .dark class on <html>) */
 :root {
   /* Keeps native form-control chrome (date/time picker icons, scrollbars)
@@ -723,6 +738,59 @@ select.field-input {
    frosted glass — a real user-reported bug, not a nitpick, 2026-08-29. */
 body.mobile-menu-open {
     overflow: hidden;
+}
+
+/* Mobile menu open/close as a fade + slide, not an instant display
+   toggle — opacity/transform animate, display:none can't, so the
+   drawer stays display:flex at all times and visibility is driven by
+   opacity + pointer-events instead (visibility:hidden keeps it out
+   of tab order and off-screen-reader while closed, delayed so the
+   closing animation gets to play first). */
+.mobile-menu-panel {
+    display: flex;
+    flex-direction: column;
+    /* Keeps the drawer's own rubber-band bounce at the top/bottom of
+       its scroll region from chaining into anything else — mostly
+       moot now that body.mobile-menu-open already locks the page
+       behind it, but a cheap, standard defensive default regardless. */
+    overscroll-behavior: contain;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(10px);
+    transition: opacity 0.16s ease, transform 0.16s ease, visibility 0s linear 0.16s;
+}
+.mobile-menu-panel.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition: opacity 0.16s ease, transform 0.16s ease, visibility 0s linear 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+    .mobile-menu-panel { transition: opacity 0.16s ease, visibility 0s linear 0.16s; transform: none; }
+    .mobile-menu-panel.is-open { transition: opacity 0.16s ease, visibility 0s linear 0s; }
+}
+
+/* Dims the app behind the open drawer and doubles as a large,
+   obvious "tap anywhere to close" target — kept as a second way out
+   alongside the explicit X button, not a replacement for it (see
+   #mobile-menu-close-btn in base.html). */
+.mobile-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 41;
+    background: rgba(10, 10, 14, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+}
+.mobile-menu-backdrop.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.16s ease, visibility 0s linear 0s;
 }
 @supports not selector(::-webkit-scrollbar) {
   .app-sidebar {
