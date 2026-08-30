@@ -215,22 +215,49 @@
                      side had the narrower neighbor. -->
                 <div style="padding:16px 32px; padding-top:calc(16px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
                     <div style="display:flex; align-items:center; gap:14px; min-width:0;">
-                        <!-- Mobile-only brand mark. The sidebar carries
+                        <!-- Mobile-only brand mark, icon + wordmark
+                             (same .sidebar-brand treatment as the
+                             sidebar and the mobile drawer, not a third
+                             icon-only variant) — the sidebar carries
                              this on desktop, but the sidebar itself is
-                             gone on mobile — without this, "Artha" was
-                             only ever visible after opening the More
-                             drawer, so day-to-day on Dashboard/Finance/
-                             Notes/Calendar a user never saw the brand
-                             at all. Top bar is the standard place for
-                             it once primary nav moves to a bottom tab
-                             bar (real estate the old hamburger button
-                             used to occupy here). No inline `display`
-                             on this element on purpose — see the
-                             md:hidden trap noted elsewhere in this file
-                             and in CLAUDE.md. -->
-                        <a href="{{ url_for('dashboard.index') }}" class="md:hidden" aria-label="Artha home" style="line-height:0; flex-shrink:0;">
-                            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" loading="eager" style="width:26px; height:26px; object-fit:contain; display:block;" />
+                             gone on mobile, so without this "Artha"
+                             was only ever visible after opening the
+                             More drawer; day-to-day on Dashboard/
+                             Finance/Notes/Calendar a user never saw
+                             the brand at all. Icon-only was considered
+                             and rejected: that's a mark earned through
+                             years of recognition a brand this young
+                             doesn't have yet, and the date text next
+                             to it already truncates gracefully
+                             (text-overflow:ellipsis below) if the two
+                             ever compete for room on a narrow phone.
+                             Top bar is the standard place for it once
+                             primary nav moves to a bottom tab bar
+                             (real estate the old hamburger button used
+                             to occupy here).
+
+                             md:hidden lives on a wrapper, not on the
+                             link itself — .sidebar-brand sets its own
+                             display:flex via a class selector, which
+                             risks fighting md:hidden's media query at
+                             equal specificity depending on stylesheet
+                             order, same trap already documented for
+                             #mobile-tabbar and the mobile-menu drawer
+                             above. -->
+                        <div class="md:hidden">
+                        <!-- Sized down from the sidebar's own 28px icon
+                             / 22px wordmark (inline styles deliberately,
+                             overriding .sidebar-brand's img/span rules
+                             for just this instance) — at full size it
+                             left the date next to it truncating to
+                             "Sun..." on every phone tested, not just
+                             the narrowest ones. Still legible as
+                             "Artha", still buys back real room. -->
+                        <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand" aria-label="Artha home" style="flex-shrink:0; gap:6px;">
+                            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" loading="eager" style="width:20px; height:20px;" />
+                            <span style="font-size:15px;">Artha</span>
                         </a>
+                        </div>
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date-mobile" class="sm:hidden"></div>
                     </div>
@@ -386,29 +413,17 @@
                 <div class="md:hidden">
                 <div id="mobile-menu-backdrop" class="mobile-menu-backdrop" aria-hidden="true"></div>
                 <div id="mobile-menu" class="glass-card mobile-menu-panel" style="position:fixed; top:calc(64px + env(safe-area-inset-top, 0px)); left:16px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); z-index:42; padding:12px; overflow-y:auto;" aria-label="Mobile navigation">
-                    <!-- Same brand mark as the desktop sidebar
-                         (.sidebar-brand in style.css) — the mobile menu
-                         is this app's stand-in for the sidebar, and was
-                         the one surface in the whole app showing zero
-                         "Artha" branding, even once opened. Paired with
-                         an explicit close button now, in the same row —
-                         the only way out used to be tapping the More
-                         tab a second time, which the drawer's own
-                         height routinely covered up. -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                    <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand" style="padding:8px 0 14px 12px;">
-                        <img
-                            src="{{ url_for('static', filename='icons/artha-logo.png') }}"
-                            alt=""
-                            loading="eager"
-                        />
-                        <span>Artha</span>
-                    </a>
+                    <!-- No brand mark here anymore — the top bar itself
+                         carries it now (see the mobile-only .sidebar-brand
+                         instance in the top bar above), so repeating it
+                         here was redundant once that shipped. Just the
+                         close button, right-aligned. -->
+                    <div style="display:flex; align-items:center; justify-content:flex-end; padding:4px 4px 10px;">
                     <button type="button" id="mobile-menu-close-btn" class="icon-btn" aria-label="Close menu" style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="x" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
                     </button>
                     </div>
-                    <div style="margin:10px 0 10px; height:1px; background:var(--border-subtle);"></div>
+                    <div style="margin:0 0 10px; height:1px; background:var(--border-subtle);"></div>
 
                     <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'nav-active' if is_dashboard_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="layout-dashboard" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Dashboard</a>
                     <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance</a>
