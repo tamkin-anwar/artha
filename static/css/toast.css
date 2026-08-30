@@ -13,7 +13,15 @@
 /* Responsive repositioning for small screens */
 @media (max-width: 640px) {
     .toast-container {
-        bottom: 16px;
+        /* Clears the bottom tab bar (#mobile-tabbar in base.html,
+           roughly 55-60px of content plus the home-indicator safe
+           area) instead of sitting at the screen's true bottom edge —
+           a toast's z-index has to beat the tab bar's to be visible
+           over page content at all, which meant it was sitting on
+           top of the tab bar too, blocking every tab underneath
+           until the toast dismissed itself. Reported by a real user,
+           2026-08-30. */
+        bottom: calc(64px + env(safe-area-inset-bottom, 0px));
         right: 16px;
         left: 16px;
         width: auto;
