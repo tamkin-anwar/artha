@@ -245,17 +245,19 @@
                              #mobile-tabbar and the mobile-menu drawer
                              above. -->
                         <div class="md:hidden">
-                        <!-- Sized down from the sidebar's own 28px icon
-                             / 22px wordmark (inline styles deliberately,
+                        <!-- Close to the sidebar's own 28px icon / 22px
+                             wordmark (inline styles deliberately,
                              overriding .sidebar-brand's img/span rules
-                             for just this instance) — at full size it
-                             left the date next to it truncating to
-                             "Sun..." on every phone tested, not just
-                             the narrowest ones. Still legible as
-                             "Artha", still buys back real room. -->
-                        <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand" aria-label="Artha home" style="flex-shrink:0; gap:6px;">
-                            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" loading="eager" style="width:20px; height:20px;" />
-                            <span style="font-size:15px;">Artha</span>
+                             for just this instance) — first pass sized
+                             it down further than this to protect the
+                             date next to it, but a real user found the
+                             shrunk wordmark itself the worse tradeoff.
+                             Fixed by shortening the date text instead
+                             (drops the weekday now, see the script
+                             below) rather than the brand mark. -->
+                        <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand" aria-label="Artha home" style="flex-shrink:0; gap:8px;">
+                            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" loading="eager" style="width:25px; height:25px;" />
+                            <span style="font-size:19px;">Artha</span>
                         </a>
                         </div>
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
@@ -639,20 +641,26 @@
 
         <script>
             // The full weekday+month spelling ("Thursday, August 27, 2026")
-            // has nowhere near enough room next to the hamburger button and
-            // the mobile search icon on a phone-width top bar — abbreviate
-            // there. Two elements toggled by the same hidden/sm:block CSS
-            // classes used everywhere else in this top bar, rather than a
+            // has nowhere near enough room next to the mobile search icon
+            // on a phone-width top bar — abbreviate there. Two elements
+            // toggled by the same hidden/sm:block CSS classes used
+            // everywhere else in this top bar, rather than a
             // window.innerWidth check made once at load time: a real phone
             // rotates and a real browser window resizes, and CSS media
             // queries track that continuously where a one-shot JS read
             // would just go stale (min-width:0 + ellipsis above is still a
             // safety net for whatever doesn't fit either format).
+            //
+            // Mobile drops the weekday too ("Aug 30", not "Sun, Aug 30")
+            // now that it's sharing the row with the Artha wordmark —
+            // with both, "Sun, Aug 30" truncated to "Sun, Aug ..." on a
+            // real phone, a real user found that worse than just losing
+            // the weekday outright.
             const d = new Date();
             document.getElementById('top-date').textContent =
                 d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
             document.getElementById('top-date-mobile').textContent =
-                d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+                d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
         </script>
 
         <script type="module">
