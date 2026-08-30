@@ -141,6 +141,19 @@ not a gap to fix.
   `<div class="hidden md:block">` wrapper in `templates/base.html` for
   the pattern, and the "What's New" top-bar icon in that same file for
   a real instance of getting this wrong and then fixing it, 2026-08-29).
+  A related but distinct variant of the same family: a `display:none`
+  child isn't just visually hidden, it's excluded from CSS Grid's item
+  generation and auto-placement entirely, so a sibling meant for the
+  grid's *last* track can get auto-placed into an earlier one once the
+  hidden item stops "holding its place." The top bar's
+  `grid-template-columns:1fr auto 1fr` has three children (date, a
+  `hidden sm:block` search bar, and the icons div); on mobile the search
+  bar disappears, so the icons div auto-placed into column 2 instead of
+  3, landing the mobile search icon stranded mid-bar instead of flush
+  right (reported by a real user's screenshot, 2026-08-29). Fixed by
+  pinning the surviving item's track explicitly (`grid-column:3` on the
+  icons div in `templates/base.html`) instead of relying on
+  auto-placement to skip the missing item correctly.
 - **`scrollbar-width` vs. `::-webkit-scrollbar` on the same element.**
   Setting both makes Chrome/Safari/Edge silently prefer their own native
   "thin" scrollbar rendering over the custom webkit thumb styling, even
