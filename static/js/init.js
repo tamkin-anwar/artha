@@ -116,9 +116,15 @@ function initSettingsMenu() {
             if (isHidden) {
                 mobileMenu.classList.remove("hidden");
                 mobileMenuBtn.setAttribute("aria-expanded", "true");
+                // The menu is a fixed overlay with its own scroll region
+                // (see #mobile-menu in style.css), not an in-flow panel —
+                // without this, scrolling inside it also scrolled the
+                // dashboard visible behind its frosted-glass background.
+                document.body.classList.add("mobile-menu-open");
             } else {
                 mobileMenu.classList.add("hidden");
                 mobileMenuBtn.setAttribute("aria-expanded", "false");
+                document.body.classList.remove("mobile-menu-open");
             }
         });
     }

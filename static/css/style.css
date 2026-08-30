@@ -670,12 +670,22 @@ select.field-input {
    .scrollbar-thin's content-panel treatment: this is navigation chrome,
    not something to browse, so it should recede even further. Still the
    same underlying idea (a quiet thumb, no visible track), just turned
-   down a notch, which is why it isn't just .scrollbar-thin again. */
-.app-sidebar::-webkit-scrollbar { width: 6px; }
-.app-sidebar::-webkit-scrollbar-track { background: transparent; }
-.app-sidebar::-webkit-scrollbar-thumb {
+   down a notch, which is why it isn't just .scrollbar-thin again.
+   #mobile-menu gets the same treatment — it's the mobile equivalent of
+   this same sidebar nav, just reshaped into a fixed overlay. */
+.app-sidebar::-webkit-scrollbar, #mobile-menu::-webkit-scrollbar { width: 6px; }
+.app-sidebar::-webkit-scrollbar-track, #mobile-menu::-webkit-scrollbar-track { background: transparent; }
+.app-sidebar::-webkit-scrollbar-thumb, #mobile-menu::-webkit-scrollbar-thumb {
     background: rgba(139, 149, 168, 0.25);
     border-radius: 9999px;
+}
+
+/* Locks the dashboard behind the open mobile nav overlay. Without this,
+   scrolling inside #mobile-menu's own scroll region (see base.html)
+   also scrolled the page underneath, visible right through the menu's
+   frosted glass — a real user-reported bug, not a nitpick, 2026-08-29. */
+body.mobile-menu-open {
+    overflow: hidden;
 }
 @supports not selector(::-webkit-scrollbar) {
   .app-sidebar {

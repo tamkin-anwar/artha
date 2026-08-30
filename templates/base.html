@@ -332,7 +332,13 @@
                 </div>
 
                 <!-- MOBILE MENU -->
-                <div id="mobile-menu" class="hidden md:hidden glass-card" style="margin:0 16px; position:sticky; top:64px; z-index:39; padding:12px;" aria-label="Mobile navigation">
+                <!-- A fixed overlay with its own scroll region, not an
+                     in-flow sticky panel — the dashboard visible through
+                     its frosted glass otherwise scrolls right along with
+                     it, which reads as broken rather than layered (see
+                     body.mobile-menu-open in style.css for the matching
+                     background scroll-lock). -->
+                <div id="mobile-menu" class="hidden md:hidden glass-card" style="position:fixed; top:64px; left:16px; right:16px; bottom:16px; z-index:39; padding:12px; overflow-y:auto;" aria-label="Mobile navigation">
                     <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'nav-active' if is_dashboard_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="layout-dashboard" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Dashboard</a>
                     <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance</a>
                     <a href="{{ url_for('ai.page') }}" class="nav-link {{ 'nav-active' if is_ai_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="sparkles" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> AI Assistant</a>
