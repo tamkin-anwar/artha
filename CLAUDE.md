@@ -154,6 +154,19 @@ not a gap to fix.
   pinning the surviving item's track explicitly (`grid-column:3` on the
   icons div in `templates/base.html`) instead of relying on
   auto-placement to skip the missing item correctly.
+  Also caught this same session on the mobile bottom tab bar
+  (`#mobile-tabbar`, added 2026-08-30): its `<nav>` needs its own
+  inline `display:flex` for the row of tabs, so `class="md:hidden"`
+  was put directly on that same element - which meant the inline
+  style beat Tailwind's `md:hidden` media query exactly like every
+  other instance of this trap, and the tab bar stayed visible on
+  desktop. Fixed the same way as `settings-btn`: `md:hidden` moved
+  onto a plain wrapper `<div>` around the `<nav>`, with no inline
+  style of its own to fight. Caught in this same change before it
+  shipped, not by a later user report - worth checking for on sight
+  any time `class="md:hidden"` (or `hidden md:block`, etc.) lands on
+  an element that also carries an inline `display` in its own
+  `style="..."`.
 - **`scrollbar-width` vs. `::-webkit-scrollbar` on the same element.**
   Setting both makes Chrome/Safari/Edge silently prefer their own native
   "thin" scrollbar rendering over the custom webkit thumb styling, even

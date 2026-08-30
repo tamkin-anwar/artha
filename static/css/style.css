@@ -109,6 +109,16 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* Kills the default gray flash Safari/Chrome draw on every tap of a
+   link or button — it reads as "a website" the instant you touch
+   anything. Every interactive element that should still show a tap
+   state gets a deliberate one of its own (:active rules below and on
+   .btn-primary/.btn-secondary/.btn-danger already), rather than
+   losing tap feedback entirely. */
+a, button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 h1, h2, h3, .stat-number {
   font-family: 'Fraunces', serif;
 }
@@ -205,6 +215,25 @@ h1, h2, h3, .stat-number {
 }
 .btn-danger:hover { background: var(--red-dim); }
 .btn-danger:active { transform: scale(0.97); }
+
+/* The boxed 36x36 icon buttons in the top bar (mobile search trigger,
+   What's New, Settings) — same press-state idea as .btn-primary/
+   .btn-secondary/.btn-danger above, just for the icon-only shape. */
+.icon-btn {
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.icon-btn:hover { background: var(--bg-hover); }
+.icon-btn:active { transform: scale(0.92); }
+
+/* The hamburger and account-chip buttons aren't boxed like .icon-btn,
+   so a scale feels like the icon is shrinking inside empty space —
+   a brief opacity dip reads as "pressed" without that mismatch. */
+#menu-btn, #account-btn {
+  transition: opacity 0.1s ease;
+}
+#menu-btn:active, #account-btn:active {
+  opacity: 0.55;
+}
 
 /* Inputs */
 .field-input {
@@ -549,6 +578,14 @@ select.field-input {
 .nav-link:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+/* :hover has no equivalent on a touchscreen — without this, tapping a
+   sidebar/mobile-menu link (now that the browser's own tap-highlight
+   is switched off above) gave no feedback at all until the new page
+   finished loading. */
+.nav-link:active {
+  background: var(--bg-hover);
+  transform: scale(0.98);
 }
 .nav-active {
   background: rgba(212,168,67,0.08);
@@ -950,7 +987,13 @@ body.mobile-menu-open {
    in base.html so every logged-in page gets it without per-template work)
    ========================= */
 .feedback-fab {
-    position: fixed; right: 24px; bottom: 24px; z-index: 90;
+    position: fixed; right: 24px; z-index: 90;
+    /* calc(), not max() — the FAB needs its normal 24px gap from the
+       edge ADDED on top of whatever the home-indicator area reserves,
+       not replaced by it, or the button sits flush against the gesture
+       bar on notched iPhones. Falls back to a plain 24px everywhere
+       env(safe-area-inset-bottom) isn't supported. */
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     width: 44px; height: 44px; border-radius: 50%;
     background: var(--bg-surface); border: 1px solid var(--border-subtle);
     color: var(--text-secondary);
@@ -961,6 +1004,50 @@ body.mobile-menu-open {
 .dark .feedback-fab { box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
 .feedback-fab:hover { transform: translateY(-2px) scale(1.04); color: var(--gold); box-shadow: 0 10px 26px rgba(0,0,0,0.16); }
 .dark .feedback-fab:hover { box-shadow: 0 10px 26px rgba(0,0,0,0.45); }
+.feedback-fab:active { transform: scale(0.92); }
+
+/* Hidden below Tailwind's md breakpoint (768px, matching #mobile-tabbar
+   and every other mobile/desktop split in this file) now that the
+   bottom tab bar occupies the same bottom-right corner on phones —
+   two floating bottom elements fighting for the same space is exactly
+   what Apple's own guidance warns a tab bar plus a bottom toolbar
+   produces. "Send feedback" moved into the tab bar's More sheet
+   instead (#mobile-feedback-btn in base.html). */
+@media (max-width: 767px) {
+    .feedback-fab { display: none; }
+}
+
+/* =========================
+   Mobile bottom tab bar — the primary mobile nav entry point (see
+   #mobile-tabbar in base.html). One shared look for all 5 items,
+   including the "More" button that opens the existing drawer.
+   ========================= */
+.tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 0;
+    color: var(--text-secondary);
+    text-decoration: none;
+    background: none;
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.tab-item span {
+    font-size: 10px;
+    line-height: 1;
+}
+.tab-item:active {
+    opacity: 0.6;
+}
+.tab-item.tab-active {
+    color: var(--gold);
+}
 
 @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-pop-in {

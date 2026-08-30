@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page draw under the notch/Dynamic
+         Island and the home-indicator area instead of iOS just leaving
+         a blank bar there, which is what makes env(safe-area-inset-*)
+         padding (see style.css and the top bar/main content below)
+         actually do anything. Without it, those env() values are 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>{% block title %}Artha{% endblock %}</title>
 
     <!-- CSRF for AJAX (read by notes.js / transactions.js) -->
@@ -16,6 +21,13 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#d4a843">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- "black-translucent" draws the status bar transparent over
+         Artha's own (dark-navy or cream) background instead of iOS's
+         default opaque white bar, which looked like a foreign strip of
+         browser chrome sitting on top of the app rather than part of
+         it. Only correct because the top bar now reserves real space
+         for the status bar itself via safe-area-inset-top below. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
@@ -201,12 +213,8 @@
                      button (right) are very different widths, so the
                      search box always sat off-center, closer to whichever
                      side had the narrower neighbor. -->
-                <div style="padding:16px 32px; border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
+                <div style="padding:16px 32px; padding-top:calc(16px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
                     <div style="display:flex; align-items:center; gap:16px; min-width:0;">
-                        <button id="menu-btn" type="button" class="md:hidden" aria-expanded="false" aria-controls="mobile-menu" style="background:none; border:none; color:var(--text-primary); line-height:0; flex-shrink:0;">
-                            <i data-lucide="menu" aria-hidden="true" style="width:22px; height:22px; stroke-width:1.5;"></i>
-                        </button>
-
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date-mobile" class="sm:hidden"></div>
                     </div>
@@ -227,6 +235,7 @@
                             <button
                                 type="button"
                                 id="global-search-trigger-mobile"
+                                class="icon-btn"
                                 aria-label="Search"
                                 style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;"
                             >
@@ -240,6 +249,7 @@
                             <div class="hidden md:block">
                                 <a
                                     href="{{ url_for('dashboard.whats_new') }}"
+                                    class="icon-btn"
                                     style="position:relative; background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; text-decoration:none; flex-shrink:0;"
                                     title="What's new"
                                 >
@@ -255,6 +265,7 @@
                             <button
                                 id="settings-btn"
                                 type="button"
+                                class="icon-btn"
                                 style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center;"
                                 aria-haspopup="menu"
                                 aria-expanded="false"
@@ -338,7 +349,7 @@
                      it, which reads as broken rather than layered (see
                      body.mobile-menu-open in style.css for the matching
                      background scroll-lock). -->
-                <div id="mobile-menu" class="hidden md:hidden glass-card" style="position:fixed; top:64px; left:16px; right:16px; bottom:16px; z-index:39; padding:12px; overflow-y:auto;" aria-label="Mobile navigation">
+                <div id="mobile-menu" class="hidden md:hidden glass-card" style="position:fixed; top:calc(64px + env(safe-area-inset-top, 0px)); left:16px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); z-index:42; padding:12px; overflow-y:auto;" aria-label="Mobile navigation">
                     <!-- Same brand mark as the desktop sidebar
                          (.sidebar-brand in style.css) — the mobile menu
                          is this app's stand-in for the sidebar, and was
@@ -367,6 +378,13 @@
                     {% if current_user.is_authenticated and current_user.is_admin %}
                         <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin<span id="admin-badge-mobile">{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</span></a>
                     {% endif %}
+                    <!-- The feedback FAB is hidden on mobile now that the
+                         bottom tab bar occupies that same corner of the
+                         screen (see .feedback-fab's mobile media query in
+                         style.css) — this is the mobile replacement,
+                         forwarding to the exact same modal via a click on
+                         the real button rather than duplicating its logic. -->
+                    <button type="button" id="mobile-feedback-btn" class="nav-link" style="width:100%; display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:14px; background:none; border:none; text-align:left; font-family:inherit;"><i data-lucide="message-circle" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Send feedback</button>
 
                     <div style="margin:10px 0; height:1px; background:var(--border-subtle);"></div>
 
@@ -443,6 +461,61 @@
                     </div>
                 </div>
 
+                <!-- MOBILE BOTTOM TAB BAR -->
+                <!-- The primary mobile nav entry point, replacing the old
+                     hamburger button — a hamburger-triggered drawer reads
+                     as a web/Android pattern; iOS's own convention for an
+                     app with several core sections you jump between often
+                     is a persistent bottom tab bar (Apple's HIG caps it at
+                     5 destinations, same as UIKit's own tab bar
+                     auto-generating a "More" tab past 5 view controllers,
+                     which is exactly what this does with Artha's other
+                     7 sections). Dashboard/Finance/Notes/Calendar made
+                     the cut as the ones worth a one-tap reach; AI
+                     Assistant, Scenarios, and Calculator sit behind More
+                     since they're more considered, occasional visits
+                     rather than a quick glance (and the Dashboard already
+                     surfaces AI inline). The drawer this opens is the
+                     same #mobile-menu built earlier, unchanged.
+
+                     md:hidden lives on this wrapper, not the <nav> —
+                     the nav needs its own inline display:flex for the
+                     row of tabs, and an inline style always beats a
+                     class selector's media query, Tailwind's md:hidden
+                     included. Same trap, same fix, as settings-btn's
+                     wrapper above and the CLAUDE.md entry it's
+                     documented under. -->
+                <div class="md:hidden">
+                <nav id="mobile-tabbar" aria-label="Primary navigation" style="position:fixed; left:0; right:0; bottom:0; z-index:41; display:flex; background:var(--bg-page); border-top:1px solid var(--border-subtle); padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));">
+                    <a href="{{ url_for('dashboard.index') }}" class="tab-item {{ 'tab-active' if is_dashboard_active }}">
+                        <i data-lucide="layout-dashboard" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="{{ url_for('finance.finance_page') }}" class="tab-item {{ 'tab-active' if is_finance_active }}">
+                        <i data-lucide="bar-chart-2" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <span>Finance</span>
+                    </a>
+                    <a href="{{ url_for('notes.notes_page') }}" class="tab-item {{ 'tab-active' if is_notes_active }}">
+                        <i data-lucide="file-text" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <span>Notes</span>
+                    </a>
+                    <a href="{{ url_for('dashboard.calendar_page') }}" class="tab-item {{ 'tab-active' if is_calendar_active }}">
+                        <i data-lucide="calendar" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <span>Calendar</span>
+                    </a>
+                    <button
+                        type="button"
+                        id="tabbar-more-btn"
+                        class="tab-item {{ 'tab-active' if (is_ai_active or is_scenarios_active or is_calculator_active or is_admin_active) }}"
+                        aria-expanded="false"
+                        aria-controls="mobile-menu"
+                    >
+                        <i data-lucide="more-horizontal" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <span>More</span>
+                    </button>
+                </nav>
+                </div>
+
                 <!-- PAGE CONTENT -->
                 <!-- Extra bottom padding clears the feedback FAB below
                      (fixed, bottom-right, ~68px footprint from the edge)
@@ -451,7 +524,7 @@
                      Archive/Delete row, for instance) gets stuck directly
                      under the button once you've scrolled as far as the
                      page allows, with no way to scroll it clear. -->
-                <main style="padding:32px 32px 96px;">
+                <main style="padding:32px 32px 96px; padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));">
                     {{ self.content() }}
                 </main>
             </div>

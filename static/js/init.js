@@ -50,11 +50,16 @@ function initSettingsMenu() {
     const accountBtn = document.getElementById("account-btn");
     const accountMenu = document.getElementById("account-dropdown");
 
-    const mobileMenuBtn = document.getElementById("menu-btn");
+    // Opened from the bottom tab bar's "More" tab, not a hamburger
+    // button anymore — see #mobile-tabbar in base.html.
+    const mobileMenuBtn = document.getElementById("tabbar-more-btn");
     const mobileMenu = document.getElementById("mobile-menu");
 
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
     const mobileSettingsPanel = document.getElementById("mobile-settings-panel");
+
+    const mobileFeedbackBtn = document.getElementById("mobile-feedback-btn");
+    const feedbackFab = document.getElementById("feedback-fab");
 
     if (btn && menu) {
         const closeMenu = () => {
@@ -126,6 +131,19 @@ function initSettingsMenu() {
                 mobileMenuBtn.setAttribute("aria-expanded", "false");
                 document.body.classList.remove("mobile-menu-open");
             }
+        });
+    }
+
+    // The feedback FAB is hidden on mobile (see .feedback-fab's media
+    // query in style.css) now that the bottom tab bar sits in the same
+    // corner. This forwards to the exact same modal by clicking the
+    // real button, rather than duplicating its open logic here.
+    if (mobileFeedbackBtn && feedbackFab && mobileMenu) {
+        mobileFeedbackBtn.addEventListener("click", () => {
+            mobileMenu.classList.add("hidden");
+            document.getElementById("tabbar-more-btn")?.setAttribute("aria-expanded", "false");
+            document.body.classList.remove("mobile-menu-open");
+            feedbackFab.click();
         });
     }
 
