@@ -430,7 +430,18 @@
                      trap as #mobile-tabbar's fix above, same fix. -->
                 <div class="md:hidden">
                 <div id="mobile-menu-backdrop" class="mobile-menu-backdrop" aria-hidden="true"></div>
-                <div id="mobile-menu" class="glass-card mobile-menu-panel" style="position:fixed; top:calc(64px + env(safe-area-inset-top, 0px)); left:16px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); z-index:42; padding:12px; overflow-y:auto;" aria-label="Mobile navigation">
+                <!-- bottom:0, not the 16px inset every other floating
+                     panel here uses — a real user reported the drawer
+                     reading as visually broken, not intentional, with
+                     the tab bar's labels peeking through in the gap
+                     below it. It has higher z-index (42) than the tab
+                     bar (41) already, so covering it fully while open
+                     is just extending the drawer the rest of the way
+                     down, not a new mechanism. Padding-bottom (not the
+                     outer inset) carries the safe-area clearance now,
+                     so scrolled content still clears the home
+                     indicator without leaving the tab bar exposed. -->
+                <div id="mobile-menu" class="glass-card mobile-menu-panel" style="position:fixed; top:calc(64px + env(safe-area-inset-top, 0px)); left:16px; right:16px; bottom:0; z-index:42; padding:12px 12px calc(12px + env(safe-area-inset-bottom, 0px)); overflow-y:auto;" aria-label="Mobile navigation">
                     <!-- No brand mark here anymore — the top bar itself
                          carries it now (see the mobile-only .sidebar-brand
                          instance in the top bar above), so repeating it
