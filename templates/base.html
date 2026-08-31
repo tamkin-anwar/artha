@@ -261,9 +261,21 @@
                         </a>
                         </div>
                         <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
-                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date-mobile" class="sm:hidden"></div>
                     </div>
 
+                    <!-- Below sm (640px), this column shows the mobile
+                         date instead of the search bar — the middle
+                         grid track was otherwise dead, unused space at
+                         that width (the search bar's own hidden sm:block
+                         is the only thing that used to live here), and
+                         it's exactly the free, centered room the date
+                         needed instead of crowding the logo in the left
+                         column. No fixed width on the wrapper itself
+                         (unlike the search bar's own 360px) — it sizes
+                         to whichever child is actually visible, so the
+                         two outer 1fr columns still get the rest of the
+                         row for the logo and the search icon. -->
+                    <div>
                     <div style="width:360px; max-width:100%;" class="hidden sm:block">
                         <button
                             type="button"
@@ -273,6 +285,10 @@
                             <i data-lucide="search" aria-hidden="true" style="width:14px; height:14px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Ask Artha or search...
                             <span style="margin-left:auto; font-size:11px; background:var(--bg-card); padding:2px 6px; border-radius:4px; color:var(--text-secondary);">⌘K</span>
                         </button>
+                    </div>
+                    <div class="sm:hidden" style="text-align:center;">
+                        <span id="top-date-mobile" style="font-size:13px; color:var(--text-secondary); white-space:nowrap;"></span>
+                    </div>
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px; justify-self:end; grid-column:3;">
