@@ -1,3 +1,5 @@
+from datetime import date, datetime, timezone
+
 import pytest
 
 from artha import create_app
@@ -41,6 +43,24 @@ def _reset_limiter(app):
     except AssertionError:
         pass
     yield
+
+
+def current_period_timestamp() -> datetime:
+    """The timestamp the app itself would stamp on a transaction added
+    "now" with no explicit date: the *local* calendar date (date.today(),
+    the clock every "this month" filter in finance/routes.py and
+    utils.current_month_bounds() runs on) pinned to noon UTC, exactly like
+    _resolve_transaction_timestamp() in finance/routes.py.
+
+    Test helpers must use this rather than datetime.now(timezone.utc) for
+    "current period" rows: a bare UTC now lands on the *next* calendar day
+    (and sometimes the next month) whenever the suite runs after UTC
+    midnight but before local midnight, so the row falls outside the
+    window the route computes from date.today() and export/budget
+    assertions that expect it to be counted fail.
+    """
+    today = date.today()
+    return datetime(today.year, today.month, today.day, 12, 0, tzinfo=timezone.utc)
 
 
 def make_user(username="alice", password="password123", email=None, **extra):

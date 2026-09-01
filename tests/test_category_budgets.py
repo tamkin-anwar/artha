@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from artha.extensions import db
 from artha.models import CategoryBudget, Transaction
 
-from .conftest import make_user
+from .conftest import current_period_timestamp, make_user
 
 
 def _add_expense(user, amount, category=None):
@@ -14,7 +13,7 @@ def _add_expense(user, amount, category=None):
         type="expense",
         category=category,
         user_id=user.id,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=current_period_timestamp(),
     )
     db.session.add(tx)
     db.session.commit()
