@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from artha.extensions import db
@@ -15,7 +15,14 @@ from artha.services.ai_service import (
 
 
 def _expense(user, amount, category, days_ago=0):
-    ts = datetime.now() - timedelta(days=days_ago)
+    # ai_service assembles "this month's spending" from user_now(), which
+    # falls back to UTC for a user with no timezone (the test user) - not
+    # date.today(). Stamp in that same UTC frame so the row is counted no
+    # matter what time of day the suite runs, and never let days_ago carry
+    # it back into the previous month (a bare subtraction does exactly that
+    # when the suite runs on the 1st, UTC).
+    now = datetime.now(timezone.utc)
+    ts = now - timedelta(days=min(days_ago, now.day - 1))
     tx = Transaction(
         description="x", amount=Decimal(str(amount)), type="expense",
         category=category, user_id=user.id, timestamp=ts,

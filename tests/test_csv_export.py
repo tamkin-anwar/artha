@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from artha.extensions import db
 from artha.models import Transaction
 
-from .conftest import make_user
+from .conftest import current_period_timestamp, make_user
 
 
 def _add_tx(user, description, amount, ttype, when=None):
@@ -13,7 +12,7 @@ def _add_tx(user, description, amount, ttype, when=None):
         amount=Decimal(amount),
         type=ttype,
         user_id=user.id,
-        timestamp=when or datetime.now(timezone.utc),
+        timestamp=when or current_period_timestamp(),
     )
     db.session.add(tx)
     db.session.commit()
