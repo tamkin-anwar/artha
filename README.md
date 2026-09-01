@@ -29,11 +29,12 @@ Built by Anwar Creative Studio.
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
 - An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, scheduling an event, or setting a budget, always behind an explicit confirm step before anything is saved
 - A global search palette (⌘K) across transactions, notes, scenarios, and events
+- An in-app What's New page: a running, plain-language changelog of everything shipped, not a commit log
 - Self-serve, email-based password reset, no admin needed
 - In-app feedback (floating button, any page) and an admin panel to triage it and see who's actually using the app
 - An Account menu (your name/avatar) for identity actions (edit profile, change password, sign out), separate from a Preferences menu (theme, currency, notifications)
 - Dark and light theme with persistence, multi-currency display
-- Mobile-first responsive design, tuned against real iOS and Android widths, not just "technically doesn't overflow"
+- A native-feeling mobile experience: a bottom tab bar instead of a hamburger menu, safe-area-aware layout for notched phones, and cross-fade page transitions, tuned against real iOS and Android widths, not just "technically doesn't overflow"
 - Offline support via Service Worker (PWA-ready)
 - Rate-limited login and a pytest suite covering auth and the money-handling paths
 

@@ -26,6 +26,18 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-08-30",
+        "category": "new",
+        "title": "A real bottom tab bar on mobile",
+        "body": "Dashboard, Finance, Notes, and Calendar now sit in a bottom tab bar, the same pattern real iOS apps use, instead of a hamburger menu. Everything else, like AI Assistant, Scenarios, and Calculator, is one tap away under More.",
+    },
+    {
+        "date": "2026-08-30",
+        "category": "improved",
+        "title": "Mobile navigation, polished",
+        "body": "The Artha logo shows up right in the top bar now, not just after opening the menu. The slide-out menu has a real close button and fades in instead of snapping open, and no longer leaves the tab bar peeking out underneath it. Save confirmations don't block the tab bar anymore either.",
+    },
+    {
         "date": "2026-08-29",
         "category": "fixed",
         "title": "The top bar and slide-out menu, tightened up on mobile",
