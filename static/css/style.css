@@ -1009,6 +1009,37 @@ body.mobile-menu-open {
     text-decoration: underline;
 }
 
+/* Theme-aware counterparts of the auth-* classes above, for pages that
+   share the same hide_app_shell centered-card layout (Privacy, Edit
+   Profile, Change Password, 2FA setup, recovery codes) but are reached
+   mid-session by an already-logged-in user with their own theme choice
+   already set. Login, Register, password reset, and the 2FA login-verify
+   step stay on the fixed-dark auth-* classes above deliberately, as a
+   consistent gateway identity for someone who isn't authenticated yet;
+   everything past that point should look like the rest of the app, not
+   like a separate product. Found and fixed 2026-08-31 after a user
+   reported Privacy & Security staying dark while the rest of the app
+   correctly switched to light. */
+.settings-bg {
+    background: var(--bg-page);
+}
+
+.settings-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-card);
+}
+
+.settings-tile {
+    background: var(--bg-hover);
+    border: 1px solid var(--border-subtle);
+}
+
+.text-primary   { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary  { color: var(--text-muted); }
+
 /* =========================
     App shell responsiveness
    ========================= */

@@ -3,7 +3,7 @@
 {% block title %}Edit Profile{% endblock %}
 
 {% block content %}
-<main class="min-h-screen flex items-center justify-center px-4 py-14 auth-bg" role="main">
+<main class="min-h-screen flex items-center justify-center px-4 py-14 settings-bg" role="main">
     <div class="w-full max-w-md">
 
         <div class="flex items-center justify-center gap-2 mb-6">
@@ -21,8 +21,8 @@
             </div>
         </div>
 
-        <section class="rounded-2xl p-8 shadow-xl auth-card" aria-label="Edit profile form">
-            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold text-white mb-6">
+        <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Edit profile form">
+            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold mb-6">
                 Edit Profile
             </h1>
 
@@ -47,7 +47,7 @@
                     id="username_display"
                     type="text"
                     value="{{ current_user.username }}"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                     disabled
                     title="Username can't be changed here"
                 />
@@ -60,7 +60,7 @@
                     autocomplete="given-name"
                     placeholder="First Name"
                     value="{{ current_user.first_name or '' }}"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                     autofocus
                 />
 
@@ -72,7 +72,7 @@
                     autocomplete="family-name"
                     placeholder="Last Name"
                     value="{{ current_user.last_name or '' }}"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                 />
 
                 <label for="email" class="sr-only">Email</label>
@@ -83,24 +83,24 @@
                     autocomplete="email"
                     placeholder="Email"
                     value="{{ current_user.email or '' }}"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                     required
                 />
 
-                <button type="submit" class="w-full py-3 rounded-lg font-semibold auth-button">
+                <button type="submit" class="w-full py-3 rounded-lg font-semibold btn-primary">
                     Save Changes
                 </button>
             </form>
 
-            <p class="text-center text-sm mt-5 text-slate-300">
+            <p class="text-center text-sm mt-5 text-secondary">
                 <a href="{{ url_for('dashboard.index') }}" class="auth-link">
                     Back to dashboard
                 </a>
             </p>
         </section>
 
-        <section class="rounded-2xl p-8 shadow-xl auth-card mt-6" aria-label="Security">
-            <h2 style="font-family:'Fraunces',serif;" class="text-xl font-semibold text-white mb-4">
+        <section class="rounded-2xl p-8 shadow-xl settings-card mt-6" aria-label="Security">
+            <h2 style="font-family:'Fraunces',serif;" class="text-xl font-semibold mb-4">
                 Security
             </h2>
 
@@ -111,8 +111,8 @@
             </p>
 
             {% if current_user.otp_enabled %}
-                <p class="text-sm text-slate-300 mb-4">
-                    Two-factor authentication is <strong class="text-white">on</strong>. You'll be asked for a code
+                <p class="text-sm text-secondary mb-4">
+                    Two-factor authentication is <strong class="text-primary">on</strong>. You'll be asked for a code
                     from your authenticator app every time you log in.
                 </p>
                 <form
@@ -130,7 +130,7 @@
                         type="password"
                         autocomplete="current-password"
                         placeholder="Current password"
-                        class="w-full px-4 py-3 rounded-lg auth-input"
+                        class="w-full px-4 py-3 rounded-lg field-input"
                         required
                     />
                     <label for="disable_code" class="sr-only">Authentication code</label>
@@ -141,32 +141,32 @@
                         inputmode="numeric"
                         autocomplete="one-time-code"
                         placeholder="Current code or a recovery code"
-                        class="w-full px-4 py-3 rounded-lg auth-input"
+                        class="w-full px-4 py-3 rounded-lg field-input"
                         required
                     />
-                    <button type="submit" class="w-full py-3 rounded-lg font-semibold auth-button">
+                    <button type="submit" class="w-full py-3 rounded-lg font-semibold btn-primary">
                         Turn off two-factor authentication
                     </button>
                 </form>
             {% else %}
-                <p class="text-sm text-slate-300 mb-4">
-                    Two-factor authentication is <strong class="text-white">off</strong>. Turn it on to require a
+                <p class="text-sm text-secondary mb-4">
+                    Two-factor authentication is <strong class="text-primary">off</strong>. Turn it on to require a
                     code from an authenticator app, not just your password, to log in.
                 </p>
                 <a
                     href="{{ url_for('auth.enable_2fa') }}"
-                    class="block w-full py-3 rounded-lg font-semibold auth-button text-center"
+                    class="block w-full py-3 rounded-lg font-semibold btn-primary text-center"
                 >
                     Set up two-factor authentication
                 </a>
             {% endif %}
         </section>
 
-        <section class="rounded-2xl p-8 shadow-xl auth-card mt-6" aria-label="Danger zone" style="border:1px solid rgba(239,68,68,0.3);">
-            <h2 style="font-family:'Fraunces',serif;" class="text-xl font-semibold text-white mb-2">
+        <section class="rounded-2xl p-8 shadow-xl settings-card mt-6" aria-label="Danger zone" style="border:1px solid rgba(239,68,68,0.3);">
+            <h2 style="font-family:'Fraunces',serif;" class="text-xl font-semibold mb-2">
                 Danger zone
             </h2>
-            <p class="text-sm text-slate-300 mb-4">
+            <p class="text-sm text-secondary mb-4">
                 Deleting your account removes access right away. Everything (transactions, notes, scenarios, and
                 everything else) is permanently erased {{ account_deletion_grace_days }} days after that, unless
                 you log back in before then to cancel.
@@ -186,7 +186,7 @@
                     type="password"
                     autocomplete="current-password"
                     placeholder="Current password"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                     required
                 />
                 <label for="confirm_username" class="sr-only">Type your username to confirm</label>
@@ -196,13 +196,13 @@
                     type="text"
                     autocomplete="off"
                     placeholder="Type &quot;{{ current_user.username }}&quot; to confirm"
-                    class="w-full px-4 py-3 rounded-lg auth-input"
+                    class="w-full px-4 py-3 rounded-lg field-input"
                     required
                 />
                 <button
                     type="submit"
                     class="w-full py-3 rounded-lg font-semibold"
-                    style="background:#ef4444; color:#fff;"
+                    style="background:var(--red); color:#fff;"
                 >
                     Delete my account
                 </button>

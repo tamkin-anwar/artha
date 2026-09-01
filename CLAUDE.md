@@ -119,8 +119,28 @@ not a gap to fix.
   on. Any change to statement import, AI context/write access, hosting,
   or third-party services (added 2026-08-28) needs that page checked
   against the new reality and updated in the same change, not left to go
-  stale. A wrong privacy claim users actually read is worse than no page
+  stale. A wrong privacy claim users actually see is worse than no page
   at all.
+- **`hide_app_shell` pages split into two families, only one of which
+  should ever be theme-aware (fixed 2026-08-31).** Login, Register,
+  forgot/reset password, and the 2FA login-verify step are steps in
+  *authenticating* — nobody has a session yet, so they keep the fixed-dark
+  `auth-bg`/`auth-card`/`auth-input`/`auth-button` classes in
+  `static/css/style.css` as a deliberate, consistent gateway identity
+  regardless of the visitor's theme preference. Every other
+  `hide_app_shell` page (Privacy, Edit Profile, Change Password, 2FA
+  enable, recovery codes) is reached by an already-logged-in user with
+  their own theme already set, and uses the theme-aware counterparts
+  instead: `settings-bg`/`settings-card`/`settings-tile` plus the
+  existing `field-input`/`btn-primary`/`text-primary`/`text-secondary`/
+  `text-tertiary` classes, never a hardcoded `text-white`/`text-slate-300`
+  Tailwind utility or a literal `rgba(...)` background. Privacy & Security
+  shipped with the fixed-dark classes and stayed dark even in light mode
+  until a real user reported it. A new page in this second family should
+  follow the same theme-aware classes from the start, not copy-paste an
+  existing auth-* page. The one legitimate exception is a QR code's own
+  background box (`enable_2fa.html`) — that stays hardcoded white, since
+  the SVG's black modules need guaranteed contrast to scan.
 - **Production static assets cache for 5 minutes** (`SEND_FILE_MAX_AGE_DEFAULT`
   in `ProductionConfig`, 2026-08-31) — added after profiling showed every
   navigation re-fetching all ~18 JS/CSS files with a `Cache-Control: no-cache`

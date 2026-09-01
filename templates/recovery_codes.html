@@ -3,7 +3,7 @@
 {% block title %}Your recovery codes{% endblock %}
 
 {% block content %}
-<main class="min-h-screen flex items-center justify-center px-4 py-14 auth-bg" role="main">
+<main class="min-h-screen flex items-center justify-center px-4 py-14 settings-bg" role="main">
     <div class="w-full max-w-md">
 
         <div class="flex items-center justify-center gap-2 mb-6">
@@ -21,29 +21,29 @@
             </div>
         </div>
 
-        <section class="rounded-2xl p-8 shadow-xl auth-card" aria-label="Recovery codes">
-            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold text-white mb-2">
+        <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Recovery codes">
+            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold mb-2">
                 Save your recovery codes
             </h1>
-            <p class="text-center text-sm text-slate-300 mb-6">
+            <p class="text-center text-sm text-secondary mb-6">
                 Two-factor authentication is on. Each code below works once, in place of a code from your
                 authenticator app, if you ever lose access to it. This is the only time they're shown.
             </p>
 
-            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:18px; margin-bottom:20px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:'JetBrains Mono',monospace; font-size:14px; color:#fff;">
+            <div class="settings-tile" style="border-radius:12px; padding:18px; margin-bottom:20px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);">
                     {% for code in codes %}
                         <div>{{ code }}</div>
                     {% endfor %}
                 </div>
             </div>
 
-            <p class="text-center text-xs text-slate-400 mb-6">
+            <p class="text-center text-xs text-tertiary mb-6">
                 Copy or print these somewhere safe. Artha can't show them to you again. Losing both your
                 authenticator app and these codes means asking to be signed back in manually.
             </p>
 
-            <a href="{{ url_for('auth.edit_profile') }}" class="block w-full py-3 rounded-lg font-semibold auth-button text-center">
+            <a href="{{ url_for('auth.edit_profile') }}" class="block w-full py-3 rounded-lg font-semibold btn-primary text-center">
                 I've saved these
             </a>
         </section>

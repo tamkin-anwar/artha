@@ -3,7 +3,7 @@
 {% block title %}Privacy & Security{% endblock %}
 
 {% block content %}
-<main class="min-h-screen flex items-center justify-center px-4 py-14 auth-bg" role="main">
+<main class="min-h-screen flex items-center justify-center px-4 py-14 settings-bg" role="main">
     <div class="w-full max-w-2xl">
 
         <div class="flex items-center justify-center gap-2 mb-6">
@@ -21,37 +21,37 @@
             </div>
         </div>
 
-        <section class="rounded-2xl p-8 shadow-xl auth-card" aria-label="Privacy and security">
-            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold text-white mb-2">
+        <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Privacy and security">
+            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold mb-2">
                 Privacy &amp; Security
             </h1>
-            <p class="text-center text-sm text-slate-300 mb-8">
+            <p class="text-center text-sm text-secondary mb-8">
                 What actually happens to your data when you use Artha, in plain language, not legal boilerplate.
             </p>
 
             <div class="grid sm:grid-cols-2 gap-3 mb-8">
-                <div class="rounded-lg p-4" style="background:rgba(14,17,24,0.5); border:1px solid var(--border-subtle);">
-                    <div class="text-sm font-semibold text-white mb-1">Siloed by account</div>
-                    <p class="text-xs text-slate-300 leading-relaxed">Your transactions, notes, and scenarios are scoped to your account alone. No other user's queries can ever touch them.</p>
+                <div class="rounded-lg p-4 settings-tile">
+                    <div class="text-sm font-semibold mb-1">Siloed by account</div>
+                    <p class="text-xs text-secondary leading-relaxed">Your transactions, notes, and scenarios are scoped to your account alone. No other user's queries can ever touch them.</p>
                 </div>
-                <div class="rounded-lg p-4" style="background:rgba(14,17,24,0.5); border:1px solid var(--border-subtle);">
-                    <div class="text-sm font-semibold text-white mb-1">Encrypted in transit</div>
-                    <p class="text-xs text-slate-300 leading-relaxed">Every page loads over HTTPS, and session cookies are marked Secure, so they never travel over plain HTTP.</p>
+                <div class="rounded-lg p-4 settings-tile">
+                    <div class="text-sm font-semibold mb-1">Encrypted in transit</div>
+                    <p class="text-xs text-secondary leading-relaxed">Every page loads over HTTPS, and session cookies are marked Secure, so they never travel over plain HTTP.</p>
                 </div>
-                <div class="rounded-lg p-4" style="background:rgba(14,17,24,0.5); border:1px solid var(--border-subtle);">
-                    <div class="text-sm font-semibold text-white mb-1">No tracking, no ads</div>
-                    <p class="text-xs text-slate-300 leading-relaxed">Zero analytics or advertising scripts run anywhere on Artha. Nothing about how you use it gets sold or shared.</p>
+                <div class="rounded-lg p-4 settings-tile">
+                    <div class="text-sm font-semibold mb-1">No tracking, no ads</div>
+                    <p class="text-xs text-secondary leading-relaxed">Zero analytics or advertising scripts run anywhere on Artha. Nothing about how you use it gets sold or shared.</p>
                 </div>
-                <div class="rounded-lg p-4" style="background:rgba(14,17,24,0.5); border:1px solid var(--border-subtle);">
-                    <div class="text-sm font-semibold text-white mb-1">AI doesn't train on your data</div>
-                    <p class="text-xs text-slate-300 leading-relaxed">Anthropic's API, which powers Artha's AI features, does not use customer data to train its models by default. Artha never opts in.</p>
+                <div class="rounded-lg p-4 settings-tile">
+                    <div class="text-sm font-semibold mb-1">AI doesn't train on your data</div>
+                    <p class="text-xs text-secondary leading-relaxed">Anthropic's API, which powers Artha's AI features, does not use customer data to train its models by default. Artha never opts in.</p>
                 </div>
             </div>
 
             <div class="space-y-7">
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold text-white mb-2">Where your data lives</h2>
-                    <p class="text-sm text-slate-300 leading-relaxed">
+                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">Where your data lives</h2>
+                    <p class="text-sm text-secondary leading-relaxed">
                         Everything you enter into Artha, transactions, notes, scenarios, calendar events, lives in a single
                         Postgres database hosted on Render, a SOC 2 Type II and ISO 27001 certified infrastructure
                         provider. It isn't shared with any other product, and nobody outside of running the app has a
@@ -60,18 +60,18 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold text-white mb-2">How your account is protected</h2>
-                    <ul class="text-sm text-slate-300 space-y-2">
-                        <li class="flex gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span><span><strong class="text-white">Your password is hashed</strong>, never stored in plain text. Not even Artha's own operator can read it back.</span></li>
-                        <li class="flex gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span><span><strong class="text-white">Two-factor authentication is optional and free</strong>: a code from an authenticator app on top of your password, with one-time recovery codes for a lost phone.</span></li>
-                        <li class="flex gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span><span><strong class="text-white">Login is rate-limited</strong>, so repeated password guesses get slowed down automatically.</span></li>
-                        <li class="flex gap-2"><span class="text-emerald-400 mt-0.5">&#10003;</span><span><strong class="text-white">Deleting your account is real</strong>: a 30-day window, undone just by logging back in, then a full purge, not a flag that quietly leaves your data behind.</span></li>
+                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">How your account is protected</h2>
+                    <ul class="text-sm text-secondary space-y-2">
+                        <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Your password is hashed</strong>, never stored in plain text. Not even Artha's own operator can read it back.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Two-factor authentication is optional and free</strong>: a code from an authenticator app on top of your password, with one-time recovery codes for a lost phone.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Login is rate-limited</strong>, so repeated password guesses get slowed down automatically.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Deleting your account is real</strong>: a 30-day window, undone just by logging back in, then a full purge, not a flag that quietly leaves your data behind.</span></li>
                     </ul>
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold text-white mb-2">Your bank statement, step by step</h2>
-                    <ol class="text-sm text-slate-300 space-y-2">
+                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">Your bank statement, step by step</h2>
+                    <ol class="text-sm text-secondary space-y-2">
                         <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5" >1.</span><span>You upload a PDF or CSV. It's read directly from the upload into memory, never written to disk or any storage bucket, anywhere.</span></li>
                         <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">2.</span><span>A free, offline parser reads it first, entirely on Artha's own server. No external call, no cost, for the large majority of statements.</span></li>
                         <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">3.</span><span>Only if that fails, the extracted text, never the original file, is sent once to Claude to make sense of an unusual layout.</span></li>
@@ -81,14 +81,14 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold text-white mb-2">The AI Assistant</h2>
-                    <p class="text-sm text-slate-300 leading-relaxed mb-2">
+                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">The AI Assistant</h2>
+                    <p class="text-sm text-secondary leading-relaxed mb-2">
                         When you ask it something, it's handed a snapshot built for that one question, your budgets,
                         upcoming notes and events, and recent transactions, not a permanent memory of everything you've
                         ever entered. It runs on Anthropic's commercial API, which by policy does not use customer data
                         to train its models unless a customer explicitly opts in. Artha doesn't.
                     </p>
-                    <p class="text-sm text-slate-300 leading-relaxed">
+                    <p class="text-sm text-secondary leading-relaxed">
                         More importantly: the AI Assistant can never write to your account directly. Every action it
                         suggests, adding a transaction, setting a budget, anything, shows up as a card you have to click
                         to confirm. It proposes; you decide.
@@ -96,18 +96,18 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold text-white mb-2">What Artha doesn't do</h2>
-                    <ul class="text-sm text-slate-300 space-y-2">
-                        <li class="flex gap-2"><span class="text-red-400 mt-0.5">&#10005;</span><span>Doesn't sell or share your data with advertisers, data brokers, or anyone else.</span></li>
-                        <li class="flex gap-2"><span class="text-red-400 mt-0.5">&#10005;</span><span>Doesn't run analytics or ad-tracking scripts of any kind.</span></li>
-                        <li class="flex gap-2"><span class="text-red-400 mt-0.5">&#10005;</span><span>Doesn't store your bank statement file anywhere, ever, not even temporarily.</span></li>
-                        <li class="flex gap-2"><span class="text-red-400 mt-0.5">&#10005;</span><span>Doesn't let the AI touch your account without your own explicit click.</span></li>
-                        <li class="flex gap-2"><span class="text-red-400 mt-0.5">&#10005;</span><span>Doesn't let one user's data cross into another's, even on the same Artha instance.</span></li>
+                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">What Artha doesn't do</h2>
+                    <ul class="text-sm text-secondary space-y-2">
+                        <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't sell or share your data with advertisers, data brokers, or anyone else.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't run analytics or ad-tracking scripts of any kind.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't store your bank statement file anywhere, ever, not even temporarily.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't let the AI touch your account without your own explicit click.</span></li>
+                        <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't let one user's data cross into another's, even on the same Artha instance.</span></li>
                     </ul>
                 </div>
             </div>
 
-            <p class="text-center text-sm mt-8 pt-6 text-slate-300" style="border-top:1px solid var(--border-subtle);">
+            <p class="text-center text-sm mt-8 pt-6 text-secondary" style="border-top:1px solid var(--border-subtle);">
                 Built and run by Anwar Creative Studio. If anything here ever stops matching what you actually see
                 happening, tell us directly.
             </p>

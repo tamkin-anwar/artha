@@ -26,6 +26,12 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-08-31",
+        "category": "fixed",
+        "title": "Privacy & Security, and account settings, now follow your theme",
+        "body": "Privacy & Security stayed dark even in light mode, along with Edit Profile, Change Password, and the two-factor setup pages. All of them now switch with the rest of the app.",
+    },
+    {
         "date": "2026-08-30",
         "category": "new",
         "title": "A real bottom tab bar on mobile",
