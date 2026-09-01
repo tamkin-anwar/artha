@@ -1,5 +1,21 @@
 // static/js/init.js (module)
 
+// iOS Safari never applies the CSS :active pseudo-class to a touch tap
+// unless *some* touchstart listener exists anywhere on the page - a
+// long-standing WebKit quirk, not new here. It didn't matter before
+// because the browser's own default tap-highlight (the gray flash)
+// still gave every tap visual feedback regardless. This session killed
+// that default (-webkit-tap-highlight-color: transparent in style.css)
+// and replaced it with deliberate :active styles everywhere - .tab-item,
+// .icon-btn, .nav-link, the feedback FAB - which meant taps on a real
+// iPhone stopped showing ANY feedback at all: the highlight was gone
+// and :active still never activated. That reads as "nothing happened,"
+// so users tapped again - exactly the double-tap/lag a real user
+// reported on the mobile tab bar. This no-op listener is the standard,
+// documented fix: it does nothing itself, but its mere presence makes
+// WebKit start honoring :active on tap everywhere in the app.
+document.addEventListener("touchstart", () => {}, { passive: true });
+
 import "./flash.js";
 import "./notes.js";
 import "./transactions.js";
