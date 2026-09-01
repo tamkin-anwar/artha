@@ -25,3 +25,9 @@ instance/
 # Build artifacts
 dist/
 build/
+
+# Node (Tailwind CLI build only — see package.json's build:css.
+# static/css/tailwind.css, the actual compiled output, IS committed:
+# there's no Node build step in the deploy pipeline, so the compiled
+# CSS has to already be in the repo, same as any other static asset).
+node_modules/

@@ -1,0 +1,26 @@
+{
+  "name": "artha",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A personal finance and productivity \"Personal OS,\" built with Flask, designed as a fast, self-hosted alternative to bloated budgeting apps. This package.json exists only for the Tailwind CSS build (npm run build:css / watch:css) -- the app itself is Flask, not Node.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./static/css/tailwind-src.css -o ./static/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./static/css/tailwind-src.css -o ./static/css/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tamkin-anwar/artha.git"
+  },
+  "keywords": [],
+  "author": "Anwar Creative Studio",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/tamkin-anwar/artha/issues"
+  },
+  "homepage": "https://github.com/tamkin-anwar/artha#readme",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

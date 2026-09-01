@@ -121,6 +121,18 @@ not a gap to fix.
   against the new reality and updated in the same change, not left to go
   stale. A wrong privacy claim users actually read is worse than no page
   at all.
+- **Production static assets cache for 5 minutes** (`SEND_FILE_MAX_AGE_DEFAULT`
+  in `ProductionConfig`, 2026-08-31) — added after profiling showed every
+  navigation re-fetching all ~18 JS/CSS files with a `Cache-Control: no-cache`
+  round trip, a real cost on a full-page-reload app where that happens on
+  every single tab tap. Werkzeug's own ETag (present regardless of this
+  setting) still catches a change on revalidation, so this bounds staleness
+  to 5 minutes rather than removing the safety net — deliberately not the
+  indefinite/`immutable` caching that caused the real Service Worker
+  staleness incident above; this is a much shorter, bounded window on a
+  different mechanism. Deliberately not set on `DevelopmentConfig`, so it
+  can't compound with "the dev server doesn't hot-reload" below and make a
+  stale asset look like a hot-reload failure.
 
 ## Known traps
 
@@ -167,6 +179,20 @@ not a gap to fix.
   any time `class="md:hidden"` (or `hidden md:block`, etc.) lands on
   an element that also carries an inline `display` in its own
   `style="..."`.
+- **Tailwind is precompiled, not the CDN script (changed 2026-08-31).**
+  `templates/base.html` links `static/css/tailwind.css`, built from
+  `static/css/tailwind-src.css` via `npm run build:css` (Tailwind CLI,
+  see `package.json`). Adding or changing a Tailwind utility class
+  anywhere in a template — `hidden`, `md:block`, a new `grid-cols-*`,
+  whatever — does nothing until that build runs again and the
+  regenerated `tailwind.css` is committed; there's no dev-server
+  watch process wired in yet, and no build step in the deploy pipeline
+  either, so the compiled file is a committed static asset like
+  `style.css`, not a generated artifact. Forgetting the rebuild is a
+  silent failure, not an error: the class just doesn't render, same
+  family of bug as every other trap in this section. Run
+  `npm run watch:css` while actively touching Tailwind classes to
+  avoid this entirely.
 - **`scrollbar-width` vs. `::-webkit-scrollbar` on the same element.**
   Setting both makes Chrome/Safari/Edge silently prefer their own native
   "thin" scrollbar rendering over the custom webkit thumb styling, even

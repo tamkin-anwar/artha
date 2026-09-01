@@ -47,7 +47,7 @@ Built by Anwar Creative Studio.
 - Resend (transactional email, password reset)
 - Vanilla JavaScript (ES modules), no frontend framework
 - Chart.js
-- Utility-first CSS (Tailwind) plus a small hand-written component layer
+- Utility-first CSS (Tailwind, precompiled via the Tailwind CLI, not the CDN build) plus a small hand-written component layer
 - Service Worker (offline caching, fallback, and push)
 - pytest
 
@@ -65,6 +65,13 @@ python wsgi.py
 `init_db.py` creates the local SQLite database and prompts for confirmation before running. The AI Assistant needs an `ANTHROPIC_API_KEY` environment variable to work; password reset needs `RESEND_API_KEY`/`RESET_EMAIL_FROM`; everything else runs without extra setup, including Web Push (a fixed dev-only VAPID keypair ships as a fallback; set real `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIMS_EMAIL` env vars in any deployed environment instead).
 
 `requirements-dev.txt` adds pytest on top of `requirements.txt`; production only needs the latter.
+
+The compiled CSS (`static/css/tailwind.css`) is committed, so Node isn't needed just to run the app. It's only needed to change a Tailwind class:
+```bash
+npm install
+npm run build:css   # one-off rebuild
+npm run watch:css   # rebuilds on every save while you're actively editing classes
+```
 
 ## Running tests
 ```bash

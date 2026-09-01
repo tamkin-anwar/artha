@@ -69,6 +69,20 @@ class ProductionConfig(Config):
         "pool_pre_ping": True,
         "pool_recycle": 280,
     }
+    # Flask's default is Cache-Control: no-cache — every static JS/CSS
+    # file gets revalidated with the server on every single request,
+    # which on a full-page-reload app means a real round trip for each
+    # of the ~18 scripts/stylesheets on every navigation, not just the
+    # first page load. This doesn't remove that safety net, it just
+    # stops paying for it so often: the browser skips the request
+    # entirely for 5 minutes, and Werkzeug's own ETag (unaffected by
+    # this setting, already present on every static response) still
+    # catches a change within that window on revalidation, and always
+    # catches one once the 5 minutes are up. Deliberately NOT set on
+    # DevelopmentConfig — a cached response would silently outlive the
+    # dev server's own restart-to-pick-up-changes requirement, one
+    # more layer of "why isn't my edit showing up" during local work.
+    SEND_FILE_MAX_AGE_DEFAULT = 300
 
 
 class TestingConfig(Config):

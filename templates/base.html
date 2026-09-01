@@ -56,11 +56,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-    <!-- Tailwind (CDN for now) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = { darkMode: "class" };
-    </script>
+    <!-- Tailwind — precompiled (see package.json's build:css and
+         static/css/tailwind-src.css), not the CDN script. The CDN
+         build recompiles the whole utility set client-side on every
+         single page load (an MPA reloads fully on every navigation,
+         so that happened on every tab tap) and its own console output
+         says outright not to use it in production. This file is a
+         committed static asset like style.css — nothing about
+         deploying or serving it changes; it only needs a rebuild
+         (`npm run build:css`) when a template or one of the JS files
+         listed in tailwind-src.css's @source lines starts using a
+         Tailwind class it didn't before. -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 
     <!-- Lucide icons (CDN) -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>

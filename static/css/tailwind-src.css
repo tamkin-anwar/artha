@@ -1,0 +1,31 @@
+/* static/css/tailwind-src.css
+--------------------------------
+Source file for the Tailwind CLI build (see package.json's build:css
+script). Compiles to static/css/tailwind.css, which is what
+templates/base.html actually links -- committed to the repo like any
+other static asset, so nothing at deploy time needs Node or a build
+step.
+
+@source points at every place a Tailwind class name can appear: every
+template, plus the JS files that toggle "hidden" via classList
+(auth.js, init.js, scenarios.js) -- Tailwind only ever compiles classes
+it can actually find as literal strings in one of these files, so a
+class used nowhere else won't render even if you type it correctly.
+
+Real usage in this app is small and mostly the same handful of
+utilities repeated (hidden/block/flex/grid plus sm:/md:/lg: variants)
+-- most of the UI is deliberately hand-written inline styles, not
+Tailwind. darkMode is still declared for parity with the old CDN
+config, even though nothing in the app currently uses a dark: variant
+(dark theme is handled entirely through the .dark class + CSS custom
+properties in style.css) -- cheap to keep correct in case that ever
+changes. */
+
+@import "tailwindcss";
+
+@source "../../templates/**/*.html";
+@source "../js/auth.js";
+@source "../js/init.js";
+@source "../js/scenarios.js";
+
+@custom-variant dark (&:where(.dark, .dark *));
