@@ -9,7 +9,7 @@ from sqlalchemy import func
 from ...extensions import db
 from ...models import Transaction, User
 from ...models.scenario import VALID_PRIORITIES, VALID_STATUSES, Scenario
-from ...services.exchange_rate_service import get_rates, convert_usd_to
+from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
 from ...utils import is_ajax_request
 from . import scenarios_bp
 
@@ -190,7 +190,13 @@ def _scenario_month_comparison(scenario: Scenario) -> dict:
 
     # target's own month is exactly what's being compared against, so the
     # one-time cost (if any) always lands here — no separate check needed.
-    scenario_net_effect = scenario.monthly_savings - scenario.monthly_cost - scenario.one_time_cost
+    # Converted from the scenario's own currency to the same display
+    # currency totals["net"] is already in -- otherwise this combines
+    # two numbers in different currencies, the same bug Budget.monthly_cap
+    # had (see that model's own comment).
+    display_currency, rates = _scenario_display_currency(scenario.user_id)
+    scenario_net_effect_native = scenario.monthly_savings - scenario.monthly_cost - scenario.one_time_cost
+    scenario_net_effect = convert_amount(scenario_net_effect_native, scenario.currency or "USD", display_currency, rates)
     net_with_scenario = totals["net"] + scenario_net_effect
 
     # Bar widths for the before/after visual, scaled against whichever side
@@ -342,6 +348,10 @@ def _apply_form(scenario: Scenario, form) -> None:
     scenario.one_time_cost = one_time_cost
     scenario.monthly_cost = monthly_cost
     scenario.monthly_savings = monthly_savings
+    # Whatever currency was active right now, when these numbers were
+    # typed in -- same signal Budget.currency/a manual transaction's own
+    # currency come from. Re-captured on every save, not just creation.
+    scenario.currency = current_user.preferred_currency or "USD"
     scenario.start_date = start_date
     scenario.end_date = end_date
     scenario.priority = priority

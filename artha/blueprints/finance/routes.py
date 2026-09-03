@@ -18,7 +18,7 @@ from ...extensions import db
 from ...models import Transaction
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
-from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to
+from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
 from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date, CURRENCY_CODES
 from . import finance_bp
 
@@ -935,7 +935,14 @@ def finance_page():
     budget_row = Budget.query.filter_by(user_id=uid).first()
     current_month_txs = bucket_for(_month_start(today.year, today.month))["txs"]
     current_month_expense = bucket_for(_month_start(today.year, today.month))["expense"]
-    budget = budget_status(budget_row.monthly_cap if budget_row else None, current_month_expense)
+    # The cap's own currency converted to display_currency before
+    # comparing -- current_month_expense is already in display_currency.
+    # See Budget.currency's own docstring for the bug this avoids.
+    budget_cap = (
+        convert_amount(budget_row.monthly_cap, budget_row.currency or "USD", display_currency, rates)
+        if budget_row else None
+    )
+    budget = budget_status(budget_cap, current_month_expense)
 
     # Per-category budgets: same current-month scope as the overall budget
     # above, just grouped by the raw category slug instead of summed.
@@ -955,7 +962,10 @@ def finance_page():
             "category": row.category,
             "label": TRANSACTION_CATEGORIES.get(row.category, {}).get("label", row.category),
             "icon": TRANSACTION_CATEGORIES.get(row.category, {}).get("icon"),
-            "status": budget_status(row.monthly_cap, category_expense_totals.get(row.category, Decimal("0"))),
+            "status": budget_status(
+                convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates),
+                category_expense_totals.get(row.category, Decimal("0")),
+            ),
         }
         for row in category_budget_rows
     ]
@@ -1006,7 +1016,12 @@ def finance_page():
         recurring_count=recurring_count,
         recurring_bills=recurring_bills,
         budget=budget,
-        budget_cap_raw=(budget_row.monthly_cap if budget_row else None),
+        # Converted to display_currency, same as `budget` above -- the
+        # Edit field re-saves whatever's shown here stamped with today's
+        # preferred_currency (set_budget()), so showing the raw
+        # (possibly different-currency) number here would let an
+        # untouched Save silently re-denominate the cap.
+        budget_cap_raw=budget_cap,
         category_budgets=category_budgets,
         budgetable_categories=budgetable_categories,
         today_date=today.strftime("%Y-%m-%d"),
@@ -2218,12 +2233,20 @@ def set_budget():
         flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
+    # Whatever currency was active right now, when this number was typed
+    # in -- same signal a manual transaction's own currency comes from.
+    # Re-captured on every save (not just creation), since editing the
+    # cap number means re-typing it while looking at whatever's
+    # currently selected, same as a fresh entry.
+    currency = current_user.preferred_currency or "USD"
+
     row = Budget.query.filter_by(user_id=current_user.id).first()
     if row is None:
-        row = Budget(user_id=current_user.id, monthly_cap=cap)
+        row = Budget(user_id=current_user.id, monthly_cap=cap, currency=currency)
         db.session.add(row)
     else:
         row.monthly_cap = cap
+        row.currency = currency
 
     try:
         db.session.commit()
@@ -2273,12 +2296,16 @@ def set_category_budget():
         flash(msg, "error")
         return redirect(url_for("finance.finance_page"))
 
+    # Same currency-capture as set_budget() above.
+    currency = current_user.preferred_currency or "USD"
+
     row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
     if row is None:
-        row = CategoryBudget(user_id=current_user.id, category=category, monthly_cap=cap)
+        row = CategoryBudget(user_id=current_user.id, category=category, monthly_cap=cap, currency=currency)
         db.session.add(row)
     else:
         row.monthly_cap = cap
+        row.currency = currency
 
     try:
         db.session.commit()

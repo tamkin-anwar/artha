@@ -14,7 +14,7 @@ from ...changelog import CHANGELOG_ENTRIES
 from ...extensions import db
 from ...models import Note, Transaction, Event, EventException, User
 from ...models.budget import Budget
-from ...services.exchange_rate_service import get_rates, convert_usd_to
+from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
 from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
@@ -247,7 +247,17 @@ def index():
         renewals_symbol = CURRENCY_SYMBOLS.get(current_user.preferred_currency, "$")
         summary_parts.append(f"{renewals_symbol}{renewals_total:,.0f} in renewals this week")
     budget_row = Budget.query.filter_by(user_id=uid).first()
-    budget = budget_status(budget_row.monthly_cap if budget_row else None, expense_decimal)
+    # The cap's own currency (its NULL-means-USD fallback, same as
+    # Transaction) converted to display_currency before comparing --
+    # expense_decimal is already in display_currency, and a cap left
+    # unconverted here is exactly the bug a real user hit the day this
+    # shipped: a $5,000 cap silently misread as a 5,000-of-whatever-
+    # you-just-switched-to cap.
+    budget_cap = (
+        convert_amount(budget_row.monthly_cap, budget_row.currency or "USD", display_currency, rates)
+        if budget_row else None
+    )
+    budget = budget_status(budget_cap, expense_decimal)
 
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])

@@ -98,6 +98,24 @@ def test_convert_usd_to_falls_back_to_usd_figure_when_unavailable(app):
     assert result == Decimal("50")
 
 
+def test_convert_amount_same_currency_is_identity_no_rate_lookup(app):
+    from artha.services.exchange_rate_service import convert_amount
+    # No ExchangeRate row seeded -- a rate lookup would return None,None
+    # via the unreachable-provider path; getting the exact answer back
+    # proves the same-currency case skips it entirely.
+    with app.app_context():
+        assert convert_amount(Decimal("42"), "GBP", "GBP") == Decimal("42")
+
+
+def test_convert_amount_converts_between_two_non_usd_currencies(app):
+    from artha.services.exchange_rate_service import convert_amount
+    _seed_rates(app)
+    with app.app_context():
+        # 100 GBP -> USD (100/0.80=125) -> BDT (125*110=13750)
+        result = convert_amount(Decimal("100"), "GBP", "BDT")
+    assert result == Decimal("13750")
+
+
 # ---------------------------------------------------------------------------
 # Transaction.native_currency / value_in_usd
 # ---------------------------------------------------------------------------
@@ -203,7 +221,7 @@ def test_budget_status_compares_in_the_users_own_currency(app, auth_client, user
     _seed_rates(app)
     user.preferred_currency = "GBP"
     db.session.commit()
-    db.session.add(Budget(user_id=user.id, monthly_cap=Decimal("100")))
+    db.session.add(Budget(user_id=user.id, monthly_cap=Decimal("100"), currency="GBP"))
     # A $115 USD expense converts to £92 (115 * 0.80) -- 92% of a £100
     # cap, "warning" tier. Comparing the raw USD-pivot figure ($115)
     # against a cap meant as £100 would instead read 115%, "over" tier --
@@ -215,7 +233,76 @@ def test_budget_status_compares_in_the_users_own_currency(app, auth_client, user
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
     assert "You've spent 92% of your" in body
+
+
+def test_budget_cap_stays_correct_after_switching_display_currency(app, auth_client, user):
+    """The exact regression a real user hit live: a cap set while
+    browsing in USD must still mean the same real amount after the user
+    later switches their display currency -- not get silently reread as
+    if it had always been in the new currency (a $5,000 cap misread as
+    a BDT5,000 cap the moment someone switches to Taka)."""
+    from artha.models.budget import Budget
+
+    _seed_rates(app)
+    # Cap set while preferred_currency was (implicitly) USD -- currency
+    # left unset here on purpose, matching a pre-this-fix row exactly.
+    db.session.add(Budget(user_id=user.id, monthly_cap=Decimal("5000")))
+    _add_tx(user, "Groceries", "713.05", "expense", currency="USD")
+    db.session.commit()
+
+    # Now switch to BDT, matching set_currency()'s own persistence.
+    user.preferred_currency = "BDT"
+    db.session.commit()
+
+    resp = auth_client.get("/")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # $713.05 spent against a real $5,000 cap is 14%, nowhere near
+    # "over" -- if the cap were misread as ৳5,000 instead of the
+    # converted ~৳613,850 it actually is, this would wrongly say "over".
     assert "over your" not in body
+
+
+def test_set_budget_captures_currency_active_at_save_time(app, auth_client, user):
+    user.preferred_currency = "EUR"
+    db.session.commit()
+
+    resp = auth_client.post("/finance/budget", data={"monthly_cap": "500"}, headers=AJAX_HEADERS)
+    assert resp.status_code == 200
+
+    from artha.models.budget import Budget
+    row = Budget.query.filter_by(user_id=user.id).first()
+    assert row.currency == "EUR"
+    assert row.monthly_cap == Decimal("500")
+
+
+def test_scenario_comparison_converts_scenario_currency_to_display_currency(app, user):
+    """The same class of bug as Budget.monthly_cap, in Scenario: costs
+    typed in one currency combined with real transaction totals already
+    converted to the user's display currency."""
+    from artha.models.scenario import Scenario
+    from artha.blueprints.scenarios.routes import _scenario_month_comparison
+
+    _seed_rates(app)
+    user.preferred_currency = "GBP"
+    db.session.commit()
+
+    # $100/mo cost, typed in USD -- converts to £80.
+    scenario = Scenario(
+        user_id=user.id, title="New gym", monthly_cost=Decimal("100"), currency="USD",
+    )
+    db.session.add(scenario)
+    _add_tx(user, "Salary", "1000.00", "income", currency="USD")  # -> £800
+    db.session.commit()
+
+    with app.app_context():
+        comparison = _scenario_month_comparison(scenario)
+
+    # net = 800 (income) - 0 (no expenses); scenario effect = -80 (cost,
+    # converted). If the £100... sorry $100 cost were left unconverted
+    # and just subtracted as if it were already GBP, net_with_scenario
+    # would be 800 - 100 = 700 instead of the correct 800 - 80 = 720.
+    assert comparison["net_with_scenario"] == Decimal("720.00")
 
 
 # ---------------------------------------------------------------------------

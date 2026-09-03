@@ -28,6 +28,15 @@ class Scenario(db.Model):
     one_time_cost = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0"))
     monthly_cost = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0"))
     monthly_savings = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0"))
+    # The currency all three money fields above were typed in -- one
+    # scenario is assumed to be entirely in one currency (there's a
+    # single amount field per cost/savings, not a currency picker per
+    # field). Same NULL-means-USD convention as Budget.currency, and the
+    # same bug it fixes: _scenario_month_comparison() combines these with
+    # real transaction totals that ARE currency-converted, so these need
+    # to be converted to that same basis first or the comparison is
+    # comparing numbers in two different currencies.
+    currency = db.Column(db.String(3), nullable=True)
 
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)

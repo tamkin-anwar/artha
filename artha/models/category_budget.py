@@ -20,6 +20,9 @@ class CategoryBudget(db.Model):
     # never "income" — budgets are an expense concept.
     category = db.Column(db.String(20), nullable=False)
     monthly_cap = db.Column(db.Numeric(12, 2), nullable=False)
+    # Same currency-capture as Budget.currency -- see that column's own
+    # comment for why this exists and what breaks without it.
+    currency = db.Column(db.String(3), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

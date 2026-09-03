@@ -7,17 +7,28 @@ function getCsrfToken() {
     return meta ? meta.content : "";
 }
 
-// Best-effort: this device's own localStorage already has the change
-// either way, so a failed request here just means a *different* device
-// won't see it until the next successful save, not that anything on this
-// one is wrong.
+// The account-wide save itself is still best-effort (this device's own
+// localStorage already has the change either way, so a failed request
+// here just means a *different* device won't see it until the next
+// successful save) -- but a successful save reloads the page on purpose.
+// Dashboard/Finance totals, budgets, and comparisons are converted
+// server-side into whichever currency the account is set to (see
+// CLAUDE.md's Multi-currency note); the client-side relabel this
+// triggers before the reload (applyCurrencyEverywhere, still called by
+// the caller) only reformats the *symbol* on numbers already baked into
+// the page at load time, so without this reload those totals stay
+// showing the previous currency's converted figures under a new
+// currency's symbol until the next full page load happens to occur —
+// a real bug a user hit live, not just a cosmetic lag.
 function persistCurrencyToAccount(code) {
     fetch("/set_currency", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({ code }),
-    }).catch(() => {});
+    })
+        .then((res) => { if (res.ok) window.location.reload(); })
+        .catch(() => {});
 }
 
 function setSelectValueIfPresent(selectEl, value) {

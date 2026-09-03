@@ -156,3 +156,36 @@ def convert_usd_to(amount_usd: Decimal, target_currency: str, rates: dict | None
     if not rates or target_currency not in rates.get("rates", {}):
         return amount_usd
     return amount_usd * Decimal(str(rates["rates"][target_currency]))
+
+
+def convert_amount(amount: Decimal, from_currency: str, to_currency: str, rates: dict | None = None) -> Decimal:
+    """`amount`, in `from_currency`, converted to `to_currency` — the
+    general two-currency version of the lock_usd_value/convert_usd_to
+    pair above, for a currency-less stored number that isn't a
+    Transaction (Budget.monthly_cap, CategoryBudget.monthly_cap,
+    Scenario's cost/savings fields). Those carry their own `currency`
+    column (same NULL-means-USD convention Transaction uses) but no
+    locked USD value, since nothing about a budget cap is "created" at
+    a moment worth locking a rate to — it's compared fresh every time,
+    so both hops (native -> USD -> target) happen live here.
+
+    Identity when the two currencies already match (the common case —
+    most users never switch display currency away from what they set
+    their budget in) skips the rate lookup entirely. Degrades to
+    returning `amount` unconverted if a live rate isn't available for
+    either currency, same precedent as convert_usd_to."""
+    if from_currency == to_currency:
+        return amount
+    if rates is None:
+        rates = get_rates()
+    table = (rates or {}).get("rates", {})
+    if from_currency != "USD" and from_currency not in table:
+        return amount
+    if to_currency != "USD" and to_currency not in table:
+        return amount
+    from_rate = Decimal("1") if from_currency == "USD" else Decimal(str(table[from_currency]))
+    if from_rate == 0:
+        return amount
+    amount_usd = amount / from_rate
+    to_rate = Decimal("1") if to_currency == "USD" else Decimal(str(table[to_currency]))
+    return amount_usd * to_rate
