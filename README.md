@@ -16,15 +16,15 @@ Built by Anwar Creative Studio.
 - Spending and Income break down by category in a live Chart.js doughnut; Cash Flow shows income vs. spending as a bar chart per period
 - Recurring lists every recurring bill/income with a projected total scaled to the selected period
 - Inline transaction editing, no page reloads; undo delete with toast notifications
-- Bank statement import from CSV or PDF (including password-protected PDFs and international formats: £/€ amounts, day-month-year dates, Taka), with a preview-and-edit step and auto-categorization before anything is committed
+- Bank statement import from CSV or PDF (including password-protected PDFs and international formats: £/€ amounts, day-month-year dates, Taka), with a preview-and-edit step and auto-categorization before anything is committed. Each transaction keeps the currency it actually happened in, not just whatever's currently selected
 - CSV export respecting whichever month filter is active
 - An overall monthly budget and per-category budgets side by side, each with its own progress card and over/near-limit alert
 - Recurring transactions with automatic monthly regeneration
 
 **Elsewhere**
 - Notes with pinning, colors, tags, due dates, and a 30-day trash
-- Calendar with due-date notes, recurring bill reminders, and time-blocked events
-- Web Push notifications for bills, notes, and calendar events due today, with independent opt-in per reminder type
+- Calendar with due-date notes, recurring bill reminders, and time-blocked events, plus a private subscription link so any calendar app (Apple, Google, Outlook) can show them too
+- Web Push notifications for bills, notes, and calendar events due today, with independent opt-in per reminder type and a delivery hour each user picks for themselves, in their own timezone
 - A Numi-style smart calculator with variables, a running total, unit and currency conversion via live exchange rates, loan payment and compound interest math, and flexible natural-language input ("10k x 9%," "$300k loan at 4.5% for 30 years"); state persists across navigation
 - Scenarios: model a "what if" financial decision (a new apartment, a career change) against your real numbers and get a payback period and a rule-based recommendation, no AI call needed
 - An AI Assistant with your financial data as context, powered by Anthropic's API, that can propose logging a transaction, creating a note, scheduling an event, or setting a budget, always behind an explicit confirm step before anything is saved
@@ -33,7 +33,7 @@ Built by Anwar Creative Studio.
 - Self-serve, email-based password reset, no admin needed
 - In-app feedback (floating button, any page) and an admin panel to triage it and see who's actually using the app
 - An Account menu (your name/avatar) for identity actions (edit profile, change password, sign out), separate from a Preferences menu (theme, currency, notifications)
-- Dark and light theme with persistence, multi-currency display
+- Dark and light theme with persistence, real multi-currency support: switching your display currency actually converts every total using live exchange rates, while each transaction still shows exactly what you paid, in the currency you paid it
 - A native-feeling mobile experience: a bottom tab bar instead of a hamburger menu, safe-area-aware layout for notched phones, and cross-fade page transitions, tuned against real iOS and Android widths, not just "technically doesn't overflow"
 - Offline support via Service Worker (PWA-ready)
 - Rate-limited login and a pytest suite covering auth and the money-handling paths
@@ -43,6 +43,7 @@ Built by Anwar Creative Studio.
 - Flask-Login + Flask-WTF (CSRF protection) + Flask-Limiter (login rate limiting)
 - Anthropic API (AI Assistant, tool-use for taking actions)
 - pdfplumber (bank statement PDF parsing)
+- icalendar (the calendar subscription feed)
 - pywebpush (Web Push notifications)
 - Resend (transactional email, password reset)
 - Vanilla JavaScript (ES modules), no frontend framework
@@ -79,7 +80,7 @@ pytest
 ```
 
 ## Renewal reminders (Web Push)
-Subscribing/receiving works from a normal page load, but *sending* a reminder on the actual due date needs to run even if nobody opens the app that day, and that can't happen from a request handler. Schedule this once a day (e.g. a Render Cron Job):
+Subscribing/receiving works from a normal page load, but *sending* a reminder on the actual due date needs to run even if nobody opens the app that day, and that can't happen from a request handler. Each user picks their own delivery hour in their own timezone, so this needs to run hourly, not once a day (e.g. a Render Cron Job on `0 * * * *`):
 ```bash
 flask send-renewal-reminders
 ```
