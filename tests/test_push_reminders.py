@@ -113,7 +113,12 @@ def test_due_today_items_excludes_notes_when_notify_notes_off(app, user):
 
 
 def test_send_renewal_reminders_respects_notify_bills_due_false(app, user):
-    today = date.today()
+    # UTC, not date.today() (system-local) -- user.timezone is unset here,
+    # so send_renewal_reminders computes this user's "today" from
+    # utils.user_now()'s UTC fallback; matching that basis exactly is what
+    # this whole feature is about (see test_..._uses_each_users_own_local_today
+    # below for the dedicated regression test on that point).
+    today = datetime.now(timezone.utc).date()
     year, month = today.year, today.month - 1 or 12
     if today.month == 1:
         year -= 1
@@ -124,6 +129,11 @@ def test_send_renewal_reminders_respects_notify_bills_due_false(app, user):
     db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
     db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/y", p256dh="a", auth="b"))
     user.notify_bills_due = False
+    # user.timezone is unset, so send_renewal_reminders reads this user's
+    # "now" as plain UTC (utils.user_now's own fallback) — match its hour
+    # exactly so the command's per-user reminder_hour gate always fires
+    # regardless of what wall-clock time this test happens to run at.
+    user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 
     sent_calls = []
@@ -197,12 +207,15 @@ def test_due_today_items_materializes_recurring_event_for_today(app, user):
 
 
 def test_send_renewal_reminders_respects_notify_events_due_false(app, user):
-    today = date.today()
+    # UTC, not date.today() -- see the matching comment on
+    # test_send_renewal_reminders_respects_notify_bills_due_false above.
+    today = datetime.now(timezone.utc).date()
     start = datetime(today.year, today.month, today.day, 10, 0)
     db.session.add(Event(user_id=user.id, title="Team sync", start=start, end=start + timedelta(hours=1)))
     db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
     db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/z", p256dh="a", auth="b"))
     user.notify_events_due = False
+    user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 
     sent_calls = []
@@ -221,7 +234,9 @@ def test_send_renewal_reminders_respects_notify_events_due_false(app, user):
 
 
 def test_send_renewal_reminders_combines_bill_and_note_in_one_push(app, user):
-    today = date.today()
+    # UTC, not date.today() -- see the matching comment on
+    # test_send_renewal_reminders_respects_notify_bills_due_false above.
+    today = datetime.now(timezone.utc).date()
     year, month = today.year, today.month - 1 or 12
     if today.month == 1:
         year -= 1
@@ -231,6 +246,7 @@ def test_send_renewal_reminders_combines_bill_and_note_in_one_push(app, user):
     ))
     db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
     db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/x", p256dh="a", auth="b"))
+    user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 
     sent_calls = []
@@ -247,3 +263,65 @@ def test_send_renewal_reminders_combines_bill_and_note_in_one_push(app, user):
     assert sent_calls[0]["title"] == "Due today"
     assert "Rent" in sent_calls[0]["body"]
     assert "Call the dentist" in sent_calls[0]["body"]
+
+
+def test_send_renewal_reminders_skips_user_not_at_their_reminder_hour(app, user):
+    today = date.today()
+    db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
+    db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/skip", p256dh="a", auth="b"))
+    # Guaranteed to differ from whatever hour this test happens to run at.
+    user.reminder_hour = (datetime.now(timezone.utc).hour + 1) % 24
+    db.session.commit()
+
+    sent_calls = []
+
+    def fake_send_push(sub, title, body, url="/"):
+        sent_calls.append({"body": body})
+        return "sent"
+
+    with patch("artha.cli.send_push", side_effect=fake_send_push):
+        result = app.test_cli_runner().invoke(args=["send-renewal-reminders"])
+
+    assert result.exit_code == 0
+    assert sent_calls == []
+
+
+def test_send_renewal_reminders_uses_each_users_own_local_today(app):
+    """The actual bug this feature shipped alongside fixing: before,
+    every user's "today" was one shared date.today() (server UTC), so a
+    user whose local calendar date had already rolled over relative to
+    UTC (or hadn't yet) could have their due-today items missed. Two
+    users, each due on a DIFFERENT calendar date at the exact same real
+    moment (mocked per-user via user_now) — proves each user's "today"
+    is computed independently, not off one shared clock."""
+    from .conftest import make_user
+
+    user_a = make_user(username="early-tz", reminder_hour=9)
+    user_b = make_user(username="late-tz", reminder_hour=9)
+
+    note_a = Note(title="A's task", content="x", user_id=user_a.id, due_date=date(2026, 3, 15))
+    note_b = Note(title="B's task", content="x", user_id=user_b.id, due_date=date(2026, 3, 16))
+    db.session.add_all([note_a, note_b])
+    db.session.add(PushSubscription(user_id=user_a.id, endpoint="https://example.com/a", p256dh="a", auth="b"))
+    db.session.add(PushSubscription(user_id=user_b.id, endpoint="https://example.com/b", p256dh="a", auth="b"))
+    db.session.commit()
+
+    def fake_user_now(owner):
+        if owner.id == user_a.id:
+            return datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc)
+        return datetime(2026, 3, 16, 9, 0, tzinfo=timezone.utc)
+
+    sent_calls = []
+
+    def fake_send_push(sub, title, body, url="/"):
+        sent_calls.append({"user_id": sub.user_id, "body": body})
+        return "sent"
+
+    with patch("artha.cli.user_now", side_effect=fake_user_now), \
+         patch("artha.cli.send_push", side_effect=fake_send_push):
+        result = app.test_cli_runner().invoke(args=["send-renewal-reminders"])
+
+    assert result.exit_code == 0
+    bodies_by_user = {c["user_id"]: c["body"] for c in sent_calls}
+    assert "A's task" in bodies_by_user[user_a.id]
+    assert "B's task" in bodies_by_user[user_b.id]

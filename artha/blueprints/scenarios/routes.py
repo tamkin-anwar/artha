@@ -7,8 +7,9 @@ from flask_login import current_user, login_required
 from sqlalchemy import func
 
 from ...extensions import db
-from ...models import Transaction
+from ...models import Transaction, User
 from ...models.scenario import VALID_PRIORITIES, VALID_STATUSES, Scenario
+from ...services.exchange_rate_service import get_rates, convert_usd_to
 from ...utils import is_ajax_request
 from . import scenarios_bp
 
@@ -57,11 +58,31 @@ def _parse_date(raw, field_name: str):
         raise ValidationError(f"{field_name} must be a valid date (YYYY-MM-DD).")
 
 
+def _scenario_display_currency(user_id: int) -> tuple[str, dict | None]:
+    """(display_currency, rates) for this user. A real DB lookup by id
+    rather than reaching for current_user — these helpers are unit-tested
+    directly by calling _verdict()/_scenario_month_comparison() outside
+    any request context, where current_user isn't a real User at all.
+    Scenario's own monthly_cost/monthly_savings/one_time_cost fields
+    carry no currency of their own (same situation as Budget.monthly_cap)
+    — implicitly whatever currency the user was looking at when they
+    typed those numbers in, i.e. this."""
+    owner = db.session.get(User, user_id)
+    display_currency = (owner.preferred_currency if owner else None) or "USD"
+    rates = get_rates() if display_currency != "USD" else None
+    return display_currency, rates
+
+
 def _monthly_income(user_id: int, months: int = 3) -> Decimal:
     """Average monthly income over the trailing N months of transaction history."""
     since = datetime.utcnow() - timedelta(days=30 * months)
+    # coalesce(usd_value, amount), not bare amount: transactions can carry
+    # different currencies now, so summing raw amount across them would
+    # be meaningless. A legacy/USD row (usd_value NULL) just sums its own
+    # amount, unchanged.
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
     total = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == user_id,
             Transaction.type == "income",
@@ -70,15 +91,18 @@ def _monthly_income(user_id: int, months: int = 3) -> Decimal:
         .scalar()
         or Decimal("0")
     )
-    return Decimal(total) / months
+    display_currency, rates = _scenario_display_currency(user_id)
+    total = convert_usd_to(Decimal(total), display_currency, rates)
+    return total / months
 
 
 def _monthly_expense(user_id: int, months: int = 3) -> Decimal:
     """Average monthly expense over the trailing N months — the expense-side
     twin of _monthly_income(), used for the same projected-month fallback."""
     since = datetime.utcnow() - timedelta(days=30 * months)
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
     total = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == user_id,
             Transaction.type == "expense",
@@ -87,7 +111,9 @@ def _monthly_expense(user_id: int, months: int = 3) -> Decimal:
         .scalar()
         or Decimal("0")
     )
-    return Decimal(total) / months
+    display_currency, rates = _scenario_display_currency(user_id)
+    total = convert_usd_to(Decimal(total), display_currency, rates)
+    return total / months
 
 
 def _month_totals(user_id: int, target: date) -> dict:
@@ -103,8 +129,9 @@ def _month_totals(user_id: int, target: date) -> dict:
     start = date(target.year, target.month, 1)
     next_month = date(target.year + 1, 1, 1) if target.month == 12 else date(target.year, target.month + 1, 1)
 
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
     income = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == user_id,
             Transaction.type == "income",
@@ -115,7 +142,7 @@ def _month_totals(user_id: int, target: date) -> dict:
         or Decimal("0")
     )
     expense = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == user_id,
             Transaction.type == "expense",
@@ -125,6 +152,9 @@ def _month_totals(user_id: int, target: date) -> dict:
         .scalar()
         or Decimal("0")
     )
+    display_currency, rates = _scenario_display_currency(user_id)
+    income = convert_usd_to(income, display_currency, rates)
+    expense = convert_usd_to(expense, display_currency, rates)
     return {
         "month_start": start,
         "income": income,

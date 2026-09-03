@@ -51,7 +51,8 @@ from ..models import Event, Note, Transaction
 from ..models.budget import Budget
 from ..models.category_budget import CategoryBudget
 from ..models.scenario import Scenario
-from ..utils import user_now
+from ..services.exchange_rate_service import get_rates, convert_usd_to
+from ..utils import user_now, CURRENCY_SYMBOLS, CURRENCY_CODES
 
 log = logging.getLogger(__name__)
 
@@ -162,6 +163,17 @@ _TOOLS = [
                 "description": {"type": "string", "description": "Short label, e.g. 'Coffee'."},
                 "amount": {"type": "number", "description": "Positive amount."},
                 "type": {"type": "string", "enum": ["income", "expense"]},
+                "currency": {
+                    "type": "string",
+                    "enum": sorted(CURRENCY_CODES),
+                    "description": (
+                        "ISO code the amount is actually in, only when the user "
+                        "explicitly names a currency (e.g. '20 euros', '500 taka'). "
+                        "Omit entirely otherwise — it then defaults to whatever "
+                        "currency the user is currently displaying, which is correct "
+                        "for the ordinary case of a plain number with no currency named."
+                    ),
+                },
                 "category": {"type": "string", "enum": list(TRANSACTION_CATEGORIES.keys())},
                 "date": {"type": "string", "description": "YYYY-MM-DD. Omit for today."},
                 "is_recurring": {
@@ -473,10 +485,31 @@ def _get_model() -> str:
 # Context assembly
 # ---------------------------------------------------------------------------
 
+def _display_amount(tx: Transaction, display_currency: str, rates: dict | None) -> Decimal:
+    """This transaction's amount in `display_currency` — exact (no
+    conversion) when it's already in that currency, the common case;
+    otherwise converted from its locked USD value using a *live* rate
+    via convert_usd_to (which itself degrades to the unconverted USD
+    figure if the rate table isn't available — good enough for the model
+    to reason approximately, better than erroring out of the whole
+    assistant turn)."""
+    if tx.native_currency == display_currency:
+        return tx.amount
+    return convert_usd_to(tx.value_in_usd, display_currency, rates)
+
+
 def _assemble_financial_context(user) -> str:
     """
     Query the DB and return a structured text block describing the user's
     financial position. Injected into the system prompt on every request.
+
+    Every figure is normalized to the user's own preferred_currency (USD
+    if they've never set one) — transactions can each carry their own
+    native currency now, and handing the model a flat list mixing $/£/৳
+    figures with no conversion would make its own arithmetic (a total,
+    a comparison) silently wrong. A transaction already in the display
+    currency shows its exact native amount; anything else is converted
+    from its locked USD value using a live rate (see _display_amount).
     """
     transactions: list[Transaction] = (
         Transaction.query
@@ -489,18 +522,23 @@ def _assemble_financial_context(user) -> str:
     if not transactions:
         return "No transactions recorded yet."
 
+    display_currency = user.preferred_currency or "USD"
+    symbol = CURRENCY_SYMBOLS.get(display_currency, "$")
+    rates = get_rates() if any(t.native_currency != display_currency for t in transactions) else None
+
     zero = Decimal("0")
     income_txs  = [t for t in transactions if t.type == "income"]
     expense_txs = [t for t in transactions if t.type == "expense"]
 
-    total_income:  Decimal = sum((t.amount for t in income_txs),  zero)
-    total_expense: Decimal = sum((t.amount for t in expense_txs), zero)
+    total_income:  Decimal = sum((_display_amount(t, display_currency, rates) for t in income_txs),  zero)
+    total_expense: Decimal = sum((_display_amount(t, display_currency, rates) for t in expense_txs), zero)
     net:           Decimal = total_income - total_expense
 
     lines = [
-        f"Total income:        ${total_income:,.2f}",
-        f"Total expenses:      ${total_expense:,.2f}",
-        f"Net balance:         ${net:,.2f} ({'surplus' if net >= 0 else 'deficit'})",
+        f"All figures in {display_currency}.",
+        f"Total income:        {symbol}{total_income:,.2f}",
+        f"Total expenses:      {symbol}{total_expense:,.2f}",
+        f"Net balance:         {symbol}{net:,.2f} ({'surplus' if net >= 0 else 'deficit'})",
         f"Transactions loaded: {len(transactions)} "
         f"(capped at {_MAX_CONTEXT_TRANSACTIONS} most recent)",
         "",
@@ -509,7 +547,11 @@ def _assemble_financial_context(user) -> str:
     for tx in transactions:
         ts   = tx.timestamp.strftime("%b %d, %Y") if tx.timestamp else "—"
         sign = "+" if tx.type == "income" else "−"
-        lines.append(f"  {ts}  {sign}${tx.amount:,.2f}  {tx.description}")
+        amount = _display_amount(tx, display_currency, rates)
+        line = f"  {ts}  {sign}{symbol}{amount:,.2f}  {tx.description}"
+        if tx.native_currency != display_currency:
+            line += f"  (originally {tx.native_currency} {tx.amount:,.2f})"
+        lines.append(line)
 
     # This-month-by-category, using the *user's* local month boundary
     # (user_now, not a bare UTC/server date.today()) so "this month" agrees
@@ -530,11 +572,11 @@ def _assemble_financial_context(user) -> str:
         totals_by_category: dict[str, Decimal] = {}
         for t in this_month_expenses:
             key = t.category or "uncategorized"
-            totals_by_category[key] = totals_by_category.get(key, zero) + t.amount
+            totals_by_category[key] = totals_by_category.get(key, zero) + _display_amount(t, display_currency, rates)
         lines += ["", f"This month's spending by category (as of {now.strftime('%b %d')}):"]
         for key, amount in sorted(totals_by_category.items(), key=lambda kv: kv[1], reverse=True):
             label = TRANSACTION_CATEGORIES.get(key, {}).get("label", key.title())
-            lines.append(f"  {label}: ${amount:,.2f}")
+            lines.append(f"  {label}: {symbol}{amount:,.2f}")
 
     return "\n".join(lines)
 
@@ -556,20 +598,32 @@ def _assemble_budget_context(user) -> str:
         Transaction.timestamp >= month_start,
         Transaction.timestamp < next_month_start,
     ).all()
+
+    # Budget.monthly_cap/CategoryBudget.monthly_cap carry no currency of
+    # their own -- they're bare numbers in whatever currency the user was
+    # looking at when they typed the cap in, i.e. their current
+    # preferred_currency. Spending has to be converted to that same
+    # currency before comparing, or a non-USD user's budget percentage
+    # would silently be off by whatever their exchange rate is.
+    display_currency = user.preferred_currency or "USD"
+    symbol = CURRENCY_SYMBOLS.get(display_currency, "$")
+    rates = get_rates() if any(t.native_currency != display_currency for t in this_month_expenses) else None
+
     spent_by_category: dict[str, Decimal] = {}
     total_spent = Decimal("0")
     for t in this_month_expenses:
         key = t.category or "uncategorized"
-        spent_by_category[key] = spent_by_category.get(key, Decimal("0")) + t.amount
-        total_spent += t.amount
+        amount = _display_amount(t, display_currency, rates)
+        spent_by_category[key] = spent_by_category.get(key, Decimal("0")) + amount
+        total_spent += amount
 
     lines = []
 
     overall = Budget.query.filter_by(user_id=user.id).first()
     if overall and overall.monthly_cap > 0:
         lines.append(
-            f"Overall monthly budget: ${overall.monthly_cap:,.2f}, "
-            f"${total_spent:,.2f} spent so far this month "
+            f"Overall monthly budget: {symbol}{overall.monthly_cap:,.2f}, "
+            f"{symbol}{total_spent:,.2f} spent so far this month "
             f"({total_spent / overall.monthly_cap * 100:.0f}%)."
         )
 
@@ -578,7 +632,7 @@ def _assemble_budget_context(user) -> str:
         label = TRANSACTION_CATEGORIES.get(cb.category, {}).get("label", cb.category.title())
         spent = spent_by_category.get(cb.category, Decimal("0"))
         pct = (spent / cb.monthly_cap * 100) if cb.monthly_cap else Decimal("0")
-        lines.append(f"{label} budget: ${cb.monthly_cap:,.2f}, ${spent:,.2f} spent ({pct:.0f}%).")
+        lines.append(f"{label} budget: {symbol}{cb.monthly_cap:,.2f}, {symbol}{spent:,.2f} spent ({pct:.0f}%).")
 
     return "\n".join(lines) if lines else "No budgets set."
 
@@ -901,10 +955,17 @@ class AIService:
             return result
 
         # Build a structured summary for the UI to consume alongside the prose.
+        # Converted to the user's own preferred_currency (not left as raw
+        # USD-pivot amounts) so the client can render this exactly like any
+        # other already-in-my-currency figure, no further conversion needed.
         transactions = Transaction.query.filter_by(user_id=user.id).all()
         zero         = Decimal("0")
-        total_income  = sum((t.amount for t in transactions if t.type == "income"),  zero)
-        total_expense = sum((t.amount for t in transactions if t.type == "expense"), zero)
+        display_currency = user.preferred_currency or "USD"
+        rates = get_rates() if any(t.native_currency != display_currency for t in transactions) else None
+        total_income_usd  = sum((t.value_in_usd for t in transactions if t.type == "income"),  zero)
+        total_expense_usd = sum((t.value_in_usd for t in transactions if t.type == "expense"), zero)
+        total_income  = convert_usd_to(total_income_usd, display_currency, rates)
+        total_expense = convert_usd_to(total_expense_usd, display_currency, rates)
 
         return {
             "insights": result["reply"],

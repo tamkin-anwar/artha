@@ -48,8 +48,7 @@ export function setCurrencyCode(code) {
     return preset.code;
 }
 
-export function formatMoney(value) {
-    const preset = getCurrencyPreset();
+function _format(preset, value) {
     const num = Number(value);
     const safeNumber = Number.isFinite(num) ? num : 0;
 
@@ -74,6 +73,37 @@ export function formatMoney(value) {
     } catch {
         return `${symbol}${safeNumber.toFixed(2)}`;
     }
+}
+
+// Formats in whichever currency the user currently has selected (Settings,
+// or the top-bar switcher) \u2014 for anything already normalized to that
+// currency server-side: dashboard/finance stat cards, budgets, chart
+// totals. Money the server hands over pre-converted like this needs no
+// further conversion here, only formatting.
+export function formatMoney(value) {
+    return _format(getCurrencyPreset(), value);
+}
+
+// Formats `value` in ITS OWN currency, ignoring whatever the user
+// currently has selected \u2014 for a single transaction's own native amount
+// (transaction_row.html's .tx-amount, a recurring bill's own row), which
+// should always show exactly what was actually paid, in the currency it
+// was actually paid in, never silently relabeled with a different
+// symbol or converted. Falls back to the globally-selected currency only
+// when `currencyCode` itself is missing (an older element that predates
+// this attribute) rather than guessing.
+export function formatMoneyIn(value, currencyCode) {
+    return _format(safeGetPreset(currencyCode || getCurrencyCode()), value);
+}
+
+// Reads data-money-value + data-money-currency off `el` and formats in
+// that transaction's own currency \u2014 the one-call shorthand every
+// .tx-amount-style call site should use instead of formatMoney(value)
+// directly, per formatMoneyIn's own reasoning above.
+export function formatMoneyFromElement(el) {
+    const raw = el?.dataset?.moneyValue ?? el?.getAttribute?.("data-money-value");
+    const currency = el?.dataset?.moneyCurrency ?? el?.getAttribute?.("data-money-currency");
+    return formatMoneyIn(Number(raw || 0), currency);
 }
 
 export function applyCurrencyToAmountPrefixes() {

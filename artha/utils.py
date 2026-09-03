@@ -7,6 +7,20 @@ from zoneinfo import ZoneInfo
 
 from flask import request
 
+# The closed set of currencies Artha supports display/entry in — matches
+# static/js/currency.js's CURRENCY_PRESETS exactly (that's the client
+# side's own closed set; keep both in sync if this ever changes). Lives
+# here, not in auth/routes.py (where /set_currency validates against it)
+# or finance/routes.py (where a Transaction's own currency does too), so
+# neither blueprint has to import from the other.
+CURRENCY_CODES = {"USD", "GBP", "EUR", "BDT", "CAD", "AUD"}
+
+# Same set, for the handful of places server-rendered text needs a symbol
+# rather than a full Intl.NumberFormat-style client-side format (e.g. a
+# plain-text dashboard summary line, or the AI Assistant's system prompt)
+# — also matches currency.js's CURRENCY_PRESETS.
+CURRENCY_SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€", "BDT": "৳", "CAD": "$", "AUD": "$"}
+
 
 def is_ajax_request() -> bool:
     """True when the request expects a JSON response rather than a full page."""

@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import requests
 
@@ -99,3 +100,59 @@ def get_rates() -> dict | None:
         db.session.rollback()
         log.warning("Exchange rate fetch failed, serving stale cache if any: %s", e)
         return _row_to_dict(row) if row else None
+
+
+def lock_usd_value(amount: Decimal, currency: str) -> tuple[Decimal | None, Decimal | None]:
+    """Returns (usd_value, rate_locked): `amount` converted to USD using
+    the rate table as of right now, meant to be called once at a
+    Transaction's creation/import time and the result stored permanently
+    (see Transaction.usd_value's own docstring for why — this is the
+    "locked" half of "lock at creation, convert live at display").
+
+    currency == "USD" short-circuits to (amount, 1) with no API call —
+    the common case for most users, and the only one that must never be
+    blocked by a third-party rate provider being unreachable.
+
+    Returns (None, None) if rates are unavailable or `currency` isn't in
+    the table. Callers should still save the transaction in that case
+    rather than blocking on it — a NULL usd_value reads back as "treat
+    as already USD" everywhere it's used (Transaction.value_in_usd),
+    the same fallback a genuinely pre-this-feature row gets."""
+    if currency == "USD":
+        return amount, Decimal("1")
+
+    rates = get_rates()
+    if rates is None or currency not in rates["rates"]:
+        return None, None
+
+    rate = Decimal(str(rates["rates"][currency]))
+    if rate == 0:
+        return None, None
+
+    usd_value = (amount / rate).quantize(Decimal("0.01"))
+    return usd_value, rate
+
+
+def convert_usd_to(amount_usd: Decimal, target_currency: str, rates: dict | None = None) -> Decimal:
+    """A USD figure converted to `target_currency` using a *live* rate —
+    the other half of the "lock at creation, convert live at display/
+    comparison" split (see lock_usd_value above): a Transaction's own
+    usd_value never moves once set, but a SUM across many transactions
+    (a month's total spending, a budget comparison) has no historical
+    moment of its own to lock, so it's always converted fresh, right
+    before it's shown or compared against a currency-less stored number
+    like Budget.monthly_cap.
+
+    `rates` lets a caller already holding a fetched table (e.g. looping
+    over several conversions in one request) skip a redundant call;
+    omitted, this fetches its own. Falls back to returning `amount_usd`
+    unconverted if the target currency or a live rate isn't available —
+    the same "degrade to the USD figure rather than block" precedent
+    lock_usd_value already sets."""
+    if target_currency == "USD":
+        return amount_usd
+    if rates is None:
+        rates = get_rates()
+    if not rates or target_currency not in rates.get("rates", {}):
+        return amount_usd
+    return amount_usd * Decimal(str(rates["rates"][target_currency]))

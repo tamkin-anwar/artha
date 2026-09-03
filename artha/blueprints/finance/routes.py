@@ -18,7 +18,8 @@ from ...extensions import db
 from ...models import Transaction
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
-from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date
+from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to
+from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date, CURRENCY_CODES
 from . import finance_bp
 
 log = logging.getLogger(__name__)
@@ -201,6 +202,17 @@ def add_transaction():
     if category not in TRANSACTION_CATEGORIES:
         category = None
 
+    # Whatever currency the page was actively displaying at submit time
+    # (static/js/currency.js's getCurrencyCode(), posted as a hidden
+    # field) is the only honest signal available for a manual entry — the
+    # amount was typed in while looking at that currency. An
+    # unrecognized/missing value falls back the same way /set_currency
+    # already does, rather than rejecting the whole transaction over it.
+    currency = (request.form.get("currency") or "").strip().upper()
+    if currency not in CURRENCY_CODES:
+        currency = current_user.preferred_currency or "USD"
+    usd_value, usd_rate_locked = lock_usd_value(amount, currency)
+
     max_pos = (
         db.session.query(func.max(Transaction.position))
         .filter_by(user_id=current_user.id)
@@ -217,6 +229,9 @@ def add_transaction():
         is_recurring=bool(request.form.get("is_recurring")),
         category=category,
         import_source="manual",
+        currency=currency,
+        usd_value=usd_value,
+        usd_rate_locked=usd_rate_locked,
     )
 
     try:
@@ -282,6 +297,20 @@ def update_transaction(transaction_id):
         category = data.get("category") or None
         tx.category = category if category in TRANSACTION_CATEGORIES else None
 
+    # currency itself only changes if explicitly sent (no UI does this
+    # today — .tx-amount always edits the native amount in its existing
+    # currency, see transaction_row.html's own comment on why that field
+    # must never show/accept a converted number). usd_value, though,
+    # always gets relocked against whatever amount/currency this row ends
+    # up with: `amount` above is unconditionally reassigned even when
+    # unchanged, so a stale usd_value left over from the pre-edit amount
+    # would otherwise silently mismatch it.
+    if "currency" in data:
+        new_currency = (data.get("currency") or "").strip().upper()
+        if new_currency in CURRENCY_CODES:
+            tx.currency = new_currency
+    tx.usd_value, tx.usd_rate_locked = lock_usd_value(tx.amount, tx.native_currency)
+
     try:
         db.session.commit()
         return jsonify({
@@ -321,6 +350,9 @@ def delete_transaction(transaction_id):
         "is_recurring": bool(tx.is_recurring),
         "category": tx.category,
         "import_source": tx.import_source,
+        "currency": tx.currency,
+        "usd_value": str(tx.usd_value) if tx.usd_value is not None else None,
+        "usd_rate_locked": str(tx.usd_rate_locked) if tx.usd_rate_locked is not None else None,
         "timestamp": (
             tx.timestamp.replace(tzinfo=timezone.utc).isoformat()
             if tx.timestamp
@@ -408,6 +440,9 @@ def undo_delete_transaction():
             is_recurring=bool(data.get("is_recurring")),
             category=data.get("category"),
             import_source=data.get("import_source"),
+            currency=data.get("currency"),
+            usd_value=Decimal(data["usd_value"]) if data.get("usd_value") is not None else None,
+            usd_rate_locked=Decimal(data["usd_rate_locked"]) if data.get("usd_rate_locked") is not None else None,
         )
         db.session.add(restored)
         db.session.commit()
@@ -527,6 +562,15 @@ def generate_recurring():
         target_day = min(template_tx.timestamp.day, days_this_month)
         target_date = date(today.year, today.month, target_day)
 
+        # Same currency as the template (a recurring bill doesn't change
+        # currency month to month), but usd_value is relocked fresh here
+        # rather than copied — this is a genuinely new transaction being
+        # created right now, so it should lock in *this* moment's rate,
+        # not carry forward a rate from whenever the template was itself
+        # created.
+        currency = template_tx.native_currency
+        usd_value, usd_rate_locked = lock_usd_value(template_tx.amount, currency)
+
         max_pos += 1
         new_tx = Transaction(
             description=template_tx.description,
@@ -537,6 +581,9 @@ def generate_recurring():
             is_recurring=True,
             timestamp=_resolve_transaction_timestamp(target_date.strftime("%Y-%m-%d")),
             recurring_month=month_start,
+            currency=currency,
+            usd_value=usd_value,
+            usd_rate_locked=usd_rate_locked,
         )
 
         # Committed one at a time (inside a savepoint) rather than as one
@@ -583,8 +630,13 @@ def finance_totals():
     uid = current_user.id
     month_start, month_end = current_month_bounds()
 
+    # coalesce(usd_value, amount): transactions can carry different
+    # currencies now, so a raw sum of `amount` across them would be
+    # meaningless. A legacy/USD row (usd_value NULL) just sums its own
+    # amount unchanged — see Transaction.value_in_usd's own docstring.
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
     income = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == uid,
             Transaction.type == "income",
@@ -595,7 +647,7 @@ def finance_totals():
         or Decimal("0")
     )
     expense = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == uid,
             Transaction.type == "expense",
@@ -605,6 +657,14 @@ def finance_totals():
         .scalar()
         or Decimal("0")
     )
+    # Converted to the user's own display currency — this is what the
+    # dashboard's stat cards refresh from after an add/edit/delete, and
+    # they need to already be in the currency it's showing everywhere
+    # else, not a raw USD-pivot figure.
+    display_currency = current_user.preferred_currency or "USD"
+    rates = get_rates() if display_currency != "USD" else None
+    income = convert_usd_to(income, display_currency, rates)
+    expense = convert_usd_to(expense, display_currency, rates)
     balance = income - expense
 
     return jsonify({
@@ -661,6 +721,12 @@ def _recurring_bills(uid: int, today: date) -> list[dict]:
             "description": desc,
             "type": ttype,
             "amount": float(tx.amount),
+            "currency": tx.native_currency,
+            # For summing across bills that may be in different
+            # currencies (see the "recurring" view's monthly_income/
+            # monthly_expense below) — "amount" above stays the exact
+            # native figure for this one bill's own display.
+            "usd_amount": float(tx.value_in_usd),
             "category": tx.category,
             "due_date": due,
             "due_label": (
@@ -698,6 +764,15 @@ def finance_page():
         .all()
     )
 
+    # Every total/comparison/breakdown built below is converted to this
+    # once, right where each is finalized, rather than left as raw
+    # USD-pivot figures — this page's own currency-less Budget/
+    # CategoryBudget caps are implicitly in this same currency (see
+    # budget_status()'s call sites further down), so spending has to be
+    # converted to match before comparing, not just before displaying.
+    display_currency = current_user.preferred_currency or "USD"
+    rates = get_rates() if any(t.native_currency != display_currency for t in all_tx) else None
+
     today = date.today()
     month_param = (request.args.get("month") or "").strip()
     all_time = month_param == "all"
@@ -720,10 +795,23 @@ def finance_page():
         key = tx.timestamp.strftime("%Y-%m")
         bucket = buckets[key]
         bucket["txs"].append(tx)
+        # value_in_usd, not amount -- transactions can carry different
+        # currencies now; every downstream total/comparison/savings-rate
+        # figure on this page is built from these buckets, so this one
+        # spot is what makes all of them currency-correct.
         if tx.type == "income":
-            bucket["income"] += tx.amount
+            bucket["income"] += tx.value_in_usd
         elif tx.type == "expense":
-            bucket["expense"] += tx.amount
+            bucket["expense"] += tx.value_in_usd
+
+    # One conversion per bucket (not per transaction) now that every
+    # bucket's running total is final — every figure derived from
+    # `buckets` from here on (month_tabs, the selected month/all-time
+    # totals, the previous-month comparison, the trend chart) inherits
+    # this, so this is the one spot that makes all of them correct.
+    for bucket in buckets.values():
+        bucket["income"] = convert_usd_to(bucket["income"], display_currency, rates)
+        bucket["expense"] = convert_usd_to(bucket["expense"], display_currency, rates)
 
     def bucket_for(d: date) -> dict:
         return buckets.get(d.strftime("%Y-%m"), {"income": Decimal("0"), "expense": Decimal("0"), "txs": []})
@@ -751,8 +839,10 @@ def finance_page():
 
     if all_time:
         transactions = all_tx
-        income = sum((t.amount for t in all_tx if t.type == "income"), Decimal("0"))
-        expense = sum((t.amount for t in all_tx if t.type == "expense"), Decimal("0"))
+        income_usd = sum((t.value_in_usd for t in all_tx if t.type == "income"), Decimal("0"))
+        expense_usd = sum((t.value_in_usd for t in all_tx if t.type == "expense"), Decimal("0"))
+        income = convert_usd_to(income_usd, display_currency, rates)
+        expense = convert_usd_to(expense_usd, display_currency, rates)
         selected_month_value = "all"
         selected_month_label = "All time"
     else:
@@ -811,9 +901,9 @@ def finance_page():
         else:
             first_word = (t.description or "").strip().split(" ")[0] if (t.description or "").strip() else "Other"
             label = first_word.capitalize()
-        category_totals[label] += t.amount
+        category_totals[label] += t.value_in_usd
         if t.timestamp:
-            day_totals[t.timestamp.day] += t.amount
+            day_totals[t.timestamp.day] += t.value_in_usd
 
     biggest_category = max(category_totals.items(), key=lambda kv: kv[1])[0] if category_totals else None
     biggest_day = max(day_totals.items(), key=lambda kv: kv[1])[0] if day_totals else None
@@ -852,7 +942,12 @@ def finance_page():
     category_expense_totals: dict[str, Decimal] = defaultdict(Decimal)
     for t in current_month_txs:
         if t.type == "expense" and t.category:
-            category_expense_totals[t.category] += t.amount
+            category_expense_totals[t.category] += t.value_in_usd
+    # Converted once here (not per-transaction above) -- compared against
+    # CategoryBudget.monthly_cap below, which is implicitly in
+    # display_currency same as everything else on this page.
+    for cat in category_expense_totals:
+        category_expense_totals[cat] = convert_usd_to(category_expense_totals[cat], display_currency, rates)
 
     category_budget_rows = CategoryBudget.query.filter_by(user_id=uid).all()
     category_budgets = [
@@ -984,6 +1079,12 @@ def _period_bounds(period: str, year: int, today: date, month_str: str | None = 
 @login_required
 def finance_breakdown():
     uid = current_user.id
+    # Every total this endpoint returns gets converted to this, right
+    # where each is finalized below, same "USD internally, converted once
+    # right before use" pattern as finance_page() — a fixed rate fetched
+    # once per request rather than once per view/bucket.
+    display_currency = current_user.preferred_currency or "USD"
+    rates = get_rates() if display_currency != "USD" else None
     view = (request.args.get("view") or "spending").strip().lower()
     period = (request.args.get("period") or "month").strip().lower()
     today = date.today()
@@ -1015,13 +1116,23 @@ def finance_breakdown():
         # elsewhere on this page.
         months = (end.year - start.year) * 12 + (end.month - start.month)
         bills = _recurring_bills(uid, today)
-        monthly_income = sum(b["amount"] for b in bills if b["type"] == "income")
-        monthly_expense = sum(b["amount"] for b in bills if b["type"] == "expense")
+        # usd_amount, not amount: bills can be in different currencies,
+        # so summing native amounts across them would be meaningless —
+        # each bill's own row below still shows its exact native amount.
+        # Converted to display_currency once here since it's what
+        # income_total/expense_total/net below actually return.
+        monthly_income = float(convert_usd_to(
+            Decimal(str(sum(b["usd_amount"] for b in bills if b["type"] == "income"))), display_currency, rates
+        ))
+        monthly_expense = float(convert_usd_to(
+            Decimal(str(sum(b["usd_amount"] for b in bills if b["type"] == "expense"))), display_currency, rates
+        ))
         items = [
             {
                 "description": b["description"],
                 "type": b["type"],
                 "amount": b["amount"],
+                "currency": b["currency"],
                 "category": b["category"],
                 "due_label": b["due_label"],
                 "due_soon": b["due_soon"],
@@ -1068,9 +1179,13 @@ def finance_breakdown():
             if b is None:
                 continue
             if t.type == "income":
-                b["income"] += t.amount
+                b["income"] += t.value_in_usd
             elif t.type == "expense":
-                b["expense"] += t.amount
+                b["expense"] += t.value_in_usd
+
+        for b in bucket_totals.values():
+            b["income"] = convert_usd_to(b["income"], display_currency, rates)
+            b["expense"] = convert_usd_to(b["expense"], display_currency, rates)
 
         buckets = []
         income_total = Decimal("0")
@@ -1103,8 +1218,10 @@ def finance_breakdown():
         if t.type != want_type:
             continue
         key = t.category if (t.category and t.category in TRANSACTION_CATEGORIES) else "_uncategorized"
-        totals[key] += t.amount
+        totals[key] += t.value_in_usd
 
+    # Percentages are ratios (scale-invariant, correct either way) but the
+    # amounts themselves are what's actually rendered — convert those.
     total = sum(totals.values(), Decimal("0"))
     categories = []
     for key, amount in sorted(totals.items(), key=lambda kv: kv[1], reverse=True):
@@ -1115,7 +1232,7 @@ def finance_breakdown():
             "label": meta["label"],
             "icon": meta["icon"],
             "color": meta["color"],
-            "amount": float(amount),
+            "amount": float(convert_usd_to(amount, display_currency, rates)),
             "pct": pct,
         })
 
@@ -1123,7 +1240,7 @@ def finance_breakdown():
         "view": view,
         "period": period,
         "period_label": period_label,
-        "total": float(total),
+        "total": float(convert_usd_to(total, display_currency, rates)),
         "categories": categories,
     })
 
@@ -1220,6 +1337,34 @@ def _detect_day_first(text: str) -> bool:
     return any(sym in text for sym in _DAY_FIRST_CURRENCY_SYMBOLS)
 
 
+# Ordered so an unambiguous symbol (£/€/৳ — each essentially one country's
+# currency) is checked before a bare "$", which spans the US, Canada, and
+# Australia with no dominant country — the exact same asymmetry
+# _DAY_FIRST_CURRENCY_SYMBOLS already relies on for date-order detection,
+# reused here rather than re-litigated.
+_CURRENCY_SYMBOL_TO_CODE = {"£": "GBP", "€": "EUR", "৳": "BDT"}
+_CURRENCY_SYMBOL_PRIORITY = ("£", "€", "৳")
+
+
+def _detect_import_currency(text: str, fallback: str) -> str:
+    """Whole-document currency guess, same one-scan-covers-the-whole-
+    statement idea as _detect_day_first (a bank export never mixes
+    currencies mid-document) — and the same deliberate exclusion of a
+    bare "$" as a signal: it spans the US, Canada, and Australia with no
+    single dominant currency, so seeing one tells us nothing reliable
+    (see _DAY_FIRST_CURRENCY_SYMBOLS's own comment for the identical
+    reasoning about date order). Falls back to the caller-supplied
+    default (the importing user's own preferred_currency, or "USD") for
+    a $-only or symbol-less statement — a statement spelling its
+    currency out as text ("BDT") rather than printing the symbol isn't
+    caught here either; a real gap, but a smaller one than guessing
+    wrong, and the preview step still shows it before anything saves."""
+    for symbol in _CURRENCY_SYMBOL_PRIORITY:
+        if symbol in text:
+            return _CURRENCY_SYMBOL_TO_CODE[symbol]
+    return fallback
+
+
 def _parse_import_date(raw: str, day_first: bool = False) -> date | None:
     """
     Tries each statement date format banks commonly export in, in order.
@@ -1303,6 +1448,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
             return [], ["Could not read file — please export as CSV (UTF-8 or Latin-1)."]
 
     day_first = _detect_day_first(text)
+    currency = _detect_import_currency(text, current_user.preferred_currency or "USD")
 
     reader = csv.reader(io.StringIO(text))
     try:
@@ -1359,6 +1505,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
             "amount": float(amount),
             "type": t_type,
             "category": _guess_category(description, t_type),
+            "currency": currency,
         })
 
     return rows, warnings
@@ -1552,6 +1699,7 @@ def _parse_statement_pdf(
     any_text_found = any(text.strip() for text in pages_text)
     year_context = _resolve_pdf_statement_years(full_text)
     day_first = _detect_day_first(full_text)
+    currency = _detect_import_currency(full_text, current_user.preferred_currency or "USD")
 
     rows: list[dict] = []
     warnings: list[str] = []
@@ -1614,6 +1762,7 @@ def _parse_statement_pdf(
                     "amount": float(amount),
                     "type": t_type,
                     "category": _guess_category(description, t_type),
+                    "currency": currency,
                 })
                 continue
 
@@ -1647,6 +1796,7 @@ def _parse_statement_pdf(
                     "amount": float(amount),
                     "type": t_type,
                     "category": _guess_category(description, t_type),
+                    "currency": currency,
                 })
                 continue
 
@@ -1670,6 +1820,12 @@ def _parse_statement_pdf(
     # statements where regex parsing alone already accounts for every
     # money-shaped line, since it only runs here.
     ai_rows, ai_warnings = _parse_statement_pdf_with_ai(pages_text)
+    # The AI extraction tool has no currency field of its own (see its
+    # own tool schema) — it doesn't need one, since currency is a
+    # whole-document property already detected once above, same as
+    # day_first.
+    for r in ai_rows:
+        r["currency"] = currency
 
     if rows:
         # Merge mode: only add AI-found transactions that don't already
@@ -1872,13 +2028,14 @@ def export_csv():
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Date", "Description", "Type", "Amount", "Category", "Recurring"])
+    writer.writerow(["Date", "Description", "Type", "Amount", "Currency", "Category", "Recurring"])
     for t in rows:
         writer.writerow([
             t.timestamp.strftime("%Y-%m-%d") if t.timestamp else "",
             _csv_formula_safe(t.description),
             t.type,
             f"{t.amount:.2f}",
+            t.native_currency,
             TRANSACTION_CATEGORIES.get(t.category, {}).get("label", "") if t.category else "",
             "yes" if t.is_recurring else "no",
         ])
@@ -2001,6 +2158,17 @@ def import_commit():
         if category not in TRANSACTION_CATEGORIES:
             category = None
 
+        # Each row already carries the whole document's detected currency
+        # (see _detect_import_currency, called once per statement in
+        # _parse_statement_csv/_parse_statement_pdf and visible in the
+        # preview step before this commit ever runs) — an unrecognized
+        # value falls back the same way manual entry does, rather than
+        # skipping an otherwise-valid row over it.
+        currency = (row.get("currency") or "").strip().upper()
+        if currency not in CURRENCY_CODES:
+            currency = current_user.preferred_currency or "USD"
+        usd_value, usd_rate_locked = lock_usd_value(amount, currency)
+
         max_pos += 1
         db.session.add(Transaction(
             description=description,
@@ -2015,6 +2183,9 @@ def import_commit():
             timestamp=_resolve_transaction_timestamp(date_str),
             category=category,
             import_source="csv",
+            currency=currency,
+            usd_value=usd_value,
+            usd_rate_locked=usd_rate_locked,
         ))
         imported += 1
 

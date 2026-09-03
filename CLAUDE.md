@@ -68,6 +68,50 @@ not a gap to fix.
   `conftest.py`. Anything that calls the AI mocks
   `artha.services.ai_service._get_client` via `unittest.mock.patch` —
   tests never hit the real Anthropic API.
+- Multi-currency (added 2026-09-02): `Transaction.currency` is the
+  currency a transaction actually happened in; `Transaction.usd_value`
+  is that amount converted to USD **at creation/import time and locked
+  forever** — `artha/services/exchange_rate_service.py`'s
+  `lock_usd_value()`. USD is purely an internal pivot, never shown to a
+  user. Two completely different operations read this data, and mixing
+  them up is the bug to avoid:
+  - **A single transaction's own display** (`transaction_row.html`'s
+    `.tx-amount`, a recurring bill's own row) always shows the *exact
+    native* `amount`/`currency` — never converted, never the display
+    currency's symbol slapped on a foreign number. Client-side, that's
+    `currency.js`'s `formatMoneyIn()`/`formatMoneyFromElement()`
+    reading a `data-money-currency` attribute, not `formatMoney()`
+    (which uses whatever's globally selected).
+  - **Any aggregate across more than one transaction** (finance totals,
+    budgets, chart data, the AI's financial-context snapshot) sums
+    `Transaction.value_in_usd` (Python) / `coalesce(usd_value, amount)`
+    (SQL — see `finance_totals()`), then converts that USD sum to the
+    user's own `preferred_currency` **server-side**, via
+    `exchange_rate_service.convert_usd_to()`, before it ever reaches a
+    template or JSON response. This also applies to comparing against
+    any currency-less stored number — `Budget.monthly_cap`,
+    `CategoryBudget.monthly_cap`, `Scenario.monthly_cost` — which carry
+    no currency field of their own and are implicitly in whatever
+    currency the user was looking at when they typed them in, i.e.
+    `preferred_currency`. Get this pivot wrong (compare a raw USD sum
+    against a GBP-denominated cap, say) and budget/scenario math is
+    silently off by the exchange rate for anyone not using USD.
+  - The one field that must **never** show a converted number:
+    `transaction_row.html`'s `.tx-amount` is also the literal editable
+    input `saveTransaction()` (`static/js/transactions.js`) parses and
+    posts back on an inline edit — if it ever displayed a converted
+    figure, editing an unrelated field (the description) and saving
+    would silently overwrite the real native amount with a converted
+    one. Any converted-equivalent for a single transaction belongs in a
+    separate, non-editable element, never inside that span.
+- Per-user reminder delivery (added 2026-09-02): `flask
+  send-renewal-reminders` (`artha/cli.py`) runs hourly now, not once
+  daily — it computes each user's own local "now" via
+  `utils.user_now(owner)` and only sends if the current hour matches
+  their own `User.reminder_hour` (default 8). The external Render Cron
+  Job's own schedule has to be `0 * * * *`, set by hand outside this
+  repo — a stale once-daily schedule there would silently mean nobody
+  except users who picked 8am ever gets notified.
 
 ## Standing conventions
 

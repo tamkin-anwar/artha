@@ -1,7 +1,7 @@
 // static/js/transactions.js
 import { updateChartData } from "./chart.js";
 import { showToast } from "./toast.js";
-import { formatMoney } from "./currency.js";
+import { formatMoney, formatMoneyFromElement } from "./currency.js";
 
 let ariaLiveRegion = null;
 
@@ -54,7 +54,10 @@ function formatRowMoney(row) {
     if (rawAttr !== null && rawAttr !== "") {
         const num = parseFloat(rawAttr);
         if (Number.isFinite(num)) {
-            amountEl.textContent = formatMoney(num);
+            // Always this transaction's own native currency, never the
+            // globally-selected one — a transaction shows exactly what
+            // was actually paid, see currency.js's formatMoneyIn.
+            amountEl.textContent = formatMoneyFromElement(amountEl);
             return;
         }
     }
@@ -62,8 +65,8 @@ function formatRowMoney(row) {
     const rawText = amountEl.textContent.trim().replace(/[^\d.-]/g, "");
     const num = parseFloat(rawText);
     if (Number.isFinite(num)) {
-        amountEl.textContent = formatMoney(num);
         amountEl.setAttribute("data-money-value", String(num));
+        amountEl.textContent = formatMoneyFromElement(amountEl);
     }
 }
 
@@ -586,7 +589,7 @@ async function saveTransaction(e) {
     const parsed = parseEditableMoneyToNumber(amountEl.textContent);
     if (parsed === null) {
         showToast("Invalid amount entered", "error");
-        amountEl.textContent = formatMoney(Number(amountEl.dataset.moneyValue || 0));
+        amountEl.textContent = formatMoneyFromElement(amountEl);
         return;
     }
 
@@ -616,7 +619,7 @@ async function saveTransaction(e) {
             showToast(errorMsg, "error");
             if (ariaLiveRegion) ariaLiveRegion.textContent = errorMsg;
 
-            amountEl.textContent = formatMoney(Number(amountEl.dataset.moneyValue || 0));
+            amountEl.textContent = formatMoneyFromElement(amountEl);
             return;
         }
 
@@ -626,7 +629,7 @@ async function saveTransaction(e) {
         setTimeout(() => row.classList.remove("bg-green-100"), 1000);
 
         amountEl.dataset.moneyValue = String(parsed);
-        amountEl.textContent = formatMoney(parsed);
+        amountEl.textContent = formatMoneyFromElement(amountEl);
         applyAmountTypeDataset(amountEl, type);
 
         if (responseData.date) {
@@ -668,7 +671,7 @@ async function saveTransaction(e) {
         showToast("Network error while updating transaction", "error");
         if (ariaLiveRegion) ariaLiveRegion.textContent = "Network error while updating transaction";
 
-        amountEl.textContent = formatMoney(Number(amountEl.dataset.moneyValue || 0));
+        amountEl.textContent = formatMoneyFromElement(amountEl);
     }
 }
 
@@ -719,10 +722,12 @@ function handleAddTransactionForm(form) {
                 return;
             }
 
+            // data-money-currency already arrived correctly set in the
+            // server-rendered row HTML (transaction_row.html) -- just
+            // re-render the text now that the row is in the live DOM.
             const amountEl = newRow.querySelector(".tx-amount");
             if (amountEl) {
-                amountEl.dataset.moneyValue = String(amountNum);
-                amountEl.textContent = formatMoney(amountNum);
+                amountEl.textContent = formatMoneyFromElement(amountEl);
             }
 
             const typeSelect = newRow.querySelector(".tx-type");

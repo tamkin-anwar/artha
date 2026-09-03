@@ -86,5 +86,10 @@ def set_preferences():
         current_user.notify_notes_due = bool(data.get("notify_notes_due"))
     if "notify_events_due" in data:
         current_user.notify_events_due = bool(data.get("notify_events_due"))
+    if "reminder_hour" in data:
+        hour = data.get("reminder_hour")
+        if isinstance(hour, bool) or not isinstance(hour, int) or not (0 <= hour <= 23):
+            return jsonify({"message": "Invalid reminder hour"}), 400
+        current_user.reminder_hour = hour
     db.session.commit()
     return jsonify({"message": "Preferences updated"})

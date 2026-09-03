@@ -6,16 +6,34 @@ artha/cli.py
 Web Push subscribing/receiving works from a normal request, but *sending*
 a reminder on the actual due date has to happen even when nobody's
 opened the app that day, so it can't live inside any view function. This
-command is meant to be triggered once a day by an external scheduler
-(a Render Cron Job hitting `flask send-renewal-reminders`, e.g. daily at
-8am) rather than anything in-app.
+command is meant to be triggered once an HOUR by an external scheduler
+(a Render Cron Job hitting `flask send-renewal-reminders`, `0 * * * *`)
+rather than anything in-app — hourly, not daily, since each user now
+picks their own local delivery hour (User.reminder_hour) rather than
+everyone getting one fixed server-side time; the command itself decides
+per run which users' local clock currently matches their own preference
+and skips everyone else. (This changed from a daily to an hourly
+schedule when per-user reminder times shipped — the external Render Cron
+Job's schedule has to be updated by hand alongside this deploy, same as
+the command's own history already required for other reasons: see the
+naming note below.)
 
-Covers two kinds of "due today": recurring bills (same logic as the
-dashboard's renewals callout) and Notes with a due_date of today. The
-command is still named send-renewal-reminders rather than something more
-generic, since that's already the exact string wired into the deployed
-Render Cron Job's command; renaming it would silently break that
-schedule until someone noticed and updated it there too.
+Covers three kinds of "due today": recurring bills (same logic as the
+dashboard's renewals callout), Notes with a due_date of today, and
+calendar Events starting today. The command is still named
+send-renewal-reminders rather than something more generic, since that's
+already the exact string wired into the deployed Render Cron Job's
+command; renaming it would silently break that schedule until someone
+noticed and updated it there too.
+
+Both "today" and "the current hour" are computed per user, in that
+user's own timezone (utils.user_today/user_now) — not the server's UTC
+clock. Before this, `today = date.today()` was one single UTC date
+shared by every user regardless of where they actually are, which is
+the same class of day-boundary bug already found and fixed elsewhere in
+this app: for anyone not physically in UTC, "due today" could silently
+mean yesterday or tomorrow depending on the time of day this command
+happened to run.
 """
 
 import logging
@@ -29,9 +47,16 @@ from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
 from .models import Event, Note, PushSubscription, Transaction, User
 from .services.push_service import send_push
-from .utils import next_due_date
+from .utils import next_due_date, user_now, user_today
 
 log = logging.getLogger(__name__)
+
+# Fallback delivery hour (in the user's own local time) for anyone who
+# hasn't picked one yet in Settings — matches the fixed hour this command
+# used to run at for everyone, before User.reminder_hour existed, so an
+# account that's never touched the new setting keeps the same behavior
+# it always had.
+DEFAULT_REMINDER_HOUR = 8
 
 
 def _due_today_items(
@@ -102,20 +127,31 @@ def _due_today_items(
 def register_cli(app):
     @app.cli.command("send-renewal-reminders")
     def send_renewal_reminders():
-        """Push one reminder to each subscribed user with a bill or note due today."""
-        today = date.today()
+        """Push one reminder to each subscribed user with a bill, note, or
+        event due today, IF the current hour in that user's own timezone
+        matches their own chosen reminder_hour (or DEFAULT_REMINDER_HOUR if
+        they've never set one). Meant to run once an hour, not once a day —
+        see this module's own docstring for why."""
         subs = PushSubscription.query.all()
 
         by_user: dict[int, list[PushSubscription]] = {}
         for sub in subs:
             by_user.setdefault(sub.user_id, []).append(sub)
 
-        sent, skipped, pruned, failed = 0, 0, 0, 0
+        sent, skipped, pruned, failed, not_their_hour = 0, 0, 0, 0, 0
 
         for user_id, user_subs in by_user.items():
             owner = db.session.get(User, user_id)
             if owner is None:
                 continue
+
+            now = user_now(owner)
+            wanted_hour = owner.reminder_hour if owner.reminder_hour is not None else DEFAULT_REMINDER_HOUR
+            if now.hour != wanted_hour:
+                not_their_hour += len(user_subs)
+                continue
+
+            today = now.date()
             items = _due_today_items(
                 user_id,
                 today,
@@ -149,6 +185,7 @@ def register_cli(app):
         db.session.commit()
         click.echo(
             f"Sent {sent}, skipped {skipped} (already notified today), "
+            f"{not_their_hour} not their hour yet, "
             f"pruned {pruned} dead subscriptions, {failed} failed (will retry next run)."
         )
 

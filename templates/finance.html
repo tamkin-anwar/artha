@@ -802,7 +802,7 @@
 
 <script type="module">
 import { onThemeChange } from "{{ url_for('static', filename='js/theme.js') }}";
-import { formatMoney } from "{{ url_for('static', filename='js/currency.js') }}";
+import { formatMoney, formatMoneyIn, formatMoneyFromElement } from "{{ url_for('static', filename='js/currency.js') }}";
 import { drawSpinner, drawFallbackMessage } from "{{ url_for('static', filename='js/chart.js') }}";
 
 function getVar(name, fallback) {
@@ -817,8 +817,9 @@ function hexToRgbTriplet(hex) {
     return r + "," + g + "," + b;
 }
 
-function signedMoney(value) {
-    return (value >= 0 ? "+" : "-") + formatMoney(Math.abs(value));
+function signedMoney(value, currencyCode) {
+    var formatted = currencyCode ? formatMoneyIn(Math.abs(value), currencyCode) : formatMoney(Math.abs(value));
+    return (value >= 0 ? "+" : "-") + formatted;
 }
 
 // fpRenderRecurring() below builds its item list via innerHTML, and the
@@ -845,7 +846,13 @@ function formatFinanceMoneyElements() {
     document.querySelectorAll(".fp-money[data-money-value]").forEach(function (el) {
         var raw = parseFloat(el.getAttribute("data-money-value"));
         if (!Number.isFinite(raw)) return;
-        el.textContent = el.hasAttribute("data-money-signed") ? signedMoney(raw) : formatMoney(raw);
+        // formatMoneyFromElement falls back to the globally-selected
+        // currency when an element carries no data-money-currency of its
+        // own (every aggregate figure on this page) -- only a single
+        // bill's own native-amount element actually diverges.
+        el.textContent = el.hasAttribute("data-money-signed")
+            ? signedMoney(raw, el.getAttribute("data-money-currency"))
+            : formatMoneyFromElement(el);
     });
 }
 
@@ -1402,7 +1409,7 @@ function fpRenderRecurring(pane, data) {
                 // in the <style> block) without a 4-line-per-item stack.
                 '<div class="recurring-row-meta">' +
                     catHtml +
-                    '<span class="recurring-row-amount fp-money" data-money-signed="1" data-money-value="' + (b.type === "income" ? b.amount : -b.amount) + '" style="color:' + amountColor + ';">' + sign + formatMoney(b.amount) + '</span>' +
+                    '<span class="recurring-row-amount fp-money" data-money-signed="1" data-money-value="' + (b.type === "income" ? b.amount : -b.amount) + '" data-money-currency="' + b.currency + '" style="color:' + amountColor + ';">' + sign + formatMoneyIn(b.amount, b.currency) + '</span>' +
                     dueHtml +
                 '</div>' +
             '</div>'

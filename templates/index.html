@@ -219,7 +219,7 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
                             </span>
                             <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
-                            <span class="dashboard-money" style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); flex-shrink:0;" data-money-value="{{ r.amount }}">${{ '%.2f'|format(r.amount) }}</span>
+                            <span class="dashboard-money" style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); flex-shrink:0;" data-money-value="{{ r.amount }}" data-money-currency="{{ r.currency }}">${{ '%.2f'|format(r.amount) }}</span>
                         </a>
                     {% endfor %}
                 </div>
@@ -297,7 +297,7 @@
     <script type="module">
         import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
         import { updateChartData } from "{{ url_for('static', filename='js/chart.js') }}";
-        import { formatMoney } from "{{ url_for('static', filename='js/currency.js') }}";
+        import { formatMoney, formatMoneyFromElement } from "{{ url_for('static', filename='js/currency.js') }}";
 
         // Budget banner / renewals amounts are plain server-rendered "$"
         // text with no id transactions.js's updateSummaryUI() (which only
@@ -313,7 +313,12 @@
             document.querySelectorAll(".dashboard-money[data-money-value]").forEach((el) => {
                 const raw = parseFloat(el.getAttribute("data-money-value"));
                 if (!Number.isFinite(raw)) return;
-                el.textContent = formatMoney(raw);
+                // Falls back to the globally-selected currency when an
+                // element carries no data-money-currency of its own
+                // (every aggregate figure on this page) -- only an
+                // element tagged with its own native currency (a single
+                // bill's own amount) actually diverges from formatMoney().
+                el.textContent = formatMoneyFromElement(el);
             });
         }
         formatDashboardMoneyElements();

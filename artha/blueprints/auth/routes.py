@@ -14,6 +14,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ...extensions import db, limiter
 from ...models import User, RecoveryCode
 from ...services.email_service import send_password_reset_email, send_account_deletion_email
+from ...utils import CURRENCY_CODES
 from . import auth_bp
 
 log = logging.getLogger(__name__)
@@ -518,11 +519,6 @@ def delete_account():
         "success",
     )
     return redirect(url_for("auth.login"))
-
-
-# Matches CURRENCY_PRESETS in static/js/currency.js — the closed set of
-# codes the currency selector actually offers.
-CURRENCY_CODES = {"USD", "GBP", "EUR", "BDT", "CAD", "AUD"}
 
 
 @auth_bp.route("/set_currency", methods=["POST"])

@@ -385,6 +385,19 @@
                                         <input type="checkbox" id="notify-events-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
                                         Events today
                                     </label>
+                                    <label for="reminder-hour-select" style="display:block; font-size:13px; color:var(--text-secondary); padding:6px 0 3px;">
+                                        Remind me at
+                                    </label>
+                                    <select
+                                        id="reminder-hour-select"
+                                        class="field-input"
+                                        style="width:100%; font-size:13px;"
+                                        aria-label="Reminder time"
+                                    >
+                                        {% for h in range(24) %}
+                                        <option value="{{ h }}" {{ 'selected' if (current_user.reminder_hour if current_user.reminder_hour is not none else 8) == h }}>{{ (h % 12 or 12) }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
+                                        {% endfor %}
+                                    </select>
                                 </div>
                                 {% endif %}
 
@@ -405,6 +418,22 @@
                                     <option value="CAD">$ CAD</option>
                                     <option value="AUD">$ AUD</option>
                                 </select>
+
+                                {% if current_user.is_authenticated %}
+                                <div class="eyebrow" style="padding:10px 12px 4px;">Calendar sync</div>
+                                <p style="font-size:12px; color:var(--text-muted); padding:0 12px 6px; line-height:1.4;">
+                                    Subscribe to this link in Apple Calendar, Google Calendar, or Outlook to see your due dates and events there.
+                                </p>
+                                <button
+                                    id="copy-calendar-link-btn"
+                                    type="button"
+                                    class="btn-secondary"
+                                    style="width:calc(100% - 24px); padding:8px 12px; font-size:13px; margin:0 12px 8px;"
+                                    data-calendar-feed-url="{{ url_for('dashboard.calendar_feed', token=current_user.calendar_feed_token, _external=True) if current_user.calendar_feed_token else '' }}"
+                                >
+                                    Copy calendar link
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -518,6 +547,19 @@
                                 <input type="checkbox" id="notify-events-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
                                 Events today
                             </label>
+                            <label for="reminder-hour-select-mobile" style="display:block; font-size:14px; color:var(--text-secondary); padding:8px 0 3px;">
+                                Remind me at
+                            </label>
+                            <select
+                                id="reminder-hour-select-mobile"
+                                class="field-input"
+                                style="width:100%;"
+                                aria-label="Reminder time"
+                            >
+                                {% for h in range(24) %}
+                                <option value="{{ h }}" {{ 'selected' if (current_user.reminder_hour if current_user.reminder_hour is not none else 8) == h }}>{{ (h % 12 or 12) }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         {% endif %}
 
@@ -535,6 +577,21 @@
                             <option value="CAD">$ CAD</option>
                             <option value="AUD">$ AUD</option>
                         </select>
+
+                        {% if current_user.is_authenticated %}
+                        <p style="font-size:13px; color:var(--text-muted); padding:6px 4px 0; line-height:1.4;">
+                            Subscribe to this link in Apple Calendar, Google Calendar, or Outlook to see your due dates and events there.
+                        </p>
+                        <button
+                            id="copy-calendar-link-btn-mobile"
+                            type="button"
+                            class="btn-secondary"
+                            style="width:100%; padding:9px 12px; font-size:14px;"
+                            data-calendar-feed-url="{{ url_for('dashboard.calendar_feed', token=current_user.calendar_feed_token, _external=True) if current_user.calendar_feed_token else '' }}"
+                        >
+                            Copy calendar link
+                        </button>
+                        {% endif %}
 
                         <div style="margin:2px 0; height:1px; background:var(--border-subtle);"></div>
                         <div class="eyebrow" style="padding:0 12px;">Account</div>
@@ -979,6 +1036,56 @@
                 bindPrefGroup(billsBoxes, billsBoxes, "notify_bills_due");
                 bindPrefGroup(notesBoxes, notesBoxes, "notify_notes_due");
                 bindPrefGroup(eventsBoxes, eventsBoxes, "notify_events_due");
+
+                // Reminder-hour <select>: same desktop/mobile sync-and-persist
+                // shape as the checkboxes above, just reading .value as an
+                // int instead of .checked.
+                var reminderHourSelects = [document.getElementById("reminder-hour-select"), document.getElementById("reminder-hour-select-mobile")].filter(Boolean);
+                reminderHourSelects.forEach(function (sel) {
+                    sel.addEventListener("change", function () {
+                        var hour = parseInt(sel.value, 10);
+                        var previous = reminderHourSelects.map(function (s) { return s.value; });
+                        reminderHourSelects.forEach(function (other) { other.value = String(hour); });
+                        savePreferences({ reminder_hour: hour }).catch(function () {
+                            reminderHourSelects.forEach(function (other, i) { other.value = previous[i]; });
+                            showToast("Couldn't update reminder preferences. Please try again.", "error");
+                        });
+                    });
+                });
+
+                // "Copy calendar link": lazily issues a feed token on first
+                // use (data-calendar-feed-url starts empty for an account
+                // that's never generated one), otherwise just copies the
+                // URL already rendered into the button's own data attribute.
+                var calendarLinkBtns = [document.getElementById("copy-calendar-link-btn"), document.getElementById("copy-calendar-link-btn-mobile")].filter(Boolean);
+                calendarLinkBtns.forEach(function (btn) {
+                    btn.addEventListener("click", function () {
+                        var existingUrl = btn.getAttribute("data-calendar-feed-url");
+                        var copyAndConfirm = function (url) {
+                            calendarLinkBtns.forEach(function (b) { b.setAttribute("data-calendar-feed-url", url); });
+                            navigator.clipboard.writeText(url).then(function () {
+                                showToast("Calendar link copied.", "success");
+                            }).catch(function () {
+                                showToast(url, "success");
+                            });
+                        };
+                        if (existingUrl) {
+                            copyAndConfirm(existingUrl);
+                            return;
+                        }
+                        btn.disabled = true;
+                        fetch("{{ url_for('dashboard.regenerate_calendar_feed_token') }}", {
+                            method: "POST",
+                            headers: { "X-CSRFToken": getCsrfToken() },
+                        })
+                            .then(function (res) { if (!res.ok) throw new Error("failed"); return res.json(); })
+                            .then(function (data) { copyAndConfirm(data.url); })
+                            .catch(function () {
+                                showToast("Couldn't set up your calendar link. Please try again.", "error");
+                            })
+                            .finally(function () { btn.disabled = false; });
+                    });
+                });
             })();
         </script>
     {% endif %}

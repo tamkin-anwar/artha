@@ -29,7 +29,22 @@ def test_export_current_month_by_default(auth_client, user):
     body = resp.get_data(as_text=True)
     assert "Coffee" in body
     assert "Paycheck" in body
-    assert body.startswith("Date,Description,Type,Amount,Category,Recurring")
+    assert body.startswith("Date,Description,Type,Amount,Currency,Category,Recurring")
+
+
+def test_export_currency_column_reflects_each_transactions_own_currency(auth_client, user):
+    _add_tx(user, "USD one", "10.00", "expense")  # currency left NULL -- legacy/default row
+    gbp_tx = Transaction(
+        description="GBP one", amount=Decimal("10.00"), type="expense",
+        user_id=user.id, timestamp=current_period_timestamp(), currency="GBP",
+    )
+    db.session.add(gbp_tx)
+    db.session.commit()
+
+    body = auth_client.get("/finance/export").get_data(as_text=True)
+    rows = {line.split(",")[1]: line for line in body.strip().split("\r\n")[1:] if line}
+    assert rows["USD one"].split(",")[4] == "USD"
+    assert rows["GBP one"].split(",")[4] == "GBP"
 
 
 def test_export_only_includes_current_users_transactions(auth_client, user):
@@ -50,7 +65,7 @@ def test_export_requires_login(client):
 def test_export_empty_month_returns_header_only(auth_client):
     body = auth_client.get("/finance/export?month=1999-01").get_data(as_text=True)
     lines = [line for line in body.strip().split("\r\n") if line]
-    assert lines == ["Date,Description,Type,Amount,Category,Recurring"]
+    assert lines == ["Date,Description,Type,Amount,Currency,Category,Recurring"]
 
 
 def test_export_neutralizes_formula_injection_in_description(auth_client, user):

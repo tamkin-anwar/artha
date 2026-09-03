@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from ..extensions import db
 
 
@@ -40,12 +42,53 @@ class Transaction(db.Model):
     # either Postgres or SQLite, so ordinary transactions are unaffected.
     recurring_month = db.Column(db.Date, nullable=True)
 
+    # The currency this transaction actually happened in (one of
+    # utils.CURRENCY_CODES). NULL on any row that predates this
+    # column, which is read everywhere as "USD" — that was the only
+    # currency that ever existed before display-currency switching did
+    # anything real, so no backfill migration is needed.
+    currency = db.Column(db.String(3), nullable=True)
+
+    # This transaction's `amount`, converted to USD using the exchange
+    # rate at the moment it was created/imported, then locked in
+    # permanently — never recomputed later. This is what lets the display
+    # layer convert a transaction into whatever currency the user is
+    # currently browsing in without a months-old chart silently drifting
+    # every time exchange rates move: the USD value of a past transaction
+    # never changes, only the final pivot-to-display-currency hop uses a
+    # live rate. NULL alongside `currency IS NULL` means "legacy row,
+    # always was USD" — `usd_value` there is just `amount` itself.
+    usd_value = db.Column(db.Numeric(14, 6), nullable=True)
+
+    # The exact rate `usd_value` was computed with (units of `currency`
+    # per 1 USD, exchange_rate_service's own rates[currency] at that
+    # moment) — audit/debugging only, never read back into any
+    # calculation. NULL whenever usd_value is NULL.
+    usd_rate_locked = db.Column(db.Numeric(18, 8), nullable=True)
+
     __table_args__ = (
         db.UniqueConstraint(
             "user_id", "description", "type", "recurring_month",
             name="uq_transaction_recurring_month",
         ),
     )
+
+    @property
+    def native_currency(self) -> str:
+        """This transaction's own currency, defaulting a legacy
+        (pre-currency-column) row to USD — the only currency that ever
+        existed before display-currency switching did anything real."""
+        return self.currency or "USD"
+
+    @property
+    def value_in_usd(self) -> Decimal:
+        """This transaction's value in USD, for aggregating across
+        transactions that may be in different currencies. Falls back to
+        `amount` itself when `usd_value` was never locked (a legacy row,
+        or one saved while the exchange-rate API was unreachable) —
+        correct specifically because both of those cases mean the
+        transaction is already being treated as USD (see native_currency)."""
+        return self.usd_value if self.usd_value is not None else self.amount
 
     def __repr__(self) -> str:
         return f"<Transaction {self.id} {self.type} {self.amount}>"

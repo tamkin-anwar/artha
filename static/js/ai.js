@@ -1,5 +1,6 @@
 // static/js/ai.js
 // Artha AI chat widget — handles /api/ai/chat and /api/ai/insights
+import { formatMoneyIn } from "./currency.js";
 
 const widget = document.getElementById("artha-ai-widget");
 if (widget) initAI();
@@ -180,6 +181,10 @@ function initAI() {
         const description = String(p.description || "Transaction");
         const amountNum    = Number.parseFloat(p.amount);
         const type         = p.type === "income" ? "income" : "expense";
+        // Only when the model picked one out explicitly (e.g. "20 euros") —
+        // otherwise this stays unset, and /add_transaction defaults it to
+        // whatever the user currently has selected, same as a manual entry.
+        const currency     = typeof p.currency === "string" && p.currency ? p.currency.toUpperCase() : null;
         const category     = typeof p.category === "string" ? p.category : "";
         const date         = typeof p.date === "string" && p.date ? p.date : null;
         const isRecurring  = p.is_recurring === true;
@@ -189,10 +194,14 @@ function initAI() {
         metaParts.push(date || "Today");
         if (isRecurring) metaParts.push("Recurring monthly");
 
+        const amountText = Number.isFinite(amountNum)
+            ? formatMoneyIn(amountNum, currency)
+            : formatMoneyIn(0, currency);
+
         return {
             title: description,
             tag: {
-                text: (type === "income" ? "+" : "−") + "$" + (Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00"),
+                text: (type === "income" ? "+" : "−") + amountText,
                 color: type === "income" ? "var(--emerald)" : "var(--red)",
             },
             meta: metaParts.join(" · "),
@@ -202,6 +211,7 @@ function initAI() {
                 formData.append("description", description);
                 formData.append("amount", Number.isFinite(amountNum) ? String(amountNum) : "0");
                 formData.append("type", type);
+                if (currency) formData.append("currency", currency);
                 if (category) formData.append("category", category);
                 if (date) formData.append("date", date);
                 // Matches the manual form's checkbox exactly (name=is_recurring,

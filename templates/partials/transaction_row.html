@@ -44,8 +44,10 @@
                 data-id="{{ tx.id }}"
                 data-type="{{ tx.type }}"
                 data-money-value="{{ tx.amount }}"
+                data-money-currency="{{ tx.native_currency }}"
                 class="tx-amount w-full sm:w-[130px] sm:text-right whitespace-nowrap"
-                style="background:transparent; outline:none; font-size:14px; font-family:'JetBrains Mono',monospace;">
+                style="background:transparent; outline:none; font-size:14px; font-family:'JetBrains Mono',monospace;"
+                {% if tx.currency and tx.currency != "USD" %}title="Amount in {{ tx.native_currency }}"{% endif %}>
             {{ "%.2f"|format(tx.amount) }}
         </span>
 

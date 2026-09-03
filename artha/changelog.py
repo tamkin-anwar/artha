@@ -26,6 +26,24 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-09-02",
+        "category": "new",
+        "title": "Subscribe to your due dates and events in Apple or Google Calendar",
+        "body": "A private calendar link, found under Calendar sync in Settings, that any calendar app can subscribe to. Notes, recurring bills, and events all show up there, with their own reminders.",
+    },
+    {
+        "date": "2026-09-02",
+        "category": "fixed",
+        "title": "Switching currency now actually converts your numbers",
+        "body": "Changing the currency setting used to just swap the symbol on the same number. Each transaction now remembers what it was actually in, and totals convert for real when you switch currencies.",
+    },
+    {
+        "date": "2026-09-02",
+        "category": "new",
+        "title": "Pick your own time for daily reminders",
+        "body": "Due-today push reminders fired at one fixed hour for everyone. Pick your own time in Settings, and it lands in your own timezone.",
+    },
+    {
         "date": "2026-08-31",
         "category": "fixed",
         "title": "Privacy & Security, and account settings, now follow your theme",

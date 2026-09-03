@@ -1,19 +1,21 @@
 import calendar as cal
 import logging
+import secrets
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from flask import render_template, redirect, url_for, request, flash, jsonify
+from flask import render_template, redirect, url_for, request, flash, jsonify, Response, abort
 from flask_login import login_required, current_user
+from icalendar import Alarm, Calendar as ICalendar, Event as ICalEvent
 from sqlalchemy import func
 
 from ...changelog import CHANGELOG_ENTRIES
 from ...extensions import db
-from ...models import Note, Transaction, Event, EventException
+from ...models import Note, Transaction, Event, EventException, User
 from ...models.budget import Budget
-from ...services.exchange_rate_service import get_rates
-from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today
+from ...services.exchange_rate_service import get_rates, convert_usd_to
+from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
 
@@ -91,8 +93,14 @@ def index():
         .order_by(Transaction.position.asc(), Transaction.id.asc())
         .all()
     )
+    # coalesce(usd_value, amount), not bare amount: transactions can now
+    # carry different currencies, so summing raw amount across them would
+    # be meaningless. A legacy/USD row (usd_value NULL) still just sums
+    # its own amount, unchanged — see Transaction.value_in_usd's docstring
+    # for why that fallback is correct, not a workaround.
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
     income = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == uid,
             Transaction.type == "income",
@@ -103,7 +111,7 @@ def index():
         or 0
     )
     expense = (
-        db.session.query(func.sum(Transaction.amount))
+        db.session.query(func.sum(usd_amount))
         .filter(
             Transaction.user_id == uid,
             Transaction.type == "expense",
@@ -113,7 +121,16 @@ def index():
         .scalar()
         or 0
     )
-    expense_decimal = Decimal(expense)
+    # Converted from the USD-pivot query result to this user's own
+    # preferred_currency (their currency-less monthly budget cap, further
+    # down, is implicitly in that same currency — see budget_status()'s
+    # call site) so this page's stat cards, and the budget comparison,
+    # both work in the currency the user actually sees everywhere else.
+    display_currency = current_user.preferred_currency or "USD"
+    rates = get_rates() if display_currency != "USD" else None
+    income = convert_usd_to(Decimal(income), display_currency, rates)
+    expense = convert_usd_to(Decimal(expense), display_currency, rates)
+    expense_decimal = expense
     income = float(income)
     expense = float(expense)
     balance = income - expense
@@ -191,11 +208,18 @@ def index():
                 "description": desc,
                 "type": ttype,
                 "amount": float(tx.amount),
+                "currency": tx.native_currency,
+                "usd_amount": float(tx.value_in_usd),
                 "due": due,
                 "due_label": "Today" if due == today else f"{cal.month_abbr[due.month]} {due.day}",
             })
     renewals_this_week.sort(key=lambda e: e["due"])
-    renewals_total = sum(e["amount"] for e in renewals_this_week if e["type"] == "expense")
+    # usd_amount, not amount: bills due this week can be in different
+    # currencies now, so a raw sum across them would be meaningless.
+    # Converted to this user's own display_currency (defined below,
+    # alongside this month's income/expense) before it's shown.
+    renewals_total_usd = sum(e["usd_amount"] for e in renewals_this_week if e["type"] == "expense")
+    renewals_total = float(convert_usd_to(Decimal(str(renewals_total_usd)), display_currency, rates))
 
     # Surfaced in the Today panel too, not moved out of Renewals This
     # Week — that card still needs every one of them for its own weekly
@@ -220,7 +244,8 @@ def index():
         n = len(due_today_notes)
         summary_parts.append(f"{n} note{'s' if n != 1 else ''} due today")
     if renewals_this_week:
-        summary_parts.append(f"${renewals_total:,.0f} in renewals this week")
+        renewals_symbol = CURRENCY_SYMBOLS.get(current_user.preferred_currency, "$")
+        summary_parts.append(f"{renewals_symbol}{renewals_total:,.0f} in renewals this week")
     budget_row = Budget.query.filter_by(user_id=uid).first()
     budget = budget_status(budget_row.monthly_cap if budget_row else None, expense_decimal)
 
@@ -486,12 +511,21 @@ def calendar_page():
     for e in events:
         events_by_date[e.start.strftime("%Y-%m-%d")].append(e)
 
+    # One rate fetch (DB-cached, cheap) reused for every day in the grid,
+    # rather than one per day.
+    calendar_display_currency = current_user.preferred_currency or "USD"
+    calendar_rates = get_rates() if calendar_display_currency != "USD" else None
+
     grid_days = []
     cursor = grid_start
     while cursor <= grid_end:
         key = cursor.strftime("%Y-%m-%d")
         day_txs = by_date.get(key, [])
-        net = sum((t.amount if t.type == "income" else -t.amount for t in day_txs), Decimal("0"))
+        # value_in_usd, not amount -- a day's transactions could be in
+        # different currencies -- then converted to this user's own
+        # display currency, same as every other total on this page.
+        net_usd = sum((t.value_in_usd if t.type == "income" else -t.value_in_usd for t in day_txs), Decimal("0"))
+        net = convert_usd_to(net_usd, calendar_display_currency, calendar_rates)
 
         # Each event's own chosen color (same NOTE_COLORS palette as the
         # Add Event modal's swatches), deduped and capped at 3 so a day
@@ -739,6 +773,159 @@ def delete_event(event_id):
         db.session.rollback()
         log.error("Error deleting event: %s", e, exc_info=True)
         return jsonify({"message": "Database error"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Calendar export — a private, per-user iCalendar (.ics) subscription feed.
+# One-way (Artha -> whatever calendar app the user picks), not OAuth-based
+# two-way sync: a long unguessable token in the URL is the entire auth
+# model, the same approach every calendar app's own "private ICS link"
+# feature already uses, since a subscribing app fetches this unattended on
+# its own schedule with no session cookie to send. Deliberately not
+# @login_required for that reason.
+# ---------------------------------------------------------------------------
+
+# How far back/forward the feed looks from "today," in the feed owner's
+# own timezone. Wide enough that a calendar app's slower refresh cycle
+# (Google can take up to a day) still shows a genuinely useful window,
+# without generating so many rows the feed gets slow to build.
+FEED_WINDOW_PAST_DAYS = 30
+FEED_WINDOW_FUTURE_DAYS = 180
+
+
+@dashboard_bp.route("/calendar/feed/<token>.ics")
+def calendar_feed(token):
+    owner = User.query.filter_by(calendar_feed_token=token).first()
+    if owner is None:
+        abort(404)
+
+    today = user_today(owner)
+    window_start = today - timedelta(days=FEED_WINDOW_PAST_DAYS)
+    window_end = today + timedelta(days=FEED_WINDOW_FUTURE_DAYS)
+    window_start_dt = datetime(window_start.year, window_start.month, window_start.day)
+    window_end_dt = datetime(window_end.year, window_end.month, window_end.day) + timedelta(days=1)
+
+    cal_feed = ICalendar()
+    cal_feed.add("prodid", "-//Artha//Calendar Feed//EN")
+    cal_feed.add("version", "2.0")
+    # Hints some clients (notably Apple Calendar) use as a display name and
+    # a suggested refresh interval — harmless for clients that ignore them.
+    cal_feed.add("x-wr-calname", "Artha")
+    cal_feed.add("x-wr-timezone", owner.timezone or "UTC")
+    cal_feed.add("refresh-interval;value=duration", "PT1H")
+
+    def _add_alarm(component):
+        # A subscribing calendar app's own native reminder, independent of
+        # Artha's Web Push — this is what actually delivers "reminder
+        # syncs to my phone" for a due note/bill, since Google/Apple fire
+        # their own local notification off this regardless of whether
+        # Artha's own push subscription is even set up on that device.
+        alarm = Alarm()
+        alarm.add("action", "DISPLAY")
+        alarm.add("description", str(component.get("summary")))
+        alarm.add("trigger", timedelta(0))
+        component.add_component(alarm)
+
+    # Time-blocked events, including this window's recurring occurrences
+    # (materialized the same way the calendar page itself triggers it —
+    # see _generate_recurring_events's own docstring for why that's
+    # necessary rather than optional here).
+    _generate_recurring_events(owner.id, window_start_dt, window_end_dt)
+    events = Event.query.filter(
+        Event.user_id == owner.id,
+        Event.start >= window_start_dt,
+        Event.start < window_end_dt,
+    ).all()
+    for event in events:
+        ical_event = ICalEvent()
+        ical_event.add("uid", f"artha-event-{event.id}@arthaapp.com")
+        ical_event.add("summary", event.title)
+        ical_event.add("dtstart", event.start)
+        ical_event.add("dtend", event.end)
+        ical_event.add("dtstamp", datetime.now(timezone.utc))
+        _add_alarm(ical_event)
+        cal_feed.add_component(ical_event)
+
+    # Notes due within the window (archived notes are excluded the same
+    # way calendar_page() excludes them — Trash is only ever reached by
+    # trashing an already-archived note, so this one filter also covers
+    # trashed notes with no separate deleted_at check needed).
+    notes_due = Note.query.filter(
+        Note.user_id == owner.id,
+        Note.due_date.isnot(None),
+        Note.due_date >= window_start,
+        Note.due_date <= window_end,
+        Note.archived.is_(False),
+    ).all()
+    for note in notes_due:
+        title = note.title or (note.preview[:40] if note.preview else "Untitled note")
+        ical_event = ICalEvent()
+        ical_event.add("uid", f"artha-note-{note.id}@arthaapp.com")
+        ical_event.add("summary", f"{title} due")
+        ical_event.add("dtstart", note.due_date)
+        ical_event.add("dtstamp", datetime.now(timezone.utc))
+        _add_alarm(ical_event)
+        cal_feed.add_component(ical_event)
+
+    # Recurring bills' next occurrence inside the window — same
+    # most-recent-row-per-(description,type) dedup and next_due_date()
+    # walk calendar_page() and cli.py's send_renewal_reminders both
+    # already use.
+    recurring_rows = Transaction.query.filter_by(user_id=owner.id, is_recurring=True).all()
+    templates_by_key = {}
+    for t in recurring_rows:
+        key = (t.description, t.type)
+        current = templates_by_key.get(key)
+        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
+            templates_by_key[key] = t
+
+    for (desc, _ttype), tx in templates_by_key.items():
+        cursor = window_start
+        # A single next_due_date() call only finds the *next* occurrence
+        # from a given date — walk forward through the whole window so a
+        # bill recurring monthly over a 210-day window shows every
+        # upcoming occurrence, not just the first.
+        seen = set()
+        while cursor <= window_end:
+            due = next_due_date(tx, cursor)
+            if due is None or due > window_end or due in seen:
+                break
+            seen.add(due)
+            ical_event = ICalEvent()
+            ical_event.add("uid", f"artha-bill-{tx.id}-{due.isoformat()}@arthaapp.com")
+            ical_event.add("summary", f"{desc} due")
+            ical_event.add("dtstart", due)
+            ical_event.add("dtstamp", datetime.now(timezone.utc))
+            _add_alarm(ical_event)
+            cal_feed.add_component(ical_event)
+            cursor = due + timedelta(days=1)
+
+    # mimetype (not content_type) so Werkzeug appends "; charset=utf-8"
+    # itself — passing that charset in-line here too used to produce a
+    # doubled "charset=utf-8; charset=utf-8" header.
+    response = Response(cal_feed.to_ical(), mimetype="text/calendar")
+    response.headers["Content-Disposition"] = 'inline; filename="artha.ics"'
+    # Helps Google notice a change sooner within its own throttled
+    # subscription refresh window (see this feature's design notes) —
+    # this feed is generated fresh on every request, so "now" is always
+    # accurate, not just a guess.
+    response.headers["Last-Modified"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    return response
+
+
+@dashboard_bp.route("/calendar/feed/regenerate", methods=["POST"])
+@login_required
+def regenerate_calendar_feed_token():
+    """Issues a fresh, unguessable feed token, invalidating any previous
+    one immediately — the only way to revoke a leaked calendar link, since
+    the token itself is the entire auth model for /calendar/feed/<token>.ics.
+    Also how a token gets created in the first place: there's no token at
+    signup, only once this is called for the first time."""
+    current_user.calendar_feed_token = secrets.token_urlsafe(32)
+    db.session.commit()
+    return jsonify({
+        "url": url_for("dashboard.calendar_feed", token=current_user.calendar_feed_token, _external=True),
+    })
 
 
 # ---------------------------------------------------------------------------

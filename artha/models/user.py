@@ -43,6 +43,21 @@ class User(UserMixin, db.Model):
     # different real-world moments.
     timezone = db.Column(db.String(64), nullable=True)
 
+    # Local hour (0-23) this user wants their "due today" push reminder
+    # delivered at. None until they've actually picked one in Settings —
+    # treated as 8 (today's de facto fixed hour) everywhere this is read,
+    # so an account that's never touched this setting keeps behaving
+    # exactly like it does today. Paired with `timezone` above (not a
+    # UTC hour) so "8am" means 8am wherever this person actually is.
+    reminder_hour = db.Column(db.Integer, nullable=True)
+
+    # Long, unguessable token for this user's private calendar subscription
+    # feed (GET /calendar/feed/<token>.ics) — the token itself is the auth,
+    # since a calendar app fetching this on its own refresh schedule has no
+    # session cookie to send. None until first requested; regenerating it
+    # (POST /calendar/feed/regenerate) is how a leaked link gets revoked.
+    calendar_feed_token = db.Column(db.String(43), nullable=True, unique=True)
+
     notes = db.relationship(
         "Note", backref="author", lazy="dynamic", cascade="all, delete-orphan"
     )
