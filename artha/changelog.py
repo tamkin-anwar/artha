@@ -39,6 +39,12 @@ CHANGELOG_ENTRIES = [
     },
     {
         "date": "2026-09-02",
+        "category": "fixed",
+        "title": "Budget alerts, fixed after the currency update",
+        "body": "Your monthly budget cap could get misread after switching currency, showing a false \"over budget\" warning. It now converts correctly, and switching currency updates your numbers right away instead of needing a refresh.",
+    },
+    {
+        "date": "2026-09-02",
         "category": "new",
         "title": "Pick your own time for daily reminders",
         "body": "Due-today push reminders fired at one fixed hour for everyone. Pick your own time in Settings, and it lands in your own timezone.",

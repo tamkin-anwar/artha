@@ -88,14 +88,24 @@ not a gap to fix.
     (SQL — see `finance_totals()`), then converts that USD sum to the
     user's own `preferred_currency` **server-side**, via
     `exchange_rate_service.convert_usd_to()`, before it ever reaches a
-    template or JSON response. This also applies to comparing against
-    any currency-less stored number — `Budget.monthly_cap`,
-    `CategoryBudget.monthly_cap`, `Scenario.monthly_cost` — which carry
-    no currency field of their own and are implicitly in whatever
-    currency the user was looking at when they typed them in, i.e.
-    `preferred_currency`. Get this pivot wrong (compare a raw USD sum
-    against a GBP-denominated cap, say) and budget/scenario math is
-    silently off by the exchange rate for anyone not using USD.
+    template or JSON response.
+  - **`Budget.monthly_cap`, `CategoryBudget.monthly_cap`, and
+    `Scenario`'s `monthly_cost`/`monthly_savings`/`one_time_cost`** each
+    have their own `currency` column (added 2026-09-02, hours after
+    multi-currency itself shipped, once a real user's $5,000 cap got
+    silently misread as a 5,000-unit cap in BDT the moment they switched
+    display currency) — captured the same way a manual transaction's
+    currency is, from `current_user.preferred_currency` at the moment
+    the cap/cost is saved, re-captured on every edit. These have no
+    "creation moment" worth locking a USD rate to the way a Transaction
+    does, so `exchange_rate_service.convert_amount(amount, from_currency,
+    to_currency)` (the two-currency sibling of `convert_usd_to()`)
+    converts them **live, at comparison time**, not once and cached.
+    Any new currency-less money field on a model works the same way:
+    give it its own `currency` column and convert with `convert_amount()`
+    before comparing it against anything already in a different
+    currency — never assume a bare number is safely comparable against
+    a converted one just because both look like plain numbers.
   - The one field that must **never** show a converted number:
     `transaction_row.html`'s `.tx-amount` is also the literal editable
     input `saveTransaction()` (`static/js/transactions.js`) parses and
@@ -200,6 +210,21 @@ not a gap to fix.
 
 ## Known traps
 
+- **Switching currency needs a real page reload, not just a client-side
+  reformat** (found 2026-09-02, the same day multi-currency shipped).
+  `static/js/currency.js`'s `formatMoney()`/`currency-refresh-ui` only
+  reformats numbers already sitting in the DOM — fine for a page that
+  never did any conversion in the first place, but finance totals,
+  budgets, and Scenario comparisons are now computed **server-side**
+  into whichever currency `preferred_currency` is. A client-side-only
+  currency switch relabels the *old* currency's already-converted
+  number with the *new* currency's symbol instead of actually
+  reconverting it, which is indistinguishable from the original
+  pre-multi-currency relabeling bug this whole feature was built to
+  fix. `static/js/settings.js`'s `persistCurrencyToAccount()` now calls
+  `window.location.reload()` once the `/set_currency` save succeeds —
+  any other place that changes `preferred_currency` client-side needs
+  the same reload, not just a `currency-refresh-ui` dispatch.
 - **A `hidden` attribute vs. a class's own `display` property.** An
   author stylesheet's `display` declaration always beats the browser's
   default `[hidden] { display: none }` at equal specificity, regardless
