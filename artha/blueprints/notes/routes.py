@@ -354,30 +354,6 @@ def update_note_fields(note_id):
         return jsonify({"message": "Database error"}), 500
 
 
-@notes_bp.route("/update_note/<int:note_id>", methods=["POST"])
-@login_required
-def update_note(note_id):
-    note = db.session.get(Note, note_id)
-    if note is None:
-        return jsonify({"message": "Not found"}), 404
-    if note.user_id != current_user.id:
-        return jsonify({"message": "Unauthorized"}), 403
-
-    data = request.get_json(silent=True) or {}
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"message": "Empty content"}), 400
-
-    note.content = content
-    try:
-        db.session.commit()
-        return jsonify({"message": "Note updated"})
-    except Exception as e:
-        db.session.rollback()
-        log.error("Error updating note: %s", e, exc_info=True)
-        return jsonify({"message": "Database error"}), 500
-
-
 @notes_bp.route("/reorder_notes", methods=["POST"])
 @login_required
 def reorder_notes():
