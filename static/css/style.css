@@ -284,10 +284,27 @@ h1, h2, h3, .stat-number {
   flex-shrink: 0;
   max-width: 5.5rem;
   border: none;
-  background: transparent;
+  background-color: transparent;
   color: var(--text-muted);
   font-size: 13px;
-  padding: 0 2px 0 12px;
+  padding: 0 18px 0 12px;
+  /* Without this, a real desktop browser's native <select> chrome (a
+     distinct bezel/highlight baked into its OS-level widget skin) draws
+     around just this control regardless of the border:none/background
+     above -- the exact "two separate boxes" look this whole wrapper
+     exists to avoid. Same reset already applied to select.field-input
+     below, just not carried over here when this control was split out
+     of that class. Removing the native appearance also removes the
+     native dropdown arrow, replaced with the same hand-drawn chevron. */
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6478' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 10px;
+}
+.dark .tx-amount-group .tx-add-currency-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 .tx-amount-group .tx-amount-input {
   flex: 1;
