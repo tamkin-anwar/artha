@@ -16,12 +16,11 @@
             class="field-input w-full min-w-0 sm:col-span-4 h-11 text-sm"
         >
 
-        <div class="relative w-full min-w-0 sm:col-span-3">
+        <div class="tx-amount-group w-full min-w-0 sm:col-span-3 h-11 text-sm">
             <select
                 name="currency"
                 aria-label="Currency"
                 class="tx-add-currency-select"
-                style="position:absolute; inset-block:0; left:0; z-index:1; width:4.5rem; height:2.75rem; border:none; background:transparent; padding:0 0 0 12px; font-size:13px; color:var(--text-muted);"
             >
                 <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
                 <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
@@ -38,8 +37,7 @@
                 step="0.01"
                 inputmode="decimal"
                 required
-                class="field-input w-full min-w-0 h-11 text-sm"
-                style="padding-left:4.5rem;"
+                class="tx-amount-input"
             >
         </div>
 

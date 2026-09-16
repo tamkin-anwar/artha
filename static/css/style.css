@@ -259,6 +259,46 @@ h1, h2, h3, .stat-number {
   padding: 10px 14px;
 }
 .field-input::placeholder { color: var(--text-muted); }
+
+/* A currency <select> and its amount <input> as one visually joined
+   control (every add-transaction form) -- replaces an earlier version
+   that absolutely-positioned the select over the input's own padding,
+   which fought the input for that space at some widths/zoom levels
+   instead of genuinely sharing it. This wrapper carries the single
+   border/background both pieces used to draw separately; the select
+   and input inside it are borderless/transparent and just add their
+   own horizontal padding, so it reads and behaves as one field even
+   though it's two form controls. */
+.tx-amount-group {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.tx-amount-group:focus-within {
+  outline: 2px solid rgba(212,168,67,0.45);
+  outline-offset: 1px;
+}
+.tx-amount-group .tx-add-currency-select {
+  flex-shrink: 0;
+  max-width: 5.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 0 2px 0 12px;
+}
+.tx-amount-group .tx-amount-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 12px 0 4px;
+}
+.tx-amount-group .tx-amount-input::placeholder { color: var(--text-muted); }
+
 .field-input:focus {
   outline: 2px solid rgba(212,168,67,0.45);
   outline-offset: 1px;
