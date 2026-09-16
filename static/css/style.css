@@ -280,6 +280,15 @@ h1, h2, h3, .stat-number {
   outline: 2px solid rgba(212,168,67,0.45);
   outline-offset: 1px;
 }
+/* The group above draws the one outline this whole control should show
+   on focus. Without this, the browser's own default focus ring on
+   whichever child actually has focus draws too -- a second, smaller
+   rounded outline sitting on just that child, reading as two
+   overlapping shapes instead of one field lighting up. */
+.tx-amount-group .tx-add-currency-select:focus,
+.tx-amount-group .tx-amount-input:focus {
+  outline: none;
+}
 .tx-amount-group .tx-add-currency-select {
   flex-shrink: 0;
   max-width: 5.5rem;
