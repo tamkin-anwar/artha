@@ -86,6 +86,8 @@ def set_preferences():
         current_user.notify_notes_due = bool(data.get("notify_notes_due"))
     if "notify_events_due" in data:
         current_user.notify_events_due = bool(data.get("notify_events_due"))
+    if "notify_budget_alerts" in data:
+        current_user.notify_budget_alerts = bool(data.get("notify_budget_alerts"))
     if "reminder_hour" in data:
         hour = data.get("reminder_hour")
         if isinstance(hour, bool) or not isinstance(hour, int) or not (0 <= hour <= 23):

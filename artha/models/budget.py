@@ -30,6 +30,13 @@ class Budget(db.Model):
     # cap in whatever they switched to -- a real bug found and fixed
     # 2026-09-02, the same day multi-currency itself shipped.
     currency = db.Column(db.String(3), nullable=True)
+    # The first-of-month this budget's "over cap" push alert was already
+    # sent for (see finance.routes._check_budget_overage_alerts) — NULL
+    # means never alerted. Compared against the current month's own
+    # first-of-month value, so it naturally "resets" itself every new
+    # month without a cron job or migration touching this column: a new
+    # month's date simply doesn't match whatever got stored last month.
+    alerted_month = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

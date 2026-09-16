@@ -210,6 +210,25 @@ not a gap to fix.
 
 ## Known traps
 
+- **A plain inline `<script>` runs the instant the parser reaches it, not
+  once the page is "ready"** (found 2026-09-15, adding the recurring-
+  transaction interval/end-date picker). `templates/finance.html` has a
+  bare, non-deferred `<script>` block partway down the page (the budget-
+  panel edit-toggle wiring) that runs synchronously as the HTML parser
+  reaches it — any element defined *later* in the same file (the add-
+  transaction form, further down) simply doesn't exist in the DOM yet at
+  that moment. A `document.querySelector(...)` for one of those elements
+  silently returns `null` there — no error, the enclosing `if (el) {...}`
+  guard just never runs, so a feature that looks fully wired quietly does
+  nothing on page load. Wrap only the new code in
+  `document.addEventListener("DOMContentLoaded", function () {...})`
+  rather than moving or rewriting the surrounding script — the existing
+  code in that block already depends on running immediately (or on
+  earlier-in-page elements), and doesn't need the same fix. Caught in
+  this same session, before shipping, by a live check that found the
+  reveal simply never happened — worth checking for on sight any time new
+  JS in this file (or any template with a similar early inline `<script>`)
+  references an element that appears later in the same document.
 - **Switching currency needs a real page reload, not just a client-side
   reformat** (found 2026-09-02, the same day multi-currency shipped).
   `static/js/currency.js`'s `formatMoney()`/`currency-refresh-ui` only

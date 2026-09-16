@@ -430,7 +430,7 @@ function applyRecurringState(row, isRecurring) {
     if (btn) {
         btn.classList.toggle("tx-recurring-on", isRecurring);
         btn.setAttribute("aria-pressed", String(isRecurring));
-        btn.title = isRecurring ? "Recurring — click to turn off" : "Mark as recurring";
+        btn.title = isRecurring ? "Recurring, click to turn off" : "Mark as recurring";
         btn.innerHTML = "";
         if (isRecurring) {
             const icon = document.createElement("i");
@@ -443,20 +443,34 @@ function applyRecurringState(row, isRecurring) {
 
     const metaRow = row.querySelector(".tx-meta-row");
     let label = row.querySelector(".tx-recurring-label");
+    const panel = row.querySelector(".tx-recurrence-panel");
 
     if (isRecurring && !label && metaRow) {
-        label = document.createElement("span");
+        label = document.createElement("button");
+        label.type = "button";
         label.className = "tx-recurring-label";
-        label.style.cssText = "color:var(--gold); display:inline-flex; align-items:center; gap:3px;";
+        label.dataset.id = row.dataset.id;
+        label.title = "Click to change how often, or when it ends";
+        label.style.cssText = "color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer;";
         label.append("· ");
         const icon = document.createElement("i");
         icon.setAttribute("data-lucide", "repeat");
         icon.style.cssText = "width:10px; height:10px; stroke-width:2;";
         label.appendChild(icon);
-        label.append(" recurring");
+        const text = document.createElement("span");
+        text.className = "tx-recurring-label-text";
+        // Turning recurring ON this way (rather than at creation) always
+        // starts monthly with no end date -- same defaults toggle-recurring
+        // sets server-side -- so the panel underneath (already in the DOM,
+        // rendered hidden on every row regardless of is_recurring, see
+        // transaction_row.html) doesn't need resetting to match.
+        text.append(" monthly");
+        label.appendChild(text);
         metaRow.appendChild(label);
+        attachRecurrencePanelListener(row);
     } else if (!isRecurring && label) {
         label.remove();
+        if (panel) panel.hidden = true;
     }
 
     if (window.lucide) window.lucide.createIcons();
@@ -500,6 +514,21 @@ function attachRecurringToggleListener(row) {
     btn.addEventListener("click", () => toggleRecurring(row));
 }
 
+// The "recurring" label opens the Every/Ends panel on click -- a
+// separate control from .tx-recurring-toggle's own single-click on/off
+// above, since changing how a series repeats or when it ends is a
+// deliberate edit, not a toggle.
+function attachRecurrencePanelListener(row) {
+    const label = row.querySelector(".tx-recurring-label");
+    const panel = row.querySelector(".tx-recurrence-panel");
+    if (!label || !panel) return;
+    if (label.dataset.bound === "1") return;
+    label.dataset.bound = "1";
+    label.addEventListener("click", () => {
+        panel.hidden = !panel.hidden;
+    });
+}
+
 function attachRowListeners(row) {
     const desc = row.querySelector(".tx-desc");
     const amount = row.querySelector(".tx-amount");
@@ -509,6 +538,7 @@ function attachRowListeners(row) {
 
     attachDeleteListener(row);
     attachRecurringToggleListener(row);
+    attachRecurrencePanelListener(row);
 
     // Belt-and-braces: the row has a hidden submit button, and a native
     // <input type="date"> (unlike the contenteditable desc/amount spans)
@@ -566,6 +596,20 @@ function attachRowListeners(row) {
             debounceSaveTransaction(e);
         });
     }
+
+    const recurrenceInterval = row.querySelector(".tx-recurrence-interval");
+    if (recurrenceInterval) {
+        recurrenceInterval.addEventListener("change", (e) => {
+            debounceSaveTransaction(e);
+        });
+    }
+
+    const recurringEndDate = row.querySelector(".tx-recurring-end-date");
+    if (recurringEndDate) {
+        recurringEndDate.addEventListener("change", (e) => {
+            debounceSaveTransaction(e);
+        });
+    }
 }
 
 async function saveTransaction(e) {
@@ -578,6 +622,8 @@ async function saveTransaction(e) {
     const typeSelect = row.querySelector(".tx-type");
     const dateInput = row.querySelector(".tx-date");
     const categorySelect = row.querySelector(".tx-category");
+    const recurrenceIntervalSelect = row.querySelector(".tx-recurrence-interval");
+    const recurringEndDateInput = row.querySelector(".tx-recurring-end-date");
     if (!descEl || !amountEl || !typeSelect) return;
 
     const dateBeforeSave = row.dataset.date;
@@ -596,6 +642,14 @@ async function saveTransaction(e) {
     row.classList.add("bg-yellow-100");
     row.setAttribute("aria-busy", "true");
 
+    // Only present at all on an already-recurring row (see
+    // transaction_row.html's `{% if tx.is_recurring %}` panel), so these
+    // stay undefined -- and therefore left out of the body below -- on
+    // every plain, non-recurring row's save.
+    const recurrencePayload = {};
+    if (recurrenceIntervalSelect) recurrencePayload.recurrence_interval = recurrenceIntervalSelect.value;
+    if (recurringEndDateInput) recurrencePayload.recurring_end_date = recurringEndDateInput.value;
+
     try {
         const res = await fetch(`/update_transaction/${id}`, {
             method: "POST",
@@ -604,7 +658,7 @@ async function saveTransaction(e) {
                 "Content-Type": "application/json",
                 ...csrfHeaders(),
             },
-            body: JSON.stringify({ description: desc, amount: parsed, type, date: dateValue, category }),
+            body: JSON.stringify({ description: desc, amount: parsed, type, date: dateValue, category, ...recurrencePayload }),
         });
 
         const responseData = await res.json().catch(() => ({}));
@@ -651,6 +705,13 @@ async function saveTransaction(e) {
             if (dateChanged) {
                 resortTransactionRows();
             }
+        }
+
+        const recurringLabelText = row.querySelector(".tx-recurring-label-text");
+        if (recurringLabelText && responseData.recurrence_interval) {
+            recurringLabelText.textContent = responseData.recurring_end_date_label
+                ? `${responseData.recurrence_interval} · ${responseData.recurring_end_date_label}`
+                : responseData.recurrence_interval;
         }
 
         const successMsg = responseData?.message || "Transaction updated successfully";

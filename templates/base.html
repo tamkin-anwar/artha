@@ -385,6 +385,10 @@
                                         <input type="checkbox" id="notify-events-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
                                         Events today
                                     </label>
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
+                                        <input type="checkbox" id="notify-budget-alerts" class="push-pref-checkbox" {{ 'checked' if current_user.notify_budget_alerts }}>
+                                        Over-budget alerts
+                                    </label>
                                     <label for="reminder-hour-select" style="display:block; font-size:13px; color:var(--text-secondary); padding:6px 0 3px;">
                                         Remind me at
                                     </label>
@@ -546,6 +550,10 @@
                             <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
                                 <input type="checkbox" id="notify-events-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
                                 Events today
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
+                                <input type="checkbox" id="notify-budget-alerts-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_budget_alerts }}>
+                                Over-budget alerts
                             </label>
                             <label for="reminder-hour-select-mobile" style="display:block; font-size:14px; color:var(--text-secondary); padding:8px 0 3px;">
                                 Remind me at
@@ -1007,6 +1015,7 @@
                 var billsBoxes = [document.getElementById("notify-bills-due"), document.getElementById("notify-bills-due-mobile")].filter(Boolean);
                 var notesBoxes = [document.getElementById("notify-notes-due"), document.getElementById("notify-notes-due-mobile")].filter(Boolean);
                 var eventsBoxes = [document.getElementById("notify-events-due"), document.getElementById("notify-events-due-mobile")].filter(Boolean);
+                var budgetBoxes = [document.getElementById("notify-budget-alerts"), document.getElementById("notify-budget-alerts-mobile")].filter(Boolean);
 
                 function savePreferences(payload) {
                     return fetch("{{ url_for('push.set_preferences') }}", {
@@ -1036,6 +1045,7 @@
                 bindPrefGroup(billsBoxes, billsBoxes, "notify_bills_due");
                 bindPrefGroup(notesBoxes, notesBoxes, "notify_notes_due");
                 bindPrefGroup(eventsBoxes, eventsBoxes, "notify_events_due");
+                bindPrefGroup(budgetBoxes, budgetBoxes, "notify_budget_alerts");
 
                 // Reminder-hour <select>: same desktop/mobile sync-and-persist
                 // shape as the checkboxes above, just reading .value as an

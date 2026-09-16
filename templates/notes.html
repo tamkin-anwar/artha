@@ -685,6 +685,9 @@
             {% endfor %}
         </div>
         <div class="notes-toolbar-actions">
+            <a href="{{ url_for('notes.export_csv') }}" class="notes-archive-link">
+                <i data-lucide="download"></i>Export CSV
+            </a>
             {% if show_trash %}
             <a href="{{ url_for('notes.notes_page') }}" class="notes-archive-link">
                 <i data-lucide="arrow-left"></i>Back to notes

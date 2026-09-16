@@ -28,6 +28,14 @@ class User(UserMixin, db.Model):
     notify_notes_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     notify_events_due = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
+    # Whether a transaction save that pushes a budget or category budget
+    # over its monthly cap should push an alert immediately, rather than
+    # only ever showing up next time the user happens to open Finance —
+    # see finance.routes._check_budget_overage_alerts. Separate flag from
+    # the three "due today" ones above since this fires from a save, not
+    # the hourly cli.py job, and someone might want one without the other.
+    notify_budget_alerts = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+
     # One of currency.js's CURRENCY_PRESETS ("USD", "GBP", ...), or None
     # if this account has never explicitly saved one — a brand-new device
     # then has nothing to inherit and falls back to USD, same as today.

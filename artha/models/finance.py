@@ -34,13 +34,46 @@ class Transaction(db.Model):
     # overlapping statement can be reasoned about.
     import_source = db.Column(db.String(10), nullable=True)
 
-    # First-of-month date this row represents, set only on rows created by
-    # generate_recurring() (NULL for everything else). A unique constraint
-    # on (user_id, description, type, recurring_month) stops two
-    # near-simultaneous /finance loads from double-generating the same
-    # recurring bill for the same month — NULL isn't unique-constrained by
-    # either Postgres or SQLite, so ordinary transactions are unaffected.
+    # The period this generated row represents, set only on rows created
+    # by generate_recurring() (NULL for everything else) — for a monthly
+    # series (recurrence_interval is None, the default) that's the
+    # first-of-month, exactly as the name says; for a weekly/biweekly
+    # series it's the exact occurrence date itself, since those periods
+    # are too short to usefully bucket by month. Either way it's the
+    # dedup key: a unique constraint on (user_id, description, type,
+    # recurring_month) stops two near-simultaneous /finance loads from
+    # double-generating the same occurrence — NULL isn't unique-
+    # constrained by either Postgres or SQLite, so ordinary transactions
+    # are unaffected. Column name predates weekly/biweekly recurrence and
+    # was kept rather than renamed to avoid touching every migration and
+    # test that already references it for the (still exact, still
+    # unchanged) monthly case.
     recurring_month = db.Column(db.Date, nullable=True)
+
+    # None (the default) means monthly, matching every recurring
+    # transaction that existed before this column shipped — "weekly" or
+    # "biweekly" (every 2 weeks) are the only other values, chosen
+    # because those are the two non-monthly cadences an actual bill or
+    # ledger entry realistically recurs on (rent split by paycheck,
+    # groceries, a weekly service). A literal daily *transaction* was
+    # deliberately left out: unlike a calendar event or a reminder,
+    # every occurrence here is a real, permanent ledger row, and no
+    # common personal-finance bill is genuinely billed once a day — that
+    # would just flood the transaction list without modeling anything
+    # real. Read by next_due_date() and generate_recurring(), both in
+    # this same spirit: monthly behavior is untouched, weekly/biweekly is
+    # additive.
+    recurrence_interval = db.Column(db.String(10), nullable=True)
+
+    # Optional last day this series should still generate a fresh copy —
+    # None (the default) means "no end, keep going" exactly like every
+    # recurring transaction before this column existed. Copied forward
+    # onto each newly generated row the same way currency/category
+    # already are, so the series remembers its own end date without
+    # re-entering it every period. generate_recurring() treats this as
+    # inclusive: the occurrence landing exactly on this date still gets
+    # generated, nothing past it does.
+    recurring_end_date = db.Column(db.Date, nullable=True)
 
     # The currency this transaction actually happened in (one of
     # utils.CURRENCY_CODES). NULL on any row that predates this

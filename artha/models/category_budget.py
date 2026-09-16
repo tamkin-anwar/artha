@@ -23,6 +23,9 @@ class CategoryBudget(db.Model):
     # Same currency-capture as Budget.currency -- see that column's own
     # comment for why this exists and what breaks without it.
     currency = db.Column(db.String(3), nullable=True)
+    # Same alert-dedup convention as Budget.alerted_month — see that
+    # column's own comment.
+    alerted_month = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

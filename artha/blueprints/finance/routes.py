@@ -15,11 +15,20 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from ...extensions import db
-from ...models import Transaction
+from ...models import Transaction, User, PushSubscription
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
 from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
-from ...utils import is_ajax_request, current_month_bounds, budget_status, next_due_date, CURRENCY_CODES
+from ...services.push_service import send_push
+from ...utils import (
+    is_ajax_request,
+    current_month_bounds,
+    budget_status,
+    next_due_date,
+    CURRENCY_CODES,
+    CURRENCY_SYMBOLS,
+    csv_formula_safe,
+)
 from . import finance_bp
 
 log = logging.getLogger(__name__)
@@ -167,6 +176,123 @@ def _resolve_transaction_timestamp(date_str: str | None) -> datetime:
     return datetime(parsed.year, parsed.month, parsed.day, 12, 0, 0, tzinfo=timezone.utc)
 
 
+_RECURRENCE_INTERVALS = {"weekly", "biweekly"}
+
+
+def _parse_recurrence_fields(form) -> tuple[str | None, date | None]:
+    """(recurrence_interval, recurring_end_date) from a form/dict-like
+    payload, both optional -- an unrecognized interval reads as None
+    (monthly, the default) rather than rejecting the whole save over it,
+    same leniency _validate_amount's caller-facing siblings use elsewhere
+    in this file. A malformed end date is silently dropped rather than
+    erroring, since it's optional by nature."""
+    interval = (form.get("recurrence_interval") or "").strip().lower()
+    if interval not in _RECURRENCE_INTERVALS:
+        interval = None
+
+    end_date = None
+    end_date_str = (form.get("recurring_end_date") or "").strip()
+    if end_date_str:
+        try:
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            end_date = None
+
+    return interval, end_date
+
+
+def _current_month_bounds_local(today: date) -> tuple[date, date]:
+    """(month_start, next_month_start) for `today` — same shape as
+    utils.current_month_bounds but returning plain dates (Budget/
+    CategoryBudget.alerted_month is a Date, not a datetime) and taking
+    `today` as a parameter instead of calling date.today() itself, so a
+    single call above each of this module's alert-check call sites can
+    share one `today` with the rest of that request."""
+    if today.month == 12:
+        return date(today.year, 12, 1), date(today.year + 1, 1, 1)
+    return date(today.year, today.month, 1), date(today.year, today.month + 1, 1)
+
+
+def _check_budget_overage_alerts(user_id: int) -> None:
+    """
+    Sends one push the moment this user's overall budget, or any one of
+    their category budgets, first crosses over its cap for the current
+    calendar month -- not the 90%/"warning" tier utils.budget_status also
+    tracks, and not on every subsequent transaction after the first one
+    that tips it over (Budget.alerted_month / CategoryBudget.alerted_month
+    dedupe that, the same way PushSubscription.last_notified_date dedupes
+    the daily due-today job in cli.py).
+
+    Call this right after committing any transaction save that could
+    increase a user's current-month expense total -- add_transaction,
+    update_transaction, generate_recurring, import_commit all do. It
+    never raises: a failed push, or a user with alerts off or no
+    subscriptions at all, should never surface as an error on the save
+    that triggered this check.
+    """
+    try:
+        owner = db.session.get(User, user_id)
+        if owner is None or not owner.notify_budget_alerts:
+            return
+
+        subs = PushSubscription.query.filter_by(user_id=user_id).all()
+        if not subs:
+            return
+
+        today = date.today()
+        month_start, month_end = _current_month_bounds_local(today)
+
+        expenses = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.timestamp >= month_start,
+            Transaction.timestamp < month_end,
+        ).all()
+        if not expenses:
+            return
+
+        rates = get_rates()
+        total_usd = sum((t.value_in_usd for t in expenses), Decimal("0"))
+        category_usd: dict[str, Decimal] = defaultdict(Decimal)
+        for t in expenses:
+            if t.category:
+                category_usd[t.category] += t.value_in_usd
+
+        newly_over = []
+
+        budget = Budget.query.filter_by(user_id=user_id).first()
+        if budget and budget.monthly_cap and budget.monthly_cap > 0 and budget.alerted_month != month_start:
+            spent = convert_usd_to(total_usd, budget.currency or "USD", rates)
+            if spent >= budget.monthly_cap:
+                symbol = CURRENCY_SYMBOLS.get(budget.currency or "USD", "$")
+                newly_over.append(f"You're over your {symbol}{budget.monthly_cap:.2f} monthly budget.")
+                budget.alerted_month = month_start
+
+        for cb in CategoryBudget.query.filter_by(user_id=user_id).all():
+            if cb.alerted_month == month_start:
+                continue
+            spent = convert_usd_to(category_usd.get(cb.category, Decimal("0")), cb.currency or "USD", rates)
+            if spent >= cb.monthly_cap:
+                label = TRANSACTION_CATEGORIES.get(cb.category, {}).get("label", cb.category)
+                newly_over.append(f"You're over your {label} budget.")
+                cb.alerted_month = month_start
+
+        if not newly_over:
+            return
+
+        body = newly_over[0] if len(newly_over) == 1 else f"{len(newly_over)} budgets just went over: " + " ".join(newly_over)
+
+        for sub in subs:
+            result = send_push(sub, title="Budget alert", body=body, url="/finance")
+            if result == "gone":
+                db.session.delete(sub)
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error checking budget overage alerts for user %s: %s", user_id, e, exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -213,6 +339,9 @@ def add_transaction():
         currency = current_user.preferred_currency or "USD"
     usd_value, usd_rate_locked = lock_usd_value(amount, currency)
 
+    is_recurring = bool(request.form.get("is_recurring"))
+    recurrence_interval, recurring_end_date = _parse_recurrence_fields(request.form) if is_recurring else (None, None)
+
     max_pos = (
         db.session.query(func.max(Transaction.position))
         .filter_by(user_id=current_user.id)
@@ -226,7 +355,9 @@ def add_transaction():
         user_id=current_user.id,
         position=int(max_pos) + 1,
         timestamp=_resolve_transaction_timestamp(request.form.get("date")),
-        is_recurring=bool(request.form.get("is_recurring")),
+        is_recurring=is_recurring,
+        recurrence_interval=recurrence_interval,
+        recurring_end_date=recurring_end_date,
         category=category,
         import_source="manual",
         currency=currency,
@@ -237,6 +368,8 @@ def add_transaction():
     try:
         db.session.add(new_tx)
         db.session.commit()
+        if t_type == "expense":
+            _check_budget_overage_alerts(current_user.id)
         if is_ajax_request():
             return render_template(
                 "partials/transaction_row.html",
@@ -309,14 +442,35 @@ def update_transaction(transaction_id):
         new_currency = (data.get("currency") or "").strip().upper()
         if new_currency in CURRENCY_CODES:
             tx.currency = new_currency
+
+    # Same "only touch what was sent" rule again -- these two only ever
+    # come from the recurring-settings control on an already-recurring
+    # row (see transaction_row.html), never from a plain description/
+    # amount/category edit, so their absence must never reset an
+    # existing series back to plain monthly or clear its end date.
+    # Sending an empty string for either is how the UI *explicitly*
+    # clears it (switch back to monthly, or remove the end date).
+    if "recurrence_interval" in data or "recurring_end_date" in data:
+        interval, end_date = _parse_recurrence_fields(data)
+        if "recurrence_interval" in data:
+            tx.recurrence_interval = interval
+        if "recurring_end_date" in data:
+            tx.recurring_end_date = end_date
     tx.usd_value, tx.usd_rate_locked = lock_usd_value(tx.amount, tx.native_currency)
 
     try:
         db.session.commit()
+        if tx.type == "expense":
+            _check_budget_overage_alerts(tx.user_id)
         return jsonify({
             "message": "Transaction updated successfully",
             "date": tx.timestamp.strftime("%Y-%m-%d"),
             "date_label": tx.timestamp.strftime("%b %d, %Y"),
+            "is_recurring": tx.is_recurring,
+            "recurrence_interval": tx.recurrence_interval or "monthly",
+            "recurring_end_date_label": (
+                "ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date else None
+            ),
         })
     except Exception as e:
         db.session.rollback()
@@ -499,12 +653,25 @@ def toggle_recurring(transaction_id):
 @login_required
 def generate_recurring():
     """
-    Auto-generate this month's copy of every recurring transaction that
+    Auto-generate the next due copy of every recurring transaction that
     doesn't already have one. Called silently on every /finance page load.
 
-    A recurring transaction "already exists this month" if a transaction
+    A monthly series (recurrence_interval is None, the default — every
+    recurring transaction predating that column) still uses its original
+    dedup rule exactly as before: "already exists" means any transaction
     with the same description + type falls within the current calendar
-    month — that's the dedup key, per spec.
+    month, regardless of whether that transaction was itself auto-
+    generated. A weekly/biweekly series dedupes tighter, against its own
+    exact computed occurrence date (recurring_month doubles as that exact
+    date for those two intervals — see Transaction.recurring_month's own
+    comment) rather than a whole-month window, since several real
+    occurrences can legitimately land in the same calendar month.
+
+    A series past its own recurring_end_date generates nothing further
+    and has is_recurring cleared on its template here, so it stops
+    showing as an active recurring rule once it's actually finished
+    rather than looking perpetually "still recurring" with nothing left
+    to generate.
     """
     uid = current_user.id
     today = date.today()
@@ -516,7 +683,7 @@ def generate_recurring():
 
     recurring_txs = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
 
-    # Recurring transactions accumulate one row per month (each generated
+    # Recurring transactions accumulate one row per period (each generated
     # copy stays is_recurring=True so it keeps showing the recurring UI).
     # Collapse to one representative row per unique (description, type) —
     # the most recent — so a "Netflix" template with 6 months of history
@@ -533,7 +700,7 @@ def generate_recurring():
         Transaction.timestamp >= month_start,
         Transaction.timestamp < next_month_start,
     ).all()
-    existing_keys = {(t.description, t.type) for t in existing_this_month}
+    existing_keys_this_month = {(t.description, t.type) for t in existing_this_month}
 
     max_pos = (
         db.session.query(func.max(Transaction.position))
@@ -544,23 +711,64 @@ def generate_recurring():
 
     generated = 0
     skipped = 0
+    ended = 0
 
     for key, template_tx in templates_by_key.items():
-        if key in existing_keys:
-            skipped += 1
-            continue
+        interval = template_tx.recurrence_interval
 
-        # Preserve the template's own day-of-month (clamped to the current
-        # month's length, e.g. day 31 in a 30-day month) rather than
-        # stamping every generated copy with today's date — otherwise
-        # every recurring bill without a copy yet this month piles onto
-        # whatever day the user happens to next load /finance, instead of
-        # landing on the day it's actually due. Same clamping already used
-        # by the calendar's upcoming-recurring reminder (see
-        # next_due_date() in artha/utils.py).
-        days_this_month = calendar.monthrange(today.year, today.month)[1]
-        target_day = min(template_tx.timestamp.day, days_this_month)
-        target_date = date(today.year, today.month, target_day)
+        if interval in ("weekly", "biweekly"):
+            due = next_due_date(template_tx, today)
+            if due is None:
+                # Past its own recurring_end_date -- this series is done.
+                template_tx.is_recurring = False
+                ended += 1
+                continue
+            if due > today:
+                skipped += 1
+                continue
+            # Matches on recurring_month == due (a prior machine-generated
+            # occurrence) OR the raw timestamp actually falling on `due`
+            # (the series' own anchor/template row, which never gets a
+            # recurring_month itself) -- without the second half, a
+            # template whose own anchor date already equals the newly
+            # computed due date would get "generated" a second time,
+            # duplicating the very occurrence the anchor already is.
+            due_start = datetime(due.year, due.month, due.day, 0, 0, 0)
+            already = Transaction.query.filter(
+                Transaction.user_id == uid,
+                Transaction.description == key[0],
+                Transaction.type == key[1],
+            ).filter(
+                db.or_(
+                    Transaction.recurring_month == due,
+                    db.and_(Transaction.timestamp >= due_start, Transaction.timestamp < due_start + timedelta(days=1)),
+                )
+            ).first()
+            if already is not None:
+                skipped += 1
+                continue
+            target_date = due
+        else:
+            if key in existing_keys_this_month:
+                skipped += 1
+                continue
+            if template_tx.recurring_end_date and month_start > template_tx.recurring_end_date:
+                template_tx.is_recurring = False
+                ended += 1
+                continue
+
+            # Preserve the template's own day-of-month (clamped to the
+            # current month's length, e.g. day 31 in a 30-day month)
+            # rather than stamping every generated copy with today's
+            # date — otherwise every recurring bill without a copy yet
+            # this month piles onto whatever day the user happens to
+            # next load /finance, instead of landing on the day it's
+            # actually due. Same clamping already used by the calendar's
+            # upcoming-recurring reminder (see next_due_date() in
+            # artha/utils.py).
+            days_this_month = calendar.monthrange(today.year, today.month)[1]
+            target_day = min(template_tx.timestamp.day, days_this_month)
+            target_date = date(today.year, today.month, target_day)
 
         # Same currency as the template (a recurring bill doesn't change
         # currency month to month), but usd_value is relocked fresh here
@@ -580,7 +788,9 @@ def generate_recurring():
             position=int(max_pos),
             is_recurring=True,
             timestamp=_resolve_transaction_timestamp(target_date.strftime("%Y-%m-%d")),
-            recurring_month=month_start,
+            recurring_month=month_start if interval not in ("weekly", "biweekly") else target_date,
+            recurrence_interval=interval,
+            recurring_end_date=template_tx.recurring_end_date,
             currency=currency,
             usd_value=usd_value,
             usd_rate_locked=usd_rate_locked,
@@ -607,7 +817,10 @@ def generate_recurring():
         log.error("Error generating recurring transactions: %s", e, exc_info=True)
         return jsonify({"message": "Error generating recurring transactions"}), 500
 
-    return jsonify({"generated": generated, "skipped": skipped})
+    if generated:
+        _check_budget_overage_alerts(current_user.id)
+
+    return jsonify({"generated": generated, "skipped": skipped, "ended": ended})
 
 
 @finance_bp.get("/api/finance_totals")
@@ -728,6 +941,8 @@ def _recurring_bills(uid: int, today: date) -> list[dict]:
             # native figure for this one bill's own display.
             "usd_amount": float(tx.value_in_usd),
             "category": tx.category,
+            "interval": tx.recurrence_interval or "monthly",
+            "end_date": tx.recurring_end_date.strftime("%Y-%m-%d") if tx.recurring_end_date else None,
             "due_date": due,
             "due_label": (
                 "Today" if due == today
@@ -739,8 +954,11 @@ def _recurring_bills(uid: int, today: date) -> list[dict]:
             # counts as "soon" everywhere it's shown in the app.
             "due_soon": due is not None and 0 <= (due - today).days <= 7,
         })
-    # Soonest due first; a rule with no resolvable due date (shouldn't
-    # happen in practice — next_due_date always finds one within a year)
+    # Soonest due first. A rule with no resolvable due date now genuinely
+    # happens whenever its recurring_end_date has already passed (see
+    # next_due_date()'s own docstring) — sorts last rather than crashing
+    # the comparison, same as the defensive "shouldn't happen" case this
+    # already handled before end dates existed.
     # sorts last rather than crashing the comparison.
     bills.sort(key=lambda b: b["due_date"] or date.max)
     return bills
@@ -1978,22 +2196,6 @@ def _fill_uncategorized_via_ai(rows: list[dict]) -> None:
             rows[i]["category"] = category
 
 
-def _csv_formula_safe(value: str) -> str:
-    """
-    Neutralizes CSV/formula injection: a description starting with
-    =, +, -, or @ is interpreted as a formula by Excel/Sheets when the
-    exported file is opened, not as literal text. description is free
-    text the user themselves typed into the amount/description field on
-    /finance, so a value like "=1+1" (or something more deliberately
-    malicious) would silently execute as a formula on open. Prefixing
-    with a single quote is the standard mitigation — spreadsheet apps
-    treat it as forcing plain-text and don't display it.
-    """
-    if value and value[0] in ("=", "+", "-", "@"):
-        return "'" + value
-    return value
-
-
 @finance_bp.route("/finance/export")
 @login_required
 def export_csv():
@@ -2047,7 +2249,7 @@ def export_csv():
     for t in rows:
         writer.writerow([
             t.timestamp.strftime("%Y-%m-%d") if t.timestamp else "",
-            _csv_formula_safe(t.description),
+            csv_formula_safe(t.description),
             t.type,
             f"{t.amount:.2f}",
             t.native_currency,
@@ -2210,6 +2412,9 @@ def import_commit():
         db.session.rollback()
         log.error("Error committing CSV import: %s", e, exc_info=True)
         return jsonify({"message": "Database error"}), 500
+
+    if imported:
+        _check_budget_overage_alerts(uid)
 
     return jsonify({
         "message": f"Imported {imported} transaction{'s' if imported != 1 else ''}.",

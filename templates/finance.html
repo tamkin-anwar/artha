@@ -296,7 +296,32 @@
                 if (!showingForm) cbForm.querySelector("select[name='category']").focus();
             });
         }
+
     })();
+
+    // Deferred to DOMContentLoaded, unlike the IIFE above: this script
+    // tag sits before the add-transaction form in the page (it's grouped
+    // here with the other budget-panel wiring instead), so querying for
+    // .tx-recurring-checkbox at parse time would silently find nothing —
+    // the form's own HTML hasn't been reached by the parser yet.
+    document.addEventListener("DOMContentLoaded", function () {
+        // Every/Ends only mean anything once "Recurring" is actually
+        // checked -- hidden the rest of the time so the common (plain,
+        // one-off) transaction stays a one-line form. handleAddTransactionForm
+        // (transactions.js) calls form.reset() after a successful add,
+        // which unchecks the box but doesn't fire its change event, so
+        // the settings row is hidden again explicitly right after too.
+        var recurringCheckbox = document.querySelector('form[action*="add_transaction"] .tx-recurring-checkbox');
+        var recurrenceSettings = document.getElementById("tx-recurrence-settings");
+        if (recurringCheckbox && recurrenceSettings) {
+            recurringCheckbox.addEventListener("change", function () {
+                recurrenceSettings.hidden = !recurringCheckbox.checked;
+            });
+            recurringCheckbox.closest("form").addEventListener("reset", function () {
+                recurrenceSettings.hidden = true;
+            });
+        }
+    });
 </script>
 
 <!-- 6-month trend -->
@@ -328,11 +353,19 @@
 
         <div class="grid grid-cols-2 gap-2.5 sm:contents">
             <div class="relative w-full min-w-0 sm:col-span-2">
-                <span
-                    class="absolute inset-y-0 left-0 pl-4 flex items-center h-11 text-sm"
-                    style="color:var(--text-muted);"
-                    data-currency-symbol
-                >$</span>
+                <select
+                    name="currency"
+                    aria-label="Currency"
+                    class="tx-add-currency-select"
+                    style="position:absolute; inset-block:0; left:0; z-index:1; width:4.5rem; height:2.75rem; border:none; background:transparent; padding:0 0 0 12px; font-size:13px; color:var(--text-muted);"
+                >
+                    <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
+                    <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
+                    <option value="BDT" {{ "selected" if current_user.preferred_currency == "BDT" }}>৳ BDT</option>
+                    <option value="EUR" {{ "selected" if current_user.preferred_currency == "EUR" }}>€ EUR</option>
+                    <option value="CAD" {{ "selected" if current_user.preferred_currency == "CAD" }}>$ CAD</option>
+                    <option value="AUD" {{ "selected" if current_user.preferred_currency == "AUD" }}>$ AUD</option>
+                </select>
 
                 <input
                     type="number"
@@ -342,7 +375,7 @@
                     inputmode="decimal"
                     required
                     class="field-input w-full min-w-0 h-11 text-sm"
-                    style="padding-left:2.25rem;"
+                    style="padding-left:4.5rem;"
                 >
             </div>
 
@@ -382,6 +415,26 @@
             >
                 Add
             </button>
+        </div>
+
+        <!-- Revealed only while "Recurring" is checked (see the
+             tx-recurring-checkbox listener below) -- monthly (the
+             default, an empty value) needs no extra input at all, so
+             these two stay hidden until there's actually a decision to
+             make. -->
+        <div id="tx-recurrence-settings" hidden class="grid grid-cols-2 gap-2.5 sm:col-span-12">
+            <div>
+                <label for="tx-recurrence-interval" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Every</label>
+                <select id="tx-recurrence-interval" name="recurrence_interval" class="field-input w-full h-9 text-sm">
+                    <option value="">Month</option>
+                    <option value="weekly">Week</option>
+                    <option value="biweekly">2 weeks</option>
+                </select>
+            </div>
+            <div>
+                <label for="tx-recurring-end-date" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Ends (optional)</label>
+                <input type="date" id="tx-recurring-end-date" name="recurring_end_date" class="field-input w-full h-9 text-sm">
+            </div>
         </div>
     </form>
 

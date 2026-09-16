@@ -17,11 +17,19 @@
         >
 
         <div class="relative w-full min-w-0 sm:col-span-3">
-            <span
-                class="absolute inset-y-0 left-0 pl-4 flex items-center h-11 text-sm"
-                style="color:var(--text-muted);"
-                data-currency-symbol
-            >$</span>
+            <select
+                name="currency"
+                aria-label="Currency"
+                class="tx-add-currency-select"
+                style="position:absolute; inset-block:0; left:0; z-index:1; width:4.5rem; height:2.75rem; border:none; background:transparent; padding:0 0 0 12px; font-size:13px; color:var(--text-muted);"
+            >
+                <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
+                <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
+                <option value="BDT" {{ "selected" if current_user.preferred_currency == "BDT" }}>৳ BDT</option>
+                <option value="EUR" {{ "selected" if current_user.preferred_currency == "EUR" }}>€ EUR</option>
+                <option value="CAD" {{ "selected" if current_user.preferred_currency == "CAD" }}>$ CAD</option>
+                <option value="AUD" {{ "selected" if current_user.preferred_currency == "AUD" }}>$ AUD</option>
+            </select>
 
             <input
                 type="number"
@@ -31,7 +39,7 @@
                 inputmode="decimal"
                 required
                 class="field-input w-full min-w-0 h-11 text-sm"
-                style="padding-left:2.25rem;"
+                style="padding-left:4.5rem;"
             >
         </div>
 

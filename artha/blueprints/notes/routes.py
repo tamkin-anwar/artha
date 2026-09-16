@@ -1,14 +1,16 @@
+import csv
+import io
 import logging
 from datetime import datetime, timedelta
 
-from flask import render_template, redirect, url_for, request, flash, jsonify
+from flask import render_template, redirect, url_for, request, flash, jsonify, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from sqlalchemy.orm.exc import StaleDataError
 
 from ...extensions import db
 from ...models import Note
-from ...utils import is_ajax_request, derive_title_and_preview
+from ...utils import is_ajax_request, derive_title_and_preview, html_to_plain_text, csv_formula_safe
 from . import notes_bp
 
 log = logging.getLogger(__name__)
@@ -426,3 +428,41 @@ def delete_note(note_id):
             return jsonify({"message": "Error deleting note"}), 500
         flash("Error deleting note", "error")
         return redirect(url_for("dashboard.index"))
+
+
+@notes_bp.route("/notes/export")
+@login_required
+def export_csv():
+    """
+    Downloads every one of the signed-in user's notes as CSV — active and
+    archived alike, so this doubles as a real backup rather than only
+    covering whatever view happens to be open. Trashed notes are left out
+    on purpose: they're already on a 30-day countdown to permanent
+    deletion (see TRASH_RETENTION_DAYS), the same "not really yours to
+    keep anymore" status a deleted transaction has, and restoring one
+    un-trashes it back into this export's scope same as any other note.
+    """
+    rows = (
+        Note.query.filter_by(user_id=current_user.id)
+        .filter(Note.deleted_at.is_(None))
+        .order_by(Note.created_at.asc(), Note.id.asc())
+        .all()
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Title", "Content", "Tag", "Pinned", "Archived", "Due Date", "Created"])
+    for note in rows:
+        writer.writerow([
+            csv_formula_safe(note.title or ""),
+            csv_formula_safe(html_to_plain_text(note.content)),
+            note.tag or "",
+            "yes" if note.pinned else "no",
+            "yes" if note.archived else "no",
+            note.due_date.strftime("%Y-%m-%d") if note.due_date else "",
+            note.created_at.strftime("%Y-%m-%d") if note.created_at else "",
+        ])
+
+    response = Response(buffer.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=artha-notes.csv"
+    return response

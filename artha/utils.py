@@ -1,6 +1,6 @@
 import calendar
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
@@ -58,28 +58,53 @@ def user_today(user) -> date:
     return user_now(user).date()
 
 
+_RECURRENCE_STEP_DAYS = {"weekly": 7, "biweekly": 14}
+
+
 def next_due_date(template_tx, from_date: date) -> date | None:
     """
     This app has no explicit "day of month" field for recurring rules —
     a recurring transaction is just a row with is_recurring=True that gets
     a fresh copy generated on whatever date the user next loads /finance
     (see generate_recurring() in finance/routes.py). So the day-of-month
-    of the most recent occurrence is the best available signal for when
-    it "usually" lands. Clamped to the last day of shorter months (e.g.
-    day 31 in February -> the 28th/29th).
+    (or, for a weekly/biweekly series, the day itself) of the most recent
+    occurrence is the best available signal for when it "usually" lands.
 
-    Shared by the dashboard's calendar page (upcoming-recurring banner)
-    and the Finance page (the Recurring bills list) so both agree on the
-    same due date for the same transaction — moved here rather than kept
-    blueprint-local specifically so finance/routes.py can use it too
-    without dashboard and finance importing from each other.
+    Shared by the dashboard's calendar page (upcoming-recurring banner),
+    the dashboard's own renewals/month-grid walks, the Finance page (the
+    Recurring bills list), and cli.py's due-today push job, so all of
+    them agree on the same due date for the same transaction — moved
+    here rather than kept blueprint-local specifically so every caller
+    can use it without importing from each other. A series with
+    recurring_end_date set never reports a due date past it: the caller
+    sees None past the last real occurrence, the same as a series that
+    simply has no next occurrence yet.
     """
+    step_days = _RECURRENCE_STEP_DAYS.get(template_tx.recurrence_interval)
+    end_date = getattr(template_tx, "recurring_end_date", None)
+
+    if step_days is not None:
+        # Weekly/biweekly: step forward by the fixed interval from the
+        # template's own anchor day, rather than scanning month-by-month —
+        # a day-of-month concept doesn't apply to a 7- or 14-day cadence.
+        anchor = template_tx.timestamp.date()
+        if anchor >= from_date:
+            candidate = anchor
+        else:
+            steps_needed = -(-(from_date - anchor).days // step_days)  # ceiling division
+            candidate = anchor + timedelta(days=step_days * steps_needed)
+        if end_date and candidate > end_date:
+            return None
+        return candidate
+
     day_of_month = template_tx.timestamp.day
     year, month = from_date.year, from_date.month
     for _ in range(13):  # defensive cap: at most one year of scanning
         days_this_month = calendar.monthrange(year, month)[1]
         candidate = date(year, month, min(day_of_month, days_this_month))
         if candidate >= from_date:
+            if end_date and candidate > end_date:
+                return None
             return candidate
         month += 1
         if month == 13:
@@ -231,3 +256,20 @@ def budget_status(cap: Decimal | None, spent: Decimal) -> dict:
         "pct_clamped": min(100.0, max(0.0, pct)),
         "tier": tier,
     }
+
+
+def csv_formula_safe(value: str) -> str:
+    """
+    Neutralizes CSV/formula injection: a value starting with =, +, -, or @
+    is interpreted as a formula by Excel/Sheets when the exported file is
+    opened, not as literal text. Any CSV export of free text the user
+    typed themselves (a transaction description, a note's title) needs
+    this — a value like "=1+1" (or something more deliberately malicious)
+    would otherwise silently execute as a formula on open. Prefixing with
+    a single quote is the standard mitigation — spreadsheet apps treat it
+    as forcing plain-text and don't display it. Shared across export
+    routes (finance, notes) rather than defined per-blueprint.
+    """
+    if value and value[0] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
