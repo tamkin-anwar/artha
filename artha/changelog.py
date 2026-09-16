@@ -26,6 +26,30 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-09-15",
+        "category": "new",
+        "title": "Get a push the moment you go over budget",
+        "body": "Budget alerts used to only show up next time you opened Finance. Turn on \"Over-budget alerts\" in Settings and you'll get a push the instant a transaction pushes your overall budget or a category over its cap.",
+    },
+    {
+        "date": "2026-09-15",
+        "category": "new",
+        "title": "Log a transaction in a different currency, without switching your whole display",
+        "body": "The add-transaction form now has its own currency picker, right next to the amount. Log a purchase in whatever it was actually paid in, without changing the currency everything else shows in.",
+    },
+    {
+        "date": "2026-09-15",
+        "category": "new",
+        "title": "Recurring transactions can now have an end date, and repeat weekly",
+        "body": "A recurring transaction used to only ever repeat monthly, forever. Now you can set it to repeat weekly or every two weeks instead, and give it an end date so it stops on its own once it's done.",
+    },
+    {
+        "date": "2026-09-15",
+        "category": "new",
+        "title": "Export your notes",
+        "body": "A new \"Export CSV\" link on the Notes page downloads everything, active and archived alike, as a spreadsheet you can keep as a backup.",
+    },
+    {
         "date": "2026-09-02",
         "category": "new",
         "title": "Subscribe to your due dates and events in Apple or Google Calendar",
