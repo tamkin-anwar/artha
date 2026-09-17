@@ -897,6 +897,20 @@ body.mobile-menu-open {
 }
 
 /* Finance — stat card icon badges */
+/* Stat card icon badges. First attempt at this was a pale ~12%-opacity
+   tint (--emerald-dim etc.) with a white radial-gradient "glossy"
+   highlight laid on top -- reasonable in isolation, but the highlight
+   just washed an already-faint color further toward gray, so Income/
+   Expenses/Net Balance/Transactions all read as near-identical muddy
+   circles instead of four distinct colors (caught by a real user
+   screenshot, not a design review). Real app icons are vivid, not
+   diluted -- these are a proper radial gradient from a light tint down
+   to a deep shade of the same hue (the same "little glass sphere"
+   construction as the Artha logo itself), with a white icon on top
+   for contrast rather than a tinted one on a tinted ground. One fixed
+   set of stops works in both themes since the badge is now fully
+   opaque -- it no longer depends on the page's own background showing
+   through to read as colored. */
 .finance-stat-icon {
     position: relative;
     width: 32px;
@@ -906,20 +920,19 @@ body.mobile-menu-open {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    overflow: hidden;
+    color: #fff;
+    box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2), 0 2px 6px rgba(0,0,0,0.15);
 }
-.finance-stat-icon svg { width: 16px; height: 16px; position: relative; z-index: 1; }
-/* A flat solid-color fill reads as a swatch, not an object -- this
-   highlight (brighter near the top-left, same trick as the trend
-   chart's bar gradient) is the small difference between a badge and a
-   little glass bead. Pure white at low opacity so it tints whichever
-   color the badge itself is, rather than fighting it. */
-.finance-stat-icon::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%);
+.finance-stat-icon svg {
+    width: 16px;
+    height: 16px;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2));
 }
+.stat-icon-emerald { background: radial-gradient(circle at 32% 26%, #7ee8ac, #22c55e 55%, #15803d 100%); }
+.stat-icon-red     { background: radial-gradient(circle at 32% 26%, #fcb0b0, #ef4444 55%, #b91c1c 100%); }
+.stat-icon-gold    { background: radial-gradient(circle at 32% 26%, #f3d78f, #d4a843 55%, #a3791f 100%); }
+.stat-icon-sky     { background: radial-gradient(circle at 32% 26%, #9fc9ff, #3b82f6 55%, #1d4ed8 100%); }
+.stat-icon-neutral { background: radial-gradient(circle at 32% 26%, #9aa4b8, #5b6478 55%, #3a4152 100%); }
 
 /* Finance — card entrance motion */
 @keyframes finance-card-in {

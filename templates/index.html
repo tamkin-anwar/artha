@@ -154,7 +154,7 @@
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
         <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
+                <span class="finance-stat-icon stat-icon-emerald">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
                 </span>
                 <span class="eyebrow">Income</span>
@@ -164,7 +164,7 @@
         </a>
         <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon" style="background:var(--red-dim); color:var(--red);">
+                <span class="finance-stat-icon stat-icon-red">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
                 </span>
                 <span class="eyebrow">Expenses</span>
@@ -174,7 +174,7 @@
         </a>
         <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
+                <span class="finance-stat-icon stat-icon-gold">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
                 </span>
                 <span class="eyebrow">Net Balance</span>
@@ -184,7 +184,7 @@
         </a>
         <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
+                <span class="finance-stat-icon stat-icon-sky">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </span>
                 <span class="eyebrow">Transactions</span>
