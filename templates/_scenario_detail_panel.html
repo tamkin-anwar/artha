@@ -37,7 +37,7 @@
 
         <div class="grid grid-cols-2 gap-3" style="margin-bottom:16px;">
             <div class="flex items-center gap-2">
-                <span class="scenario-flow-icon" style="background:var(--emerald-dim); color:var(--emerald);">
+                <span class="scenario-flow-icon" style="background:rgba(34,197,94,0.18); color:var(--emerald);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
                 </span>
                 <div class="min-w-0">
@@ -46,7 +46,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <span class="scenario-flow-icon" style="background:var(--red-dim); color:var(--red);">
+                <span class="scenario-flow-icon" style="background:rgba(239,68,68,0.18); color:var(--red);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
                 </span>
                 <div class="min-w-0">
@@ -86,7 +86,11 @@
     </div>
 
     {% set verdict_color = 'var(--emerald)' if verdict.label == 'do_it' else ('var(--red)' if verdict.label == 'bad_idea' else 'var(--amber)') %}
-    {% set verdict_dim = 'var(--emerald-dim)' if verdict.label == 'do_it' else ('var(--red-dim)' if verdict.label == 'bad_idea' else 'rgba(245,158,11,0.12)') %}
+    {# Same richer rgba values as .stat-icon-emerald/.stat-icon-red (static/css/style.css)
+       rather than the global --emerald-dim/--red-dim tokens (~12%), which read as
+       washed out for an icon badge specifically -- see that file's comment for the
+       full history of why. #}
+    {% set verdict_dim = 'rgba(34,197,94,0.18)' if verdict.label == 'do_it' else ('rgba(239,68,68,0.18)' if verdict.label == 'bad_idea' else 'rgba(245,158,11,0.2)') %}
     <div class="glass-card scenario-card-2" style="padding:20px; border-left:3px solid {{ verdict_color }};">
         <div class="flex items-start gap-3" style="margin-bottom:12px;">
             <span class="scenario-verdict-icon" style="background:{{ verdict_dim }}; color:{{ verdict_color }};">
