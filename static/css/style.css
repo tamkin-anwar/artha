@@ -1217,7 +1217,14 @@ body.mobile-menu-open {
     gap: 6px;
     font-size: 12px;
     color: var(--text-muted);
-    margin: -6px 0 0;
+    /* The form's space-y-4 normally puts a gap below every child via
+       margin-block-end -- this class's own margin shorthand (needed to
+       pull the hint up toward the password field above it) sets that
+       same physical property back to 0 as a side effect, since a class
+       selector always beats space-y-4's zero-specificity :where().
+       12px on the bottom restores breathing room before the submit
+       button instead of leaving it collapsed against this line. */
+    margin: -6px 0 12px;
     transition: color 0.15s ease;
 }
 .auth-hint svg { width: 13px; height: 13px; flex-shrink: 0; }
