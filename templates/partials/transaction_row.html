@@ -34,7 +34,8 @@
                 <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
                     <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
                     {% if tx.is_recurring %}
-                        <button type="button" class="tx-recurring-label" data-id="{{ tx.id }}" title="Click to change how often, or when it ends" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2;"></i> <span class="tx-recurring-label-text">{{ tx.recurrence_interval or "monthly" }}{{ " · ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date }}</span></button>
+                        {% set interval_label = "Bi-weekly" if tx.recurrence_interval == "biweekly" else (tx.recurrence_interval or "monthly") %}
+                        <button type="button" class="tx-recurring-label" data-id="{{ tx.id }}" title="Click to change how often, or when it ends" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2;"></i> <span class="tx-recurring-label-text">{{ interval_label }}{{ " · ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date }}</span></button>
                     {% endif %}
                 </div>
             </span>
@@ -112,7 +113,7 @@
             <select class="tx-recurrence-interval field-input h-9 text-sm" data-id="{{ tx.id }}" style="padding:0 8px;">
                 <option value="" {% if not tx.recurrence_interval %}selected{% endif %}>Month</option>
                 <option value="weekly" {% if tx.recurrence_interval == "weekly" %}selected{% endif %}>Week</option>
-                <option value="biweekly" {% if tx.recurrence_interval == "biweekly" %}selected{% endif %}>2 weeks</option>
+                <option value="biweekly" {% if tx.recurrence_interval == "biweekly" %}selected{% endif %}>Bi-weekly</option>
             </select>
         </div>
         <div>

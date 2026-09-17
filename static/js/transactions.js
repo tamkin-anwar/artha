@@ -709,9 +709,15 @@ async function saveTransaction(e) {
 
         const recurringLabelText = row.querySelector(".tx-recurring-label-text");
         if (recurringLabelText && responseData.recurrence_interval) {
-            recurringLabelText.textContent = responseData.recurring_end_date_label
-                ? `${responseData.recurrence_interval} · ${responseData.recurring_end_date_label}`
+            // Matches the "Every" dropdown's own option text (Month/Week/
+            // Bi-weekly) -- the raw stored value is the single word
+            // "biweekly", which read inconsistently next to that label.
+            const intervalLabel = responseData.recurrence_interval === "biweekly"
+                ? "Bi-weekly"
                 : responseData.recurrence_interval;
+            recurringLabelText.textContent = responseData.recurring_end_date_label
+                ? `${intervalLabel} · ${responseData.recurring_end_date_label}`
+                : intervalLabel;
         }
 
         const successMsg = responseData?.message || "Transaction updated successfully";
