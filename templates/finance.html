@@ -127,11 +127,11 @@
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
         <div class="eyebrow">{{ selected_month_label|upper }}</div>
         <div style="display:flex; align-items:center; gap:16px;">
-            <button type="button" id="csv-import-btn" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); background:none; border:none; padding:0; cursor:pointer; font-family:inherit;">
+            <button type="button" id="csv-import-btn" class="fp-inline-link" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; background:none; border:none; padding:0; cursor:pointer; font-family:inherit;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M4 4h16"/></svg>
                 Import statement
             </button>
-            <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); text-decoration:none;">
+            <a href="{{ url_for('finance.export_csv', month=selected_month_value) }}" class="fp-inline-link" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; text-decoration:none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
                 Export CSV
             </a>
@@ -684,6 +684,12 @@
     }
 
     .csv-import-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-shrink:0; }
+
+    /* Import statement / Export CSV -- previously plain text-secondary
+       with zero feedback of any kind on hover, the only interactive
+       controls on the page that didn't react at all to a pointer. */
+    .fp-inline-link { color:var(--text-secondary); transition:color 0.15s ease; }
+    .fp-inline-link:hover { color:var(--gold); }
 
     .recurring-jump-link {
         font-size:13px; color:var(--gold); margin:0 0 12px;
@@ -1518,7 +1524,7 @@ function fpLoadBreakdown(view) {
             fpStopSpinner(view);
             console.warn("Could not load " + view + " breakdown:", err);
             var canvas = fpChartCanvas(pane, view);
-            if (canvas) drawFallbackMessage(canvas, "Couldn't load — try again");
+            if (canvas) drawFallbackMessage(canvas, "Couldn't load, try again");
             // The chart isn't the only thing on the card — the total and
             // category list (or cash flow's/recurring's income/expense/net
             // figures) are still sitting there from whatever period was

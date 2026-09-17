@@ -1019,12 +1019,16 @@ body.mobile-menu-open {
     font-size: 17px;
 }
 
-/* Finance — small icon badge for the category/day summary rows */
+/* Finance — small icon badge for the category/day summary rows. Same
+   rgba values as .stat-icon-gold (not the global --gold-dim token,
+   which stays untouched everywhere else it's used) so this badge and
+   the stat cards above it read as one consistent icon language rather
+   than this one looking a shade duller by comparison. */
 .finance-mini-icon {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--gold-dim);
+    background: rgba(212,168,67,0.2);
     color: var(--gold);
     display: flex;
     align-items: center;
@@ -1036,7 +1040,11 @@ body.mobile-menu-open {
 /* Finance — transaction row flow icon (income/expense). Both arrow SVGs
    always render; data-type (kept in sync with the row's type <select> by
    transactions.js) picks which one shows and the badge's color, so
-   switching a row's type updates the icon without a page reload. */
+   switching a row's type updates the icon without a page reload. Same
+   rgba values as .stat-icon-emerald/.stat-icon-red for the same reason
+   as .finance-mini-icon above -- every transaction row's icon is what
+   this page shows most, so it's the last place the old duller tokens
+   should have lingered. */
 .tx-flow-icon {
     width: 26px;
     height: 26px;
@@ -1048,9 +1056,9 @@ body.mobile-menu-open {
 }
 .tx-flow-icon svg { width: 13px; height: 13px; }
 .tx-flow-icon-income, .tx-flow-icon-expense { display: none; }
-.tx-flow-icon[data-type="income"] { background: var(--emerald-dim); color: var(--emerald); }
+.tx-flow-icon[data-type="income"] { background: rgba(34,197,94,0.18); color: var(--emerald); }
 .tx-flow-icon[data-type="income"] .tx-flow-icon-income { display: block; }
-.tx-flow-icon[data-type="expense"] { background: var(--red-dim); color: var(--red); }
+.tx-flow-icon[data-type="expense"] { background: rgba(239,68,68,0.18); color: var(--red); }
 .tx-flow-icon[data-type="expense"] .tx-flow-icon-expense { display: block; }
 
 @media (prefers-reduced-motion: reduce) {
