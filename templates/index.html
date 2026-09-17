@@ -90,9 +90,15 @@
     <!-- Quick add -->
     <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
         <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button type="button" class="cost-tab-btn cost-tab-active" data-quick-tab="transaction">+ Transaction</button>
-            <button type="button" class="cost-tab-btn" data-quick-tab="note">+ Note</button>
-            <button type="button" class="cost-tab-btn" data-quick-tab="event">+ Event</button>
+            <button type="button" class="cost-tab-btn cost-tab-active" data-quick-tab="transaction">
+                <i data-lucide="wallet" aria-hidden="true"></i> Transaction
+            </button>
+            <button type="button" class="cost-tab-btn" data-quick-tab="note">
+                <i data-lucide="file-text" aria-hidden="true"></i> Note
+            </button>
+            <button type="button" class="cost-tab-btn" data-quick-tab="event">
+                <i data-lucide="calendar-plus" aria-hidden="true"></i> Event
+            </button>
         </div>
 
         <form method="POST" action="{{ url_for('finance.add_transaction') }}" id="quick-add-transaction" class="quick-add-form" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
@@ -146,7 +152,7 @@
 
     <!-- 4 Stat Cards -->
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
+        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 <span class="finance-stat-icon" style="background:var(--emerald-dim); color:var(--emerald);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
@@ -155,8 +161,8 @@
             </div>
             <div id="finance-income" class="stat-number money-positive" data-money-value="{{ income }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(income) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
+        </a>
+        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 <span class="finance-stat-icon" style="background:var(--red-dim); color:var(--red);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
@@ -165,8 +171,8 @@
             </div>
             <div id="finance-expense" class="stat-number money-negative" data-money-value="{{ expense }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(expense) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
+        </a>
+        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 <span class="finance-stat-icon" style="background:var(--gold-dim); color:var(--gold);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
@@ -175,8 +181,8 @@
             </div>
             <div id="finance-balance" class="stat-number money-gold" data-money-value="{{ balance }}" style="font-size:24px;">${{ "%.2f"|format(balance) }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
+        </a>
+        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 <span class="finance-stat-icon" style="background:rgba(96,165,250,0.14); color:var(--sky);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -185,7 +191,7 @@
             </div>
             <div id="dashboard-tx-count" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
+        </a>
     </div>
 
     <!-- Today + Renewals -->
@@ -207,7 +213,7 @@
                         </div>
                     {% endfor %}
                     {% for note in overdue_notes %}
-                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--red-dim); border:1px solid rgba(239,68,68,0.25); text-decoration:none;">
+                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--red-dim); border:1px solid rgba(239,68,68,0.25); text-decoration:none;">
                             <span class="finance-mini-icon" style="width:22px; height:22px; background:none; color:var(--red);">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path d="M12 9.5v4.5"/><circle cx="12" cy="17.1" r="0.75" fill="currentColor" stroke="none"/></svg>
                             </span>
@@ -216,7 +222,7 @@
                         </a>
                     {% endfor %}
                     {% for note in due_today_notes %}
-                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
+                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
                             <span class="finance-mini-icon" style="width:22px; height:22px;">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
                             </span>
@@ -225,7 +231,7 @@
                         </a>
                     {% endfor %}
                     {% for r in todays_renewals %}
-                        <a href="{{ url_for('finance.finance_page') }}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
+                        <a href="{{ url_for('finance.finance_page') }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
                             <span class="finance-mini-icon" style="width:22px; height:22px; background:var(--gold-dim); color:var(--gold);">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
                             </span>
@@ -288,7 +294,7 @@
                 <div style="display:flex; flex-direction:column; gap:2px;">
                     {% for note in recent_notes[:3] %}
                         {% set display_title = note.title if note.title else (note.preview|truncate(40, True) if note.preview else '') %}
-                        <a href="{{ url_for('notes.notes_page') }}" class="dashboard-note-row" style="display:block; padding:10px 14px; border-radius:8px; text-decoration:none;">
+                        <a href="{{ url_for('notes.notes_page') }}" class="dashboard-list-row" style="display:block; padding:10px 14px; border-radius:8px; text-decoration:none;">
                             <div style="font-weight:600; font-size:13px; color:var(--text-primary); overflow-wrap:break-word;">{{ display_title if display_title else 'Untitled' }}</div>
                             <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">{{ note.preview|truncate(60) if note.preview else '' }}</div>
                         </a>
@@ -299,11 +305,6 @@
             {% endif %}
         </div>
     </div>
-
-    <style>
-        .dashboard-note-row { border-left: 2px solid transparent; transition: background 0.12s ease, border-color 0.12s ease; }
-        .dashboard-note-row:hover { background: var(--bg-hover); border-left-color: var(--gold); }
-    </style>
 
     <script type="module">
         import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";

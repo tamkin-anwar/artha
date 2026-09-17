@@ -487,6 +487,9 @@ select.field-input {
 
 /* Scenario form — cost type tabs */
 .cost-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--bg-card);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
@@ -497,6 +500,7 @@ select.field-input {
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
+.cost-tab-btn svg { width: 14px; height: 14px; stroke-width: 2.25; flex-shrink: 0; }
 .cost-tab-btn:hover {
   background: var(--bg-hover);
 }
@@ -894,6 +898,7 @@ body.mobile-menu-open {
 
 /* Finance — stat card icon badges */
 .finance-stat-icon {
+    position: relative;
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -901,8 +906,20 @@ body.mobile-menu-open {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    overflow: hidden;
 }
-.finance-stat-icon svg { width: 16px; height: 16px; }
+.finance-stat-icon svg { width: 16px; height: 16px; position: relative; z-index: 1; }
+/* A flat solid-color fill reads as a swatch, not an object -- this
+   highlight (brighter near the top-left, same trick as the trend
+   chart's bar gradient) is the small difference between a badge and a
+   little glass bead. Pure white at low opacity so it tints whichever
+   color the badge itself is, rather than fighting it. */
+.finance-stat-icon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%);
+}
 
 /* Finance — card entrance motion */
 @keyframes finance-card-in {
@@ -926,6 +943,50 @@ body.mobile-menu-open {
 .dashboard-card-in:nth-of-type(2) { animation-delay: 0.04s; }
 .dashboard-card-in:nth-of-type(3) { animation-delay: 0.08s; }
 .dashboard-card-in:nth-of-type(4) { animation-delay: 0.12s; }
+
+/* A .glass-card that's also a real link (the Dashboard's four stat
+   cards, previously plain divs with nowhere to go) -- a small lift and
+   a gold-tinted shadow on hover so the page's headline numbers feel
+   like a door into Finance rather than inert text, without touching
+   any .glass-card used for a non-interactive panel. */
+.glass-card-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.glass-card-link:hover {
+    transform: translateY(-3px);
+    border-color: rgba(212, 168, 67, 0.35);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+}
+.dark .glass-card-link:hover {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.glass-card-link:active {
+    transform: translateY(-1px) scale(0.99);
+}
+@media (prefers-reduced-motion: reduce) {
+    .glass-card-link:hover, .glass-card-link:active { transform: none; }
+}
+
+/* Shared hover treatment for a row that's actually a link to somewhere
+   else (Dashboard's Today panel, the Scenarios widget, the Notes
+   preview) -- these read identically to a static list item until the
+   moment of navigation without this, no different from a plain <p>. */
+.dashboard-list-row {
+    display: block;
+    border-left: 2px solid transparent;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.dashboard-list-row:hover {
+    background: var(--bg-hover);
+    border-left-color: var(--gold);
+    transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-list-row:hover { transform: none; }
+}
 
 /* Finance — savings rate ring */
 .finance-ring-wrap {
