@@ -71,11 +71,17 @@
 
 /* Per-type accent — same semantic tokens used everywhere else (budget
    tiers, note colors, stat cards), not a set of colors invented just for
-   toasts. --toast-accent-dim backs the icon chip below. */
-.toast-success { --toast-accent: var(--emerald); --toast-accent-dim: var(--emerald-dim); }
-.toast-error   { --toast-accent: var(--red);     --toast-accent-dim: var(--red-dim); }
-.toast-info    { --toast-accent: var(--gold);    --toast-accent-dim: var(--gold-dim); }
-.toast-warning { --toast-accent: var(--amber);   --toast-accent-dim: var(--amber-dim); }
+   toasts. --toast-accent-dim backs the icon chip below -- the same
+   richer rgba values as .stat-icon-emerald/.stat-icon-red/.stat-icon-gold
+   (static/css/style.css), not the global --emerald-dim/--red-dim/
+   --gold-dim tokens, which read as washed out on an icon badge
+   specifically (see that file's comment for the full history). A toast
+   fires on every page, constantly, so this was the most-seen instance
+   of that same duller chip left in the app. */
+.toast-success { --toast-accent: var(--emerald); --toast-accent-dim: rgba(34,197,94,0.18); }
+.toast-error   { --toast-accent: var(--red);     --toast-accent-dim: rgba(239,68,68,0.18); }
+.toast-info    { --toast-accent: var(--gold);    --toast-accent-dim: rgba(212,168,67,0.2); }
+.toast-warning { --toast-accent: var(--amber);   --toast-accent-dim: rgba(245,158,11,0.2); }
 
 /* Icon chip — the exact treatment used elsewhere for a small circular
    colored icon badge (see .finance-mini-icon), swapped in for the old

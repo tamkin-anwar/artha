@@ -232,7 +232,7 @@
                     {% endfor %}
                     {% for r in todays_renewals %}
                         <a href="{{ url_for('finance.finance_page') }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
-                            <span class="finance-mini-icon" style="width:22px; height:22px; background:var(--gold-dim); color:var(--gold);">
+                            <span class="finance-mini-icon" style="width:22px; height:22px;">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
                             </span>
                             <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
