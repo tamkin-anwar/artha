@@ -658,7 +658,7 @@
 
 <div class="notes-page" id="notes-page"{{ ' hidden' if not (pinned_notes or other_notes) }}>
     <div class="notes-header-row">
-        <div class="eyebrow">Notes{{ ' — Archived' if show_archived }}{{ ' — Trash' if show_trash }}</div>
+        <div class="eyebrow">Notes{{ ' · Archived' if show_archived }}{{ ' · Trash' if show_trash }}</div>
         <h1 class="notes-heading">
             {% if show_trash %}Deleted notes
             {% elif show_archived %}Notes you put away
@@ -2615,7 +2615,7 @@
                             });
                         }
                         import("{{ url_for('static', filename='js/toast.js') }}").then(function (mod) {
-                            mod.showToast("Couldn't save the new order — reverted.", "error");
+                            mod.showToast("Couldn't save the new order, reverted.", "error");
                         });
                     });
                 },
