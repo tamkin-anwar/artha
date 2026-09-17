@@ -964,6 +964,7 @@ function renderTrendChart() {
     var textPrimary = getVar("--text-primary", "#f0ede8");
     var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
     var borderCard = getVar("--border-card", "rgba(255,255,255,0.08)");
+    var borderSubtle = getVar("--border-subtle", "#252d40");
 
     if (window.__monthlyTrendChart) {
         window.__monthlyTrendChart.destroy();
@@ -982,6 +983,32 @@ function renderTrendChart() {
         gradient.addColorStop(1, "rgba(" + rgb + ",0.45)");
         return gradient;
     }
+
+    // Not a full grid — a category-scale bar chart doesn't need one — but
+    // a chart mixing positive and negative bars (May's small red sliver
+    // next to Aug's tall green one) needs the one reference a bare y-axis
+    // can't give: where zero actually is. Drawn before the bars so each
+    // one visually sits on top of the line at its own base, the same way
+    // a real baseline reads. Same recessive border token as every other
+    // hairline in the app, not a heavier axis-specific gray.
+    var zeroBaselinePlugin = {
+        id: "zeroBaseline",
+        beforeDatasetsDraw: function (chart) {
+            var yScale = chart.scales.y;
+            var area = chart.chartArea;
+            if (!yScale || !area) return;
+            var y = yScale.getPixelForValue(0);
+            var c = chart.ctx;
+            c.save();
+            c.strokeStyle = borderSubtle;
+            c.lineWidth = 1;
+            c.beginPath();
+            c.moveTo(area.left, y + 0.5);
+            c.lineTo(area.right, y + 0.5);
+            c.stroke();
+            c.restore();
+        },
+    };
 
     var hasDatalabels = typeof ChartDataLabels !== "undefined";
 
@@ -1006,16 +1033,6 @@ function renderTrendChart() {
                             : { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 };
                     },
                     borderSkipped: false,
-                    // The selected month (same one highlighted gold in the
-                    // month-tab row above) gets a matching gold ring here
-                    // too, so the two stay visually tied together instead
-                    // of the chart being a disconnected second UI.
-                    borderColor: labels.map(function (_, i) {
-                        return monthValues[i] === selectedMonthValue ? gold : "transparent";
-                    }),
-                    borderWidth: labels.map(function (_, i) {
-                        return monthValues[i] === selectedMonthValue ? 2 : 0;
-                    }),
                     barPercentage: 0.5,
                     categoryPercentage: 0.7,
                     // Caps the absolute pixel width too — otherwise a
@@ -1031,7 +1048,7 @@ function renderTrendChart() {
                 },
             ],
         },
-        plugins: hasDatalabels ? [ChartDataLabels] : [],
+        plugins: (hasDatalabels ? [ChartDataLabels] : []).concat([zeroBaselinePlugin]),
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -1092,7 +1109,23 @@ function renderTrendChart() {
                 x: {
                     grid: { display: false },
                     border: { display: false },
-                    ticks: { color: mutedColor, font: { size: 11 } },
+                    // The selected month (same one highlighted gold in the
+                    // month-tab row above) used to get a gold ring drawn
+                    // around its bar -- a stroke on the mark itself, which
+                    // read more like a checkbox outline than an editorial
+                    // highlight next to the soft gradient fill everywhere
+                    // else. Bolding and gold-tinting that month's own axis
+                    // label does the same job (ties this chart back to the
+                    // month-tab row above it) without drawing on the bar.
+                    ticks: {
+                        color: function (ctx) {
+                            return monthValues[ctx.index] === selectedMonthValue ? gold : mutedColor;
+                        },
+                        font: function (ctx) {
+                            var isSelected = monthValues[ctx.index] === selectedMonthValue;
+                            return { size: 11, weight: isSelected ? "700" : "400", family: "'Inter', sans-serif" };
+                        },
+                    },
                 },
                 y: {
                     grid: { display: false },
