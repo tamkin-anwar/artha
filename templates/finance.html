@@ -1002,8 +1002,8 @@ function renderTrendChart() {
                     borderRadius: function (ctx) {
                         var v = ctx.parsed ? ctx.parsed.y : (ctx.raw || 0);
                         return v >= 0
-                            ? { topLeft: 8, topRight: 8, bottomLeft: 0, bottomRight: 0 }
-                            : { topLeft: 0, topRight: 0, bottomLeft: 8, bottomRight: 8 };
+                            ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }
+                            : { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 };
                     },
                     borderSkipped: false,
                     // The selected month (same one highlighted gold in the
@@ -1022,7 +1022,12 @@ function renderTrendChart() {
                     // brand-new account with only 1-2 months of history
                     // stretches each bar to fill its wide category slot,
                     // right back to the same blocky look this is fixing.
-                    maxBarThickness: 56,
+                    // 24px is the standard bar-chart cap (thin marks read
+                    // as considered; a thick block reads loud) — this used
+                    // to be 56px, more than double, which is exactly the
+                    // "blocky" look the comment above already meant to
+                    // avoid but the number itself never delivered on.
+                    maxBarThickness: 24,
                 },
             ],
         },
@@ -1326,18 +1331,18 @@ function fpRenderCashflow(pane, data) {
                         data: data.buckets.map(function (b) { return b.income; }),
                         backgroundColor: cfBarGradient(emerald),
                         hoverBackgroundColor: emerald,
-                        borderRadius: 6,
+                        borderRadius: 4,
                         borderSkipped: false,
-                        maxBarThickness: 28,
+                        maxBarThickness: 24,
                     },
                     {
                         label: "Spending",
                         data: data.buckets.map(function (b) { return b.expense; }),
                         backgroundColor: cfBarGradient(red),
                         hoverBackgroundColor: red,
-                        borderRadius: 6,
+                        borderRadius: 4,
                         borderSkipped: false,
-                        maxBarThickness: 28,
+                        maxBarThickness: 24,
                     },
                 ],
             },

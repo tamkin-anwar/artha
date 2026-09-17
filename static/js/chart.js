@@ -16,6 +16,19 @@ function getLegendColor() {
     return theme === "dark" ? "#fff" : "#000";
 }
 
+// Same role Finance's own donut charts already use this for (see
+// fpRenderDonut's getVar("--bg-surface", ...) in finance.html): the
+// surface-color gap between slices, not a contrasting ring.
+function getSurfaceColor() {
+    return getCSSVariable("--bg-surface") || (getCurrentTheme() === "dark" ? "#181d2a" : "#ffffff");
+}
+
+// Every other chart in the app (Finance's trend/cash-flow/donut charts)
+// sets its number-bearing text in JetBrains Mono, matching every other
+// money figure on the page -- this chart was still on a plain "Arial,
+// sans-serif" left over from before that convention existed.
+const DATALABEL_FONT = { size: 13, weight: "700", family: "'JetBrains Mono', monospace" };
+
 function syncCanvasSize(canvas) {
     if (!canvas) return;
 
@@ -137,6 +150,13 @@ export function initFinanceChart(ctx, income, expense) {
     const incomeColor = getCSSVariable("--income-color") || "#10b981";
     const expenseColor = getCSSVariable("--expense-color") || "#ef4444";
     const { legendColor, tooltipBg } = getChartThemeOptions();
+    // Same role Finance's own donut charts already use this border for
+    // (see fpRenderDonut's getVar("--bg-surface", ...) in finance.html):
+    // a surface-color gap between slices, not a contrasting ring drawn
+    // around them. This chart was still hardcoded to pure black, which
+    // read as a heavy outline in light mode instead of the quiet gap it
+    // was meant to be.
+    const surfaceColor = getCSSVariable("--bg-surface") || (getCurrentTheme() === "dark" ? "#181d2a" : "#ffffff");
 
     if (financeChartInstance) {
         financeChartInstance.destroy();
@@ -151,7 +171,7 @@ export function initFinanceChart(ctx, income, expense) {
                 {
                     data: [income, expense],
                     backgroundColor: [incomeColor, expenseColor],
-                    borderColor: "#000000",
+                    borderColor: surfaceColor,
                     borderWidth: 2,
                     hoverOffset: 6,
                 },
@@ -181,11 +201,7 @@ export function initFinanceChart(ctx, income, expense) {
                 datalabels: {
                     color: legendColor,
                     formatter: (value) => buildDatalabel(value),
-                    font: {
-                        size: 13,
-                        weight: "700",
-                        family: "Arial, sans-serif",
-                    },
+                    font: DATALABEL_FONT,
                     textStrokeColor: "rgba(0,0,0,0.15)",
                     textStrokeWidth: 0.5,
                 },
@@ -215,7 +231,7 @@ export function updateFinanceChart(income, expense) {
     }
 
     financeChartInstance.data.datasets[0].data = [income, expense];
-    financeChartInstance.data.datasets[0].borderColor = "#000000";
+    financeChartInstance.data.datasets[0].borderColor = getSurfaceColor();
     financeChartInstance.options.devicePixelRatio = window.devicePixelRatio || 1;
 
     const { legendColor, tooltipBg } = getChartThemeOptions();
@@ -227,11 +243,7 @@ export function updateFinanceChart(income, expense) {
     if (financeChartInstance.options.plugins.datalabels) {
         financeChartInstance.options.plugins.datalabels.color = legendColor;
         financeChartInstance.options.plugins.datalabels.formatter = (value) => buildDatalabel(value);
-        financeChartInstance.options.plugins.datalabels.font = {
-            size: 13,
-            weight: "700",
-            family: "Arial, sans-serif",
-        };
+        financeChartInstance.options.plugins.datalabels.font = DATALABEL_FONT;
         financeChartInstance.options.plugins.datalabels.textStrokeColor = "rgba(0,0,0,0.15)";
         financeChartInstance.options.plugins.datalabels.textStrokeWidth = 0.5;
     }
@@ -355,6 +367,10 @@ onThemeChange(() => {
         financeChartInstance.options.plugins.tooltip.titleColor = legendColor;
         financeChartInstance.options.plugins.tooltip.bodyColor = legendColor;
         financeChartInstance.options.plugins.tooltip.backgroundColor = tooltipBg;
+        // The slice border is a surface-color gap, not a fixed ring --
+        // it has to follow the surface color across the light/dark
+        // toggle the same way every other themed value here does.
+        financeChartInstance.data.datasets[0].borderColor = getSurfaceColor();
 
         if (financeChartInstance.options.plugins.datalabels) {
             financeChartInstance.options.plugins.datalabels.color = legendColor;
@@ -370,11 +386,7 @@ document.addEventListener("currency-refresh-ui", () => {
 
     if (financeChartInstance.options.plugins.datalabels) {
         financeChartInstance.options.plugins.datalabels.formatter = (value) => buildDatalabel(value);
-        financeChartInstance.options.plugins.datalabels.font = {
-            size: 13,
-            weight: "700",
-            family: "Arial, sans-serif",
-        };
+        financeChartInstance.options.plugins.datalabels.font = DATALABEL_FONT;
         financeChartInstance.options.plugins.datalabels.textStrokeColor = "rgba(0,0,0,0.15)";
         financeChartInstance.options.plugins.datalabels.textStrokeWidth = 0.5;
     }
