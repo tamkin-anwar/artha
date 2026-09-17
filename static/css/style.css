@@ -1264,12 +1264,17 @@ body.mobile-menu-open {
    inert (or invite a second click) for however long the round trip
    takes. The label stays in the DOM (so a slow connection doesn't
    leave the button blank) and is just visually hidden behind the
-   spinner. */
-.auth-button.is-loading {
-    color: transparent;
+   spinner. Generic (not scoped to .auth-button) so the same class
+   works on .btn-primary too -- Change Password/Edit Profile/2FA
+   enable share this exact "full-page POST, no feedback" gap and use
+   that class instead, and the two buttons are visually identical
+   (same gold fill, black text) so there's nothing to reconcile. */
+.is-loading {
+    position: relative;
+    color: transparent !important;
     pointer-events: none;
 }
-.auth-button.is-loading::after {
+.is-loading::after {
     content: "";
     position: absolute;
     top: 50%; left: 50%;
@@ -1282,7 +1287,7 @@ body.mobile-menu-open {
 }
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-    .auth-button.is-loading::after { animation-duration: 1.4s; }
+    .is-loading::after { animation-duration: 1.4s; }
 }
 
 .auth-link {

@@ -31,12 +31,22 @@
             </p>
 
             <div class="settings-tile" style="border-radius:12px; padding:18px; margin-bottom:20px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);">
+                <div id="recovery-codes-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);">
                     {% for code in codes %}
                         <div>{{ code }}</div>
                     {% endfor %}
                 </div>
             </div>
+
+            <button
+                type="button"
+                id="copy-recovery-codes-btn"
+                class="auth-link"
+                style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%; background:none; border:none; padding:0; margin-bottom:16px; font:inherit; font-weight:600; cursor:pointer;"
+            >
+                <i data-lucide="copy" aria-hidden="true" style="width:14px; height:14px; stroke-width:2;"></i>
+                Copy all codes
+            </button>
 
             <p class="text-center text-xs text-tertiary mb-6">
                 Copy or print these somewhere safe. Artha can't show them to you again. Losing both your
@@ -49,4 +59,20 @@
         </section>
     </div>
 </main>
+<script type="module">
+    import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+
+    var copyBtn = document.getElementById("copy-recovery-codes-btn");
+    var grid = document.getElementById("recovery-codes-grid");
+    if (copyBtn && grid) {
+        copyBtn.addEventListener("click", function () {
+            var codes = Array.from(grid.children).map(function (el) { return el.textContent.trim(); }).join("\n");
+            navigator.clipboard.writeText(codes).then(function () {
+                showToast("Recovery codes copied.", "success");
+            }).catch(function () {
+                showToast("Couldn't copy. Select and copy the codes manually.", "error");
+            });
+        });
+    }
+</script>
 {% endblock %}

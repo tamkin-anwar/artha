@@ -1,10 +1,18 @@
 // static/js/auth.js
-// Shared behavior for the auth pages (login, register, forgot/reset
-// password, 2FA verify) -- inert everywhere else, since none of these
-// selectors match outside that family. Password show/hide toggles
-// scope their eye icons to their own button (querySelector, not a
-// global id) so a page can carry more than one, like reset password's
-// new/confirm pair.
+// Shared behavior for the fixed-dark auth pages (login, register,
+// forgot/reset password, 2FA verify) AND the theme-aware settings
+// pages that carry the exact same password-field patterns (Change
+// Password, Edit Profile's disable-2FA field) -- inert everywhere
+// else, since none of these selectors match outside that set. Every
+// class referenced here (.auth-toggle-btn, .auth-hint, .is-loading)
+// is defined purely in terms of theme CSS variables, never a
+// hardcoded dark-mode color, so reusing them on a theme-aware page is
+// safe -- see CLAUDE.md's auth-* vs settings-* split, which is about
+// the fixed-dark .auth-bg/.auth-card/.auth-input/.auth-button shells
+// themselves, not these smaller shared behaviors. Password show/hide
+// toggles scope their eye icons to their own button (querySelector,
+// not a global id) so a page can carry more than one, like reset
+// password's new/confirm pair.
 
 document.querySelectorAll(".auth-toggle-btn").forEach(function (toggleBtn) {
     const input = document.getElementById(toggleBtn.getAttribute("aria-controls"));
@@ -34,12 +42,12 @@ document.querySelectorAll("[data-min-length-hint]").forEach(function (input) {
     });
 });
 
-document.querySelectorAll(".auth-card form").forEach(function (form) {
+document.querySelectorAll(".auth-card form, .settings-card form").forEach(function (form) {
     form.addEventListener("submit", function (event) {
-        // Reset password is the only auth form with two password
-        // fields to compare -- checked here, inline, rather than
-        // waiting on a full round trip just to be told they didn't
-        // match.
+        // Reset password and Change Password are the only forms in
+        // this set with two password fields to compare -- checked
+        // here, inline, rather than waiting on a full round trip just
+        // to be told they didn't match.
         const a = form.querySelector("#new_password");
         const b = form.querySelector("#confirm_password");
         if (a && b && a.value !== b.value) {
@@ -54,8 +62,11 @@ document.querySelectorAll(".auth-card form").forEach(function (form) {
         // however long the round trip takes -- this is the only signal
         // the click actually registered. The label stays in the DOM
         // (only visually hidden) so a slow connection never shows an
-        // unlabeled button.
-        const submitBtn = form.querySelector("button[type=submit].auth-button");
+        // unlabeled button. Scoped to .auth-button/.btn-primary only --
+        // Edit Profile's Danger Zone delete button is neither (a plain
+        // red button gated behind its own window.confirm()), and stays
+        // untouched on purpose.
+        const submitBtn = form.querySelector("button[type=submit].auth-button, button[type=submit].btn-primary");
         submitBtn?.classList.add("is-loading");
     });
 });
