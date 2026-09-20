@@ -73,11 +73,7 @@ export function drawFallbackMessage(canvas, message) {
 }
 
 function getChartThemeOptions() {
-    const legendColor = getLegendColor();
-    const bg = getCSSVariable("--bg-color") || (getCurrentTheme() === "dark" ? "#111827" : "#ffffff");
-    const tooltipBg = getCSSVariable("--tooltip-bg") || bg;
-
-    return { legendColor, tooltipBg };
+    return { legendColor: getLegendColor() };
 }
 
 function makeMoneyNumber(value) {
@@ -89,19 +85,16 @@ function getBalance() {
     return makeMoneyNumber(financeChartData.income) - makeMoneyNumber(financeChartData.expense);
 }
 
-function buildTooltipLabel(ctx) {
-    const label = ctx.label ? `${ctx.label}: ` : "";
-    const value = makeMoneyNumber(ctx.parsed);
-    return `${label}${formatMoney(value)}`;
-}
-
-function updateCenterLabel() {
+// No label/title args -> the resting state (the account's actual Balance).
+// Passed a slice's own label/value on hover instead -- see the onHover
+// callback below for why that replaces a native tooltip here.
+function updateCenterLabel(label, value) {
     const titleEl = document.getElementById("chart-center-title");
     const valueEl = document.getElementById("chart-center-value");
     if (!titleEl || !valueEl) return;
 
-    titleEl.textContent = "Balance";
-    valueEl.textContent = formatMoney(getBalance());
+    titleEl.textContent = label ?? "Balance";
+    valueEl.textContent = value ?? formatMoney(getBalance());
 }
 
 export function initFinanceChart(ctx, income, expense) {
@@ -129,12 +122,12 @@ export function initFinanceChart(ctx, income, expense) {
     // out past the ring into the card background (reported as "broken").
     // The exact figures are already the stat tiles right above this card,
     // so the fix is removing the redundant label entirely, not repositioning
-    // it -- legend + hover tooltip + the center Balance figure already
-    // carry everything a label would, matching Finance's own donuts
-    // (fpRenderDonut in finance.html), which never had on-slice labels.
+    // it -- legend + the center Balance figure already carry everything a
+    // label would, matching Finance's own donuts (fpRenderDonut in
+    // finance.html), which never had on-slice labels either.
     const incomeColor = getCSSVariable("--income-color") || "#10b981";
     const expenseColor = getCSSVariable("--expense-color") || "#ef4444";
-    const { legendColor, tooltipBg } = getChartThemeOptions();
+    const { legendColor } = getChartThemeOptions();
     // Same role Finance's own donut charts already use this border for
     // (see fpRenderDonut's getVar("--bg-surface", ...) in finance.html):
     // a surface-color gap between slices, not a contrasting ring drawn
@@ -178,14 +171,27 @@ export function initFinanceChart(ctx, income, expense) {
                 legend: {
                     labels: { color: legendColor },
                 },
-                tooltip: {
-                    backgroundColor: tooltipBg,
-                    titleColor: legendColor,
-                    bodyColor: legendColor,
-                    callbacks: {
-                        label: buildTooltipLabel,
-                    },
-                },
+                // No native tooltip -- it draws directly on the canvas, and
+                // Chart.js's own default positioning happily lands the
+                // tooltip box right over the center Balance figure (an
+                // absolutely-positioned DOM overlay one layer above the
+                // canvas), painting both at once and making the number
+                // "not show" behind it. onHover below swaps the center
+                // figure itself to the hovered slice's label/value instead
+                // -- same information, no second box competing for the
+                // same spot in the hole.
+                tooltip: { enabled: false },
+            },
+            onHover: (evt, elements, chart) => {
+                evt.native.target.style.cursor = elements.length ? "pointer" : "default";
+                if (elements.length) {
+                    const idx = elements[0].index;
+                    const label = chart.data.labels[idx];
+                    const value = makeMoneyNumber(chart.data.datasets[0].data[idx]);
+                    updateCenterLabel(label, formatMoney(value));
+                } else {
+                    updateCenterLabel();
+                }
             },
         },
     });
@@ -214,11 +220,8 @@ export function updateFinanceChart(income, expense) {
     financeChartInstance.data.datasets[0].borderColor = getSurfaceColor();
     financeChartInstance.options.devicePixelRatio = window.devicePixelRatio || 1;
 
-    const { legendColor, tooltipBg } = getChartThemeOptions();
+    const { legendColor } = getChartThemeOptions();
     financeChartInstance.options.plugins.legend.labels.color = legendColor;
-    financeChartInstance.options.plugins.tooltip.titleColor = legendColor;
-    financeChartInstance.options.plugins.tooltip.bodyColor = legendColor;
-    financeChartInstance.options.plugins.tooltip.backgroundColor = tooltipBg;
 
     financeChartInstance.update();
 }
@@ -333,12 +336,9 @@ onThemeChange(() => {
     themeUpdateTimeout = setTimeout(() => {
         if (!financeChartInstance) return;
 
-        const { legendColor, tooltipBg } = getChartThemeOptions();
+        const { legendColor } = getChartThemeOptions();
 
         financeChartInstance.options.plugins.legend.labels.color = legendColor;
-        financeChartInstance.options.plugins.tooltip.titleColor = legendColor;
-        financeChartInstance.options.plugins.tooltip.bodyColor = legendColor;
-        financeChartInstance.options.plugins.tooltip.backgroundColor = tooltipBg;
         // The slice border is a surface-color gap, not a fixed ring --
         // it has to follow the surface color across the light/dark
         // toggle the same way every other themed value here does.
@@ -351,10 +351,6 @@ onThemeChange(() => {
 
 document.addEventListener("currency-refresh-ui", () => {
     if (!financeChartInstance) return;
-
-    financeChartInstance.options.plugins.tooltip.callbacks = {
-        label: buildTooltipLabel,
-    };
 
     financeChartInstance.update();
     updateCenterLabel();
