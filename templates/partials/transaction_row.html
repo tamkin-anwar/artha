@@ -40,13 +40,13 @@
                         style="background:transparent; outline:none; font-size:14px; color:var(--text-primary);">
                     {{ tx.description }}
                 </span>
-                <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
-                    <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
+                <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px;">
+                    <span class="tx-date-label" style="white-space:nowrap;">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
                     {% set category_meta = categories.get(tx.category) if tx.category else None %}
-                    <span class="tx-category-label">&middot; {{ category_meta.label if category_meta else "Uncategorized" }}</span>
+                    <span class="tx-category-label" style="white-space:nowrap;">&middot; {{ category_meta.label if category_meta else "Uncategorized" }}</span>
                     {% if tx.is_recurring %}
                         {% set interval_label = "Bi-weekly" if tx.recurrence_interval == "biweekly" else (tx.recurrence_interval or "monthly") %}
-                        <button type="button" class="tx-recurring-label" data-id="{{ tx.id }}" title="Click to change how often, or when it ends" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2;"></i> <span class="tx-recurring-label-text">{{ interval_label }}{{ " · ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date }}</span></button>
+                        <button type="button" class="tx-recurring-label" data-id="{{ tx.id }}" title="Click to change how often, or when it ends" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer; white-space:nowrap;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2; flex-shrink:0;"></i> <span class="tx-recurring-label-text">{{ interval_label }}{{ " · ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date }}</span></button>
                     {% endif %}
                 </div>
             </span>
