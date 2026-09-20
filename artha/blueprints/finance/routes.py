@@ -328,6 +328,21 @@ def add_transaction():
     if category not in TRANSACTION_CATEGORIES:
         category = None
 
+    # Auto-categorize a manual add exactly like an imported statement row
+    # already gets categorized -- same two-tier shape as import_preview():
+    # the free/instant keyword guess first (also resolves "income"), the
+    # AI fallback only for what that leaves genuinely uncategorized. The
+    # add-transaction form has no category field of its own today, so
+    # this is the only chance a manual entry (recurring bills included,
+    # since they're created through this same route) gets categorized
+    # without the user doing it by hand afterward.
+    if category is None:
+        category = _guess_category(description, t_type)
+    if category is None and t_type == "expense":
+        guess_row = {"type": t_type, "description": description, "category": None}
+        _fill_uncategorized_via_ai([guess_row])
+        category = guess_row["category"]
+
     # Whatever currency the page was actively displaying at submit time
     # (static/js/currency.js's getCurrencyCode(), posted as a hidden
     # field) is the only honest signal available for a manual entry — the

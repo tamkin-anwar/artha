@@ -43,10 +43,27 @@ def test_add_transaction_ignores_unknown_category(auth_client, user):
     assert tx.category is None
 
 
-def test_add_transaction_with_no_category_stays_uncategorized(auth_client, user):
+def test_add_transaction_with_no_category_auto_guesses_from_description(auth_client, user):
+    # "Coffee" matches the dining keyword list (_CATEGORY_KEYWORDS) -- a
+    # manual add with no explicit category is exactly the case the
+    # keyword guesser exists for, same as an imported statement row.
     auth_client.post(
         "/add_transaction",
         data={"description": "Coffee", "amount": "4.50", "type": "expense"},
+        follow_redirects=True,
+    )
+    tx = Transaction.query.filter_by(user_id=user.id).first()
+    assert tx.category == "dining"
+
+
+def test_add_transaction_with_unguessable_description_stays_uncategorized(auth_client, user):
+    # No keyword match, and the AI fallback has no client configured in
+    # tests (no ANTHROPIC_API_KEY) -- degrades to None exactly like an
+    # import row the AI service couldn't reach, never a guess dressed up
+    # as a real answer.
+    auth_client.post(
+        "/add_transaction",
+        data={"description": "xyzzy plugh 42", "amount": "4.50", "type": "expense"},
         follow_redirects=True,
     )
     tx = Transaction.query.filter_by(user_id=user.id).first()
