@@ -23,12 +23,6 @@ function getSurfaceColor() {
     return getCSSVariable("--bg-surface") || (getCurrentTheme() === "dark" ? "#181d2a" : "#ffffff");
 }
 
-// Every other chart in the app (Finance's trend/cash-flow/donut charts)
-// sets its number-bearing text in JetBrains Mono, matching every other
-// money figure on the page -- this chart was still on a plain "Arial,
-// sans-serif" left over from before that convention existed.
-const DATALABEL_FONT = { size: 13, weight: "700", family: "'JetBrains Mono', monospace" };
-
 function syncCanvasSize(canvas) {
     if (!canvas) return;
 
@@ -78,18 +72,6 @@ export function drawFallbackMessage(canvas, message) {
     ctx.fillText(message, dims.cssWidth / 2, dims.cssHeight / 2);
 }
 
-function safeRegisterDatalabels() {
-    try {
-        if (typeof Chart !== "undefined" && typeof ChartDataLabels !== "undefined") {
-            if (!Chart.registry?.plugins?.get?.("datalabels")) {
-                Chart.register(ChartDataLabels);
-            }
-        }
-    } catch {
-        // ignore
-    }
-}
-
 function getChartThemeOptions() {
     const legendColor = getLegendColor();
     const bg = getCSSVariable("--bg-color") || (getCurrentTheme() === "dark" ? "#111827" : "#ffffff");
@@ -111,11 +93,6 @@ function buildTooltipLabel(ctx) {
     const label = ctx.label ? `${ctx.label}: ` : "";
     const value = makeMoneyNumber(ctx.parsed);
     return `${label}${formatMoney(value)}`;
-}
-
-function buildDatalabel(value) {
-    const num = makeMoneyNumber(value);
-    return formatMoney(num);
 }
 
 function updateCenterLabel() {
@@ -142,11 +119,19 @@ export function initFinanceChart(ctx, income, expense) {
         return;
     }
 
-    safeRegisterDatalabels();
-
     financeChartData = { income, expense };
     updateCenterLabel();
 
+    // No on-slice value labels (unlike the Trend/Cash Flow bar charts) --
+    // chartjs-plugin-datalabels centers them on the arc by default with
+    // clip:false, and a money string like "$2,343.32" is routinely wider
+    // than a two-value donut's ring is thick at that radius, so it spilled
+    // out past the ring into the card background (reported as "broken").
+    // The exact figures are already the stat tiles right above this card,
+    // so the fix is removing the redundant label entirely, not repositioning
+    // it -- legend + hover tooltip + the center Balance figure already
+    // carry everything a label would, matching Finance's own donuts
+    // (fpRenderDonut in finance.html), which never had on-slice labels.
     const incomeColor = getCSSVariable("--income-color") || "#10b981";
     const expenseColor = getCSSVariable("--expense-color") || "#ef4444";
     const { legendColor, tooltipBg } = getChartThemeOptions();
@@ -182,7 +167,10 @@ export function initFinanceChart(ctx, income, expense) {
             maintainAspectRatio: false,
             devicePixelRatio: window.devicePixelRatio || 1,
             animation: false,
-            cutout: "52%",
+            // Matches Finance's own donut charts (fpRenderDonut's
+            // cutout:"68%" in finance.html) -- a thin ring reads as
+            // considered, the same mark spec applied there.
+            cutout: "68%",
             layout: {
                 padding: 8,
             },
@@ -198,16 +186,8 @@ export function initFinanceChart(ctx, income, expense) {
                         label: buildTooltipLabel,
                     },
                 },
-                datalabels: {
-                    color: legendColor,
-                    formatter: (value) => buildDatalabel(value),
-                    font: DATALABEL_FONT,
-                    textStrokeColor: "rgba(0,0,0,0.15)",
-                    textStrokeWidth: 0.5,
-                },
             },
         },
-        plugins: typeof ChartDataLabels !== "undefined" ? [ChartDataLabels] : [],
     });
 }
 
@@ -239,14 +219,6 @@ export function updateFinanceChart(income, expense) {
     financeChartInstance.options.plugins.tooltip.titleColor = legendColor;
     financeChartInstance.options.plugins.tooltip.bodyColor = legendColor;
     financeChartInstance.options.plugins.tooltip.backgroundColor = tooltipBg;
-
-    if (financeChartInstance.options.plugins.datalabels) {
-        financeChartInstance.options.plugins.datalabels.color = legendColor;
-        financeChartInstance.options.plugins.datalabels.formatter = (value) => buildDatalabel(value);
-        financeChartInstance.options.plugins.datalabels.font = DATALABEL_FONT;
-        financeChartInstance.options.plugins.datalabels.textStrokeColor = "rgba(0,0,0,0.15)";
-        financeChartInstance.options.plugins.datalabels.textStrokeWidth = 0.5;
-    }
 
     financeChartInstance.update();
 }
@@ -372,10 +344,6 @@ onThemeChange(() => {
         // toggle the same way every other themed value here does.
         financeChartInstance.data.datasets[0].borderColor = getSurfaceColor();
 
-        if (financeChartInstance.options.plugins.datalabels) {
-            financeChartInstance.options.plugins.datalabels.color = legendColor;
-        }
-
         financeChartInstance.update();
         updateCenterLabel();
     }, 100);
@@ -383,13 +351,6 @@ onThemeChange(() => {
 
 document.addEventListener("currency-refresh-ui", () => {
     if (!financeChartInstance) return;
-
-    if (financeChartInstance.options.plugins.datalabels) {
-        financeChartInstance.options.plugins.datalabels.formatter = (value) => buildDatalabel(value);
-        financeChartInstance.options.plugins.datalabels.font = DATALABEL_FONT;
-        financeChartInstance.options.plugins.datalabels.textStrokeColor = "rgba(0,0,0,0.15)";
-        financeChartInstance.options.plugins.datalabels.textStrokeWidth = 0.5;
-    }
 
     financeChartInstance.options.plugins.tooltip.callbacks = {
         label: buildTooltipLabel,
