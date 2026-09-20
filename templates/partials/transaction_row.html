@@ -1,12 +1,21 @@
 <!-- templates/partials/transaction_row.html -->
 <style>
-    /* The date input is only relevant while actively editing this row —
-       keep it out of the way otherwise, and reveal it the moment any
-       field in the row's edit form gets focus (click/tab into desc,
-       amount, the date field itself, etc). Pure CSS so it works without
-       any JS changes. */
-    .tx-edit-form .tx-date { display: none; }
-    .tx-edit-form:focus-within .tx-date { display: inline-block; }
+    /* The date/type/category controls are only relevant while actively
+       editing this row -- keep them out of the way otherwise (the row
+       shows plain text: the date label, the flow-icon arrow, and the
+       category label below), and reveal all three the moment any field
+       in the row's edit form gets focus (click/tab into desc, amount,
+       one of these fields itself, etc). Without this, every row always
+       shows two boxy <select> elements next to otherwise borderless
+       text, which is the one thing on this page that doesn't match the
+       rest of its plain-text/soft-icon language. Pure CSS so it works
+       without any JS changes. */
+    .tx-edit-form .tx-date,
+    .tx-edit-form .tx-type,
+    .tx-edit-form .tx-category { display: none; }
+    .tx-edit-form:focus-within .tx-date,
+    .tx-edit-form:focus-within .tx-type,
+    .tx-edit-form:focus-within .tx-category { display: inline-block; }
 </style>
 <li class="tx-row flex items-start sm:items-center justify-between gap-3"
     style="padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-subtle); {{ 'border-left:3px solid var(--gold);' if tx.is_recurring else '' }} border-radius:10px; flex-wrap:wrap;"
@@ -33,6 +42,8 @@
                 </span>
                 <div class="tx-meta-row" style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:flex; align-items:center; gap:6px;">
                     <span class="tx-date-label">{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
+                    {% set category_meta = categories.get(tx.category) if tx.category else None %}
+                    <span class="tx-category-label">&middot; {{ category_meta.label if category_meta else "Uncategorized" }}</span>
                     {% if tx.is_recurring %}
                         {% set interval_label = "Bi-weekly" if tx.recurrence_interval == "biweekly" else (tx.recurrence_interval or "monthly") %}
                         <button type="button" class="tx-recurring-label" data-id="{{ tx.id }}" title="Click to change how often, or when it ends" style="color:var(--gold); display:inline-flex; align-items:center; gap:3px; background:none; border:none; padding:0; font:inherit; cursor:pointer;">&middot; <i data-lucide="repeat" style="width:10px; height:10px; stroke-width:2;"></i> <span class="tx-recurring-label-text">{{ interval_label }}{{ " · ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date }}</span></button>

@@ -581,14 +581,19 @@ select.field-input {
   }
 }
 
-/* Recurring transaction toggle pill */
+/* Recurring transaction toggle -- borderless flat-tint circle, same
+   treatment as every other icon badge on Finance (.finance-stat-icon,
+   .finance-mini-icon, .tx-flow-icon): no border, ~18-20% opacity tint,
+   muted when off, gold when on. This used to be its own bordered-pill
+   style, the one circle on the page that didn't match the rest of that
+   already-shared icon language. */
 .tx-recurring-toggle {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--bg-hover);
   color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
+  border: none;
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -596,21 +601,20 @@ select.field-input {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .tx-recurring-toggle:hover {
-  background: var(--bg-card);
+  background: var(--border-subtle);
 }
 .tx-recurring-toggle.tx-recurring-on {
-  background: var(--gold-dim);
+  background: rgba(212,168,67,0.2);
   color: var(--gold);
-  border-color: var(--gold);
 }
 .tx-recurring-toggle svg, .tx-recurring-toggle i { width: 14px; height: 14px; stroke-width: 2; }
 
-/* Same pill, as a native checkbox+label for the new-transaction form
+/* Same badge, as a native checkbox+label for the new-transaction form
    (a plain POST, unlike the per-row toggle's AJAX button above) — the
-   checkbox itself is invisibly stretched over the visual pill so the
+   checkbox itself is invisibly stretched over the visual badge so the
    whole circle is clickable, not just its center. */
 .tx-recurring-toggle-label {
   position: relative;
@@ -631,22 +635,21 @@ select.field-input {
 .tx-recurring-toggle-visual {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--bg-hover);
   color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
+  border: none;
   font-size: 13px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .tx-recurring-checkbox:checked + .tx-recurring-toggle-visual {
-  background: var(--gold-dim);
+  background: rgba(212,168,67,0.2);
   color: var(--gold);
-  border-color: var(--gold);
 }
 .tx-recurring-toggle-visual svg, .tx-recurring-toggle-visual i { width: 14px; height: 14px; stroke-width: 2; }
 .tx-recurring-checkbox:focus-visible + .tx-recurring-toggle-visual {

@@ -593,6 +593,17 @@ function attachRowListeners(row) {
     const categorySelect = row.querySelector(".tx-category");
     if (categorySelect) {
         categorySelect.addEventListener("change", (e) => {
+            // The select itself is hidden until the row is being edited
+            // (see transaction_row.html) -- the plain-text label next to
+            // the date is what the row shows at rest, so it needs to be
+            // updated the same way the flow-icon's data-type is above,
+            // rather than waiting on the round trip to reflect a change.
+            const rowEl = e.target.closest("li[data-id]");
+            const label = rowEl?.querySelector(".tx-category-label");
+            if (label) {
+                const selected = categorySelect.options[categorySelect.selectedIndex];
+                label.textContent = "· " + (selected ? selected.text : "Uncategorized");
+            }
             debounceSaveTransaction(e);
         });
     }
