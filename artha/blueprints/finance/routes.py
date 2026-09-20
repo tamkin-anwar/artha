@@ -105,6 +105,7 @@ _CATEGORY_KEYWORDS = {
         "netflix", "spotify", "hulu", "disney+", "disney plus",
         "amazon prime", "subscription", "apple.com/bill", "icloud",
         "youtube premium", "playstation plus", "xbox game pass",
+        "chatgpt", "openai", "claude.ai", "anthropic",
     ],
     "shopping": [
         "amazon", "ebay", "best buy", "clothing", "mall", "ikea",
