@@ -28,7 +28,7 @@
 
 <div id="fp-pane-transactions" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-transactions">
 <!-- Month selector -->
-<div class="glass-card" style="padding:12px 14px; margin-bottom:24px; display:flex; align-items:center; gap:8px;">
+<div class="glass-card" style="padding:12px 14px; margin-bottom:20px; display:flex; align-items:center; gap:8px;">
     <button type="button" id="month-scroll-left" aria-label="Scroll months left" style="background:none; border:none; color:var(--text-secondary); font-size:16px; cursor:pointer; flex-shrink:0; padding:4px;">
         &larr;
     </button>
@@ -62,7 +62,7 @@
 </div>
 
 <!-- Stat cards -->
-<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:20px;">
     <div class="glass-card finance-card-in" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
             <span class="finance-stat-icon stat-icon-emerald">
@@ -122,8 +122,148 @@
     </div>
 </div>
 
+<!-- Transactions -- the thing this page is actually for, so it sits
+     right under the headline numbers rather than after four summary/
+     insight cards someone has to scroll past first. Those cards (month
+     summary, budget, trend) follow below as supporting detail. -->
+<div class="finance-tab glass-card" style="padding:24px; margin-bottom:20px;">
+    <form
+        method="POST"
+        action="{{ url_for('finance.add_transaction') }}"
+        class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
+        style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border-subtle);"
+        autocomplete="off"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <input
+            type="text"
+            name="description"
+            placeholder="Description"
+            required
+            class="field-input w-full min-w-0 sm:col-span-4 h-11 text-sm"
+        >
+
+        <div class="grid grid-cols-2 gap-2.5 sm:contents">
+            <div class="tx-amount-group w-full min-w-0 sm:col-span-2 h-11 text-sm">
+                <select
+                    name="currency"
+                    aria-label="Currency"
+                    class="tx-add-currency-select"
+                >
+                    <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
+                    <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
+                    <option value="BDT" {{ "selected" if current_user.preferred_currency == "BDT" }}>৳ BDT</option>
+                    <option value="EUR" {{ "selected" if current_user.preferred_currency == "EUR" }}>€ EUR</option>
+                    <option value="CAD" {{ "selected" if current_user.preferred_currency == "CAD" }}>$ CAD</option>
+                    <option value="AUD" {{ "selected" if current_user.preferred_currency == "AUD" }}>$ AUD</option>
+                </select>
+
+                <input
+                    type="number"
+                    name="amount"
+                    placeholder="Amount"
+                    step="0.01"
+                    inputmode="decimal"
+                    required
+                    class="tx-amount-input"
+                >
+            </div>
+
+            <input
+                type="date"
+                name="date"
+                id="tx-date-input"
+                value="{{ today_date }}"
+                class="w-full min-w-0 sm:col-span-2"
+                style="background:var(--bg-sidebar); border:1px solid var(--border-subtle);
+                       color:var(--text-primary); border-radius:8px; padding:10px 14px;
+                       font-family:'Inter',sans-serif; font-size:14px; height:2.75rem;"
+            >
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5 sm:contents">
+            <div class="flex items-center gap-2 w-full min-w-0 sm:col-span-2">
+                <select
+                    name="type"
+                    required
+                    class="field-input w-full min-w-0 h-11 text-sm"
+                    style="flex:1;"
+                >
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                </select>
+
+                <label class="tx-recurring-toggle-label" title="Recurring">
+                    <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
+                    <span class="tx-recurring-toggle-visual"><i data-lucide="repeat" aria-hidden="true"></i></span>
+                </label>
+            </div>
+
+            <button
+                type="submit"
+                class="btn-primary w-full sm:col-span-2 h-11 px-5 text-sm flex items-center justify-center whitespace-nowrap"
+            >
+                Add
+            </button>
+        </div>
+
+        <!-- Revealed only while "Recurring" is checked (see the
+             tx-recurring-checkbox listener below) -- monthly (the
+             default, an empty value) needs no extra input at all, so
+             these two stay hidden until there's actually a decision to
+             make. -->
+        <div id="tx-recurrence-settings" hidden class="grid grid-cols-2 gap-2.5 sm:col-span-12">
+            <div>
+                <label for="tx-recurrence-interval" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Every</label>
+                <select id="tx-recurrence-interval" name="recurrence_interval" class="field-input w-full h-9 text-sm">
+                    <option value="">Month</option>
+                    <option value="weekly">Week</option>
+                    <option value="biweekly">Bi-weekly</option>
+                </select>
+            </div>
+            <div>
+                <label for="tx-recurring-end-date" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Ends (optional)</label>
+                <input type="date" id="tx-recurring-end-date" name="recurring_end_date" class="field-input w-full h-9 text-sm">
+            </div>
+        </div>
+    </form>
+
+    <div id="fp-recurring-count">
+    {% if recurring_count > 0 %}
+        <button type="button" class="recurring-jump-link">
+            <i data-lucide="repeat" aria-hidden="true"></i>
+            {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
+            <i data-lucide="arrow-right" aria-hidden="true"></i>
+        </button>
+    {% endif %}
+    </div>
+
+    <ul id="tx-list" class="space-y-3 scrollbar-thin" style="max-height:640px; overflow-y:auto; padding-right:6px; margin-right:-6px;">
+        {% set ns = namespace(last_date=None) %}
+        {% for tx in transactions %}
+            {% set tx_date = tx.timestamp.strftime('%Y-%m-%d') %}
+            {% if tx_date != ns.last_date %}
+                <li class="tx-date-divider" style="list-style:none;">
+                    <div style="color:var(--text-muted); font-size:11px; display:flex; align-items:center; gap:8px; margin:{{ '0' if loop.first else '16px' }} 0 8px;">
+                        <span style="flex:1; height:1px; background:var(--border-subtle);"></span>
+                        <span>{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
+                        <span style="flex:1; height:1px; background:var(--border-subtle);"></span>
+                    </div>
+                </li>
+                {% set ns.last_date = tx_date %}
+            {% endif %}
+            {% include "partials/transaction_row.html" %}
+        {% else %}
+            <li style="text-align:center; padding:24px 0; font-size:14px; color:var(--text-secondary);">
+                No transactions {% if not all_time %}in {{ selected_month_label }}{% else %}yet{% endif %}.
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+
 <!-- Month summary card -->
-<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
         <div class="eyebrow">{{ selected_month_label|upper }}</div>
         <div style="display:flex; align-items:center; gap:16px;">
@@ -179,7 +319,7 @@
 </div>
 
 <!-- Monthly budget -->
-<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
         <span class="eyebrow">Monthly Budget</span>
         <button type="button" id="budget-edit-toggle" style="background:none; border:none; color:var(--gold); font-size:12px; cursor:pointer; padding:0;">
@@ -325,148 +465,11 @@
 </script>
 
 <!-- 6-month trend -->
-<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
+<div class="glass-card finance-card-in" style="padding:20px; margin-bottom:20px;">
     <div class="eyebrow" style="margin-bottom:14px;">6-Month Trend</div>
     <div id="monthlyTrendChartWrap" style="position:relative; height:220px;">
         <canvas id="monthlyTrendChart" data-trend='{{ trend_data|tojson }}'></canvas>
     </div>
-</div>
-
-<!-- Transactions -->
-<div class="finance-tab glass-card" style="padding:24px;">
-    <form
-        method="POST"
-        action="{{ url_for('finance.add_transaction') }}"
-        class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-        style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border-subtle);"
-        autocomplete="off"
-    >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <input
-            type="text"
-            name="description"
-            placeholder="Description"
-            required
-            class="field-input w-full min-w-0 sm:col-span-4 h-11 text-sm"
-        >
-
-        <div class="grid grid-cols-2 gap-2.5 sm:contents">
-            <div class="tx-amount-group w-full min-w-0 sm:col-span-2 h-11 text-sm">
-                <select
-                    name="currency"
-                    aria-label="Currency"
-                    class="tx-add-currency-select"
-                >
-                    <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
-                    <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
-                    <option value="BDT" {{ "selected" if current_user.preferred_currency == "BDT" }}>৳ BDT</option>
-                    <option value="EUR" {{ "selected" if current_user.preferred_currency == "EUR" }}>€ EUR</option>
-                    <option value="CAD" {{ "selected" if current_user.preferred_currency == "CAD" }}>$ CAD</option>
-                    <option value="AUD" {{ "selected" if current_user.preferred_currency == "AUD" }}>$ AUD</option>
-                </select>
-
-                <input
-                    type="number"
-                    name="amount"
-                    placeholder="Amount"
-                    step="0.01"
-                    inputmode="decimal"
-                    required
-                    class="tx-amount-input"
-                >
-            </div>
-
-            <input
-                type="date"
-                name="date"
-                id="tx-date-input"
-                value="{{ today_date }}"
-                class="w-full min-w-0 sm:col-span-2"
-                style="background:var(--bg-sidebar); border:1px solid var(--border-subtle);
-                       color:var(--text-primary); border-radius:8px; padding:10px 14px;
-                       font-family:'Inter',sans-serif; font-size:14px; height:2.75rem;"
-            >
-        </div>
-
-        <div class="grid grid-cols-2 gap-2.5 sm:contents">
-            <div class="flex items-center gap-2 w-full min-w-0 sm:col-span-2">
-                <select
-                    name="type"
-                    required
-                    class="field-input w-full min-w-0 h-11 text-sm"
-                    style="flex:1;"
-                >
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                </select>
-
-                <label class="tx-recurring-toggle-label" title="Recurring">
-                    <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
-                    <span class="tx-recurring-toggle-visual"><i data-lucide="repeat" aria-hidden="true"></i></span>
-                </label>
-            </div>
-
-            <button
-                type="submit"
-                class="btn-primary w-full sm:col-span-2 h-11 px-5 text-sm flex items-center justify-center whitespace-nowrap"
-            >
-                Add
-            </button>
-        </div>
-
-        <!-- Revealed only while "Recurring" is checked (see the
-             tx-recurring-checkbox listener below) -- monthly (the
-             default, an empty value) needs no extra input at all, so
-             these two stay hidden until there's actually a decision to
-             make. -->
-        <div id="tx-recurrence-settings" hidden class="grid grid-cols-2 gap-2.5 sm:col-span-12">
-            <div>
-                <label for="tx-recurrence-interval" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Every</label>
-                <select id="tx-recurrence-interval" name="recurrence_interval" class="field-input w-full h-9 text-sm">
-                    <option value="">Month</option>
-                    <option value="weekly">Week</option>
-                    <option value="biweekly">Bi-weekly</option>
-                </select>
-            </div>
-            <div>
-                <label for="tx-recurring-end-date" style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px;">Ends (optional)</label>
-                <input type="date" id="tx-recurring-end-date" name="recurring_end_date" class="field-input w-full h-9 text-sm">
-            </div>
-        </div>
-    </form>
-
-    <div id="fp-recurring-count">
-    {% if recurring_count > 0 %}
-        <button type="button" class="recurring-jump-link">
-            <i data-lucide="repeat" aria-hidden="true"></i>
-            {{ recurring_count }} recurring transaction{{ 's' if recurring_count != 1 else '' }} set
-            <i data-lucide="arrow-right" aria-hidden="true"></i>
-        </button>
-    {% endif %}
-    </div>
-
-    <ul id="tx-list" class="space-y-3 scrollbar-thin">
-        {% set ns = namespace(last_date=None) %}
-        {% for tx in transactions %}
-            {% set tx_date = tx.timestamp.strftime('%Y-%m-%d') %}
-            {% if tx_date != ns.last_date %}
-                <li class="tx-date-divider" style="list-style:none;">
-                    <div style="color:var(--text-muted); font-size:11px; display:flex; align-items:center; gap:8px; margin:{{ '0' if loop.first else '16px' }} 0 8px;">
-                        <span style="flex:1; height:1px; background:var(--border-subtle);"></span>
-                        <span>{{ tx.timestamp.strftime('%b %d, %Y') }}</span>
-                        <span style="flex:1; height:1px; background:var(--border-subtle);"></span>
-                    </div>
-                </li>
-                {% set ns.last_date = tx_date %}
-            {% endif %}
-            {% include "partials/transaction_row.html" %}
-        {% else %}
-            <li style="text-align:center; padding:24px 0; font-size:14px; color:var(--text-secondary);">
-                No transactions {% if not all_time %}in {{ selected_month_label }}{% else %}yet{% endif %}.
-            </li>
-        {% endfor %}
-    </ul>
 </div>
 </div>
 <!-- /fp-pane-transactions -->
