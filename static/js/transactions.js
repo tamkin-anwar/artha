@@ -873,6 +873,48 @@ function applyAllTransactionDatasets() {
 // keeps this consistent with every other AI-driven write in the app
 // requiring an explicit user action first, even though the only thing
 // it can ever do is fill in a currently-empty field.
+// In-app replacement for window.confirm() -- the browser's native
+// confirm() can't be themed and renders as a bare Chrome dialog instead
+// of part of the app (see #confirm-modal-backdrop in finance.html, same
+// structure notes.html's own confirm modal already established). Only
+// one confirmation is ever in flight at a time on this page, which is
+// all the Categorize action needs it for.
+function showConfirmModal(title, sub) {
+    const backdrop = document.getElementById("confirm-modal-backdrop");
+    if (!backdrop) return Promise.resolve(window.confirm(sub || title));
+
+    const titleEl = document.getElementById("confirm-modal-title");
+    const subEl = document.getElementById("confirm-modal-sub");
+    const cancelBtn = document.getElementById("confirm-modal-cancel");
+    const confirmBtn = document.getElementById("confirm-modal-confirm");
+    if (titleEl) titleEl.textContent = title;
+    if (subEl) subEl.textContent = sub;
+
+    backdrop.hidden = false;
+    if (window.lucide) window.lucide.createIcons();
+    if (confirmBtn) confirmBtn.focus();
+
+    return new Promise((resolve) => {
+        function cleanup(result) {
+            backdrop.hidden = true;
+            cancelBtn?.removeEventListener("click", onCancel);
+            confirmBtn?.removeEventListener("click", onConfirm);
+            backdrop.removeEventListener("click", onBackdropClick);
+            document.removeEventListener("keydown", onKeydown);
+            resolve(result);
+        }
+        function onCancel() { cleanup(false); }
+        function onConfirm() { cleanup(true); }
+        function onBackdropClick(e) { if (e.target === backdrop) cleanup(false); }
+        function onKeydown(e) { if (e.key === "Escape") cleanup(false); }
+
+        cancelBtn?.addEventListener("click", onCancel);
+        confirmBtn?.addEventListener("click", onConfirm);
+        backdrop.addEventListener("click", onBackdropClick);
+        document.addEventListener("keydown", onKeydown);
+    });
+}
+
 function attachCategorizeUncategorizedListener() {
     const btn = document.getElementById("categorize-uncategorized-btn");
     if (!btn || btn.dataset.bound === "1") return;
@@ -880,15 +922,19 @@ function attachCategorizeUncategorizedListener() {
 
     btn.addEventListener("click", async () => {
         const label = document.getElementById("categorize-uncategorized-label");
+        const icon = document.getElementById("categorize-uncategorized-icon");
         const originalText = label ? label.textContent : "";
         const count = originalText.match(/\d+/)?.[0] || "these";
 
-        if (!window.confirm(`Categorize ${count} uncategorized transactions using AI? This only fills in transactions with no category set.`)) {
-            return;
-        }
+        const confirmed = await showConfirmModal(
+            `Categorize ${count} transactions with AI?`,
+            "This only fills in transactions with no category set."
+        );
+        if (!confirmed) return;
 
         btn.disabled = true;
         if (label) label.textContent = "Categorizing…";
+        if (icon) icon.classList.add("categorize-spinning");
 
         try {
             const res = await fetch("/finance/categorize_uncategorized", {
@@ -902,6 +948,7 @@ function attachCategorizeUncategorizedListener() {
                 showToast(data?.message || "Could not categorize transactions", "error");
                 btn.disabled = false;
                 if (label) label.textContent = originalText;
+                if (icon) icon.classList.remove("categorize-spinning");
                 return;
             }
 
@@ -916,12 +963,14 @@ function attachCategorizeUncategorizedListener() {
             } else {
                 btn.disabled = false;
                 if (label) label.textContent = originalText;
+                if (icon) icon.classList.remove("categorize-spinning");
             }
         } catch (err) {
             console.error("Network error during bulk categorization:", err);
             showToast("Network error while categorizing transactions", "error");
             btn.disabled = false;
             if (label) label.textContent = originalText;
+            if (icon) icon.classList.remove("categorize-spinning");
         }
     });
 }
