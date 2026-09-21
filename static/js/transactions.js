@@ -294,6 +294,81 @@ function resortTransactionRows() {
     });
 }
 
+// -----------------------------------------------------------------------
+// Search + category filter above #tx-list -- purely client-side, since
+// every row for the current period is already rendered in the DOM. Uses
+// row.style.display (not the `hidden` attribute) because .tx-row also
+// carries Tailwind's `flex` class, and an author stylesheet's `display`
+// always beats the browser's native [hidden]{display:none} default at
+// equal specificity (see CLAUDE.md's "known traps" section) -- `hidden`
+// would silently do nothing here.
+// -----------------------------------------------------------------------
+
+function applyTransactionFilters() {
+    const list = document.getElementById("tx-list");
+    if (!list) return;
+
+    const searchInput = document.getElementById("tx-search-input");
+    const categorySelect = document.getElementById("tx-category-filter");
+    const emptyState = document.getElementById("tx-no-filter-results");
+
+    const query = (searchInput?.value || "").trim().toLowerCase();
+    const categoryFilter = categorySelect?.value || "";
+    const filtering = Boolean(query || categoryFilter);
+
+    let anyVisible = false;
+    let currentDivider = null;
+    let dividerHasVisibleRow = false;
+
+    Array.from(list.children).forEach((el) => {
+        if (el.classList.contains("tx-date-divider")) {
+            if (currentDivider) currentDivider.style.display = dividerHasVisibleRow ? "" : "none";
+            currentDivider = el;
+            dividerHasVisibleRow = false;
+            return;
+        }
+        if (!el.matches("li[data-id]")) return;
+
+        const description = el.dataset.description || "";
+        const category = el.dataset.category || "";
+        const matchesSearch = !query || description.includes(query);
+        const matchesCategory = !categoryFilter
+            || (categoryFilter === "__uncategorized__" ? category === "" : category === categoryFilter);
+        const visible = matchesSearch && matchesCategory;
+
+        el.style.display = visible ? "" : "none";
+        if (visible) {
+            anyVisible = true;
+            dividerHasVisibleRow = true;
+        }
+    });
+    if (currentDivider) currentDivider.style.display = dividerHasVisibleRow ? "" : "none";
+
+    if (emptyState) {
+        const hasAnyRows = list.querySelector("li[data-id]") !== null;
+        emptyState.hidden = !(filtering && hasAnyRows && !anyVisible);
+    }
+}
+
+function attachTransactionFilterListeners() {
+    const searchInput = document.getElementById("tx-search-input");
+    const categorySelect = document.getElementById("tx-category-filter");
+
+    if (searchInput && searchInput.dataset.bound !== "1") {
+        searchInput.dataset.bound = "1";
+        let debounceTimer;
+        searchInput.addEventListener("input", () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(applyTransactionFilters, 120);
+        });
+    }
+
+    if (categorySelect && categorySelect.dataset.bound !== "1") {
+        categorySelect.dataset.bound = "1";
+        categorySelect.addEventListener("change", applyTransactionFilters);
+    }
+}
+
 async function undoDeleteTransaction() {
     try {
         const res = await fetch("/undo_delete_transaction", {
@@ -330,6 +405,7 @@ async function undoDeleteTransaction() {
 
             attachRowListeners(restoredRow);
             resortTransactionRows();
+            applyTransactionFilters();
 
             const msg = data?.message || "Transaction restored.";
             showToast(msg, "success");
@@ -604,7 +680,9 @@ function attachRowListeners(row) {
                 const selected = categorySelect.options[categorySelect.selectedIndex];
                 label.textContent = "· " + (selected ? selected.text : "Uncategorized");
             }
+            if (rowEl) rowEl.dataset.category = categorySelect.value;
             debounceSaveTransaction(e);
+            applyTransactionFilters();
         });
     }
 
@@ -713,6 +791,8 @@ async function saveTransaction(e) {
         amountEl.dataset.moneyValue = String(parsed);
         amountEl.textContent = formatMoneyFromElement(amountEl);
         applyAmountTypeDataset(amountEl, type);
+        row.dataset.description = desc.toLowerCase();
+        applyTransactionFilters();
 
         if (responseData.date) {
             // Update the row's underlying date + visible label in place.
@@ -832,6 +912,7 @@ function handleAddTransactionForm(form) {
             attachRowListeners(newRow);
             formatRowMoney(newRow);
             resortTransactionRows();
+            applyTransactionFilters();
 
             showToast("Transaction added!", "success", 1500);
 
@@ -998,6 +1079,8 @@ function initTransactions() {
     }
 
     attachCategorizeUncategorizedListener();
+    attachTransactionFilterListeners();
+    applyTransactionFilters();
 
     updateSummaryUI();
 

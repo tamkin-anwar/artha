@@ -20,7 +20,9 @@
 <li class="tx-row flex items-start sm:items-center justify-between gap-3"
     style="padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-subtle); {{ 'border-left:3px solid var(--gold);' if tx.is_recurring else '' }} border-radius:10px; flex-wrap:wrap;"
     data-id="{{ tx.id }}"
-    data-date="{{ tx.timestamp.strftime('%Y-%m-%d') }}">
+    data-date="{{ tx.timestamp.strftime('%Y-%m-%d') }}"
+    data-category="{{ tx.category or '' }}"
+    data-description="{{ tx.description|lower }}">
 
     <form method="POST"
             action="{{ url_for('finance.update_transaction', transaction_id=tx.id) }}"
