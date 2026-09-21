@@ -1928,6 +1928,20 @@ fpTopTabs.forEach(function (btn, i) {
     });
 });
 
+// Overview/Transactions honor ?tab= server-side (see active_tab in
+// finance_page()) since both are fully server-rendered and switching
+// there client-side would flash the wrong one first. Spending/Income/
+// Cash Flow/Recurring have no server-rendered content to flash -- empty
+// until fpLoadBreakdown() fetches them either way -- so ⌘K's Pages
+// entries for those four (static list in search.js) just link straight
+// to ?tab=<name> and get activated here, reusing the exact same
+// fpActivateTab() a click would trigger.
+(function () {
+    var target = new URLSearchParams(window.location.search).get("tab");
+    var btn = target && document.getElementById("fp-tab-" + target);
+    if (btn && !btn.classList.contains("fp-toptab-active")) fpActivateTab(btn, false);
+})();
+
 // Period chips and year picker are identical markup across all 3 breakdown
 // panes, so one delegated listener handles all of them rather than binding
 // per-pane (matches the recurring-toggle-btn delegation pattern above).

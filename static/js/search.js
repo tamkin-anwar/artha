@@ -5,10 +5,35 @@
 // anything beyond the trigger/modal itself exists.
 
 const GROUPS = [
+    { key: "pages", label: "Pages" },
     { key: "notes", label: "Notes" },
     { key: "transactions", label: "Transactions" },
     { key: "scenarios", label: "Scenarios" },
     { key: "events", label: "Events" },
+];
+
+// Fixed, client-known navigation destinations — every top-level page plus
+// Finance's own tabs (which finance.html reads back from ?tab=, see
+// fpActivateTab's auto-activation below and active_tab in
+// finance/routes.py). Matched entirely client-side against title+keywords
+// with no debounce, so "Pages" results appear instantly on every
+// keystroke rather than waiting on the /search round trip the other
+// groups need. The Admin entry is spliced in separately (see
+// buildPagesList) since whether it belongs depends on the signed-in user.
+const BASE_PAGES = [
+    { title: "Dashboard", keywords: "home", url: "/" },
+    { title: "Finance", keywords: "money", url: "/finance" },
+    { title: "Finance · Overview", keywords: "savings rate budget trend biggest category", url: "/finance?tab=overview" },
+    { title: "Finance · Transactions", keywords: "list add transaction search filter", url: "/finance?tab=transactions" },
+    { title: "Finance · Spending", keywords: "breakdown category expenses", url: "/finance?tab=spending" },
+    { title: "Finance · Income", keywords: "earnings", url: "/finance?tab=income" },
+    { title: "Finance · Cash Flow", keywords: "net income expense trend", url: "/finance?tab=cashflow" },
+    { title: "Finance · Recurring", keywords: "bills subscriptions renewals", url: "/finance?tab=recurring" },
+    { title: "AI Assistant", keywords: "chat ask artha", url: "/ai" },
+    { title: "Scenarios", keywords: "what if plan projection", url: "/scenarios/" },
+    { title: "Notes", keywords: "", url: "/notes" },
+    { title: "Calendar", keywords: "events schedule", url: "/calendar" },
+    { title: "Calculator", keywords: "math", url: "/calculator" },
 ];
 
 function initGlobalSearch() {
@@ -23,13 +48,28 @@ function initGlobalSearch() {
     const resultsEl = document.getElementById("global-search-results");
     if (!trigger || !backdrop || !input || !resultsEl) return;
 
-    const EMPTY_HTML = '<p class="global-search-empty">Type to search your notes, transactions, scenarios, and events.</p>';
+    const pages = backdrop.dataset.isAdmin === "true"
+        ? [...BASE_PAGES, { title: "Admin", keywords: "feedback users changelog", url: "/admin" }]
+        : BASE_PAGES;
+
+    const EMPTY_HTML = '<p class="global-search-empty">Type to search your notes, transactions, scenarios, events, or jump to a page.</p>';
     const NO_RESULTS_HTML = '<p class="global-search-no-results">No results.</p>';
 
     let debounceTimer = null;
     let activeIndex = -1;
     let resultLinks = [];
     let currentRequestId = 0;
+    // The DB-backed groups (notes/transactions/scenarios/events) arrive
+    // async and debounced; Pages is recomputed synchronously on every
+    // keystroke instead, so this holds the last known server data to
+    // merge alongside whatever Pages just matched, rather than the two
+    // racing each other and one clobbering the other's render.
+    let lastServerData = { notes: [], transactions: [], scenarios: [], events: [] };
+
+    function matchPages(query) {
+        const q = query.toLowerCase();
+        return pages.filter((p) => (p.title + " " + p.keywords).toLowerCase().includes(q));
+    }
 
     function refreshIcons() {
         if (window.lucide) window.lucide.createIcons();
@@ -104,7 +144,8 @@ function initGlobalSearch() {
                 // user is currently typing with stale ones for what they
                 // typed a moment ago.
                 if (requestId !== currentRequestId) return;
-                renderResults(data);
+                lastServerData = data;
+                renderResults({ pages: matchPages(query), ...data });
             })
             .catch(() => {
                 if (requestId !== currentRequestId) return;
@@ -124,12 +165,21 @@ function initGlobalSearch() {
             return;
         }
 
+        // Pages need no network round trip, so they render on every
+        // keystroke rather than waiting on the same 200ms debounce the
+        // DB-backed groups below still use -- merged with whichever
+        // server data is still on hand from the last resolved fetch,
+        // same "stays put until the new one lands" staleness the
+        // debounce already implied before Pages existed.
+        renderResults({ pages: matchPages(query), ...lastServerData });
+
         debounceTimer = setTimeout(() => runSearch(query), 200);
     }
 
     function openSearch() {
         backdrop.hidden = false;
         input.value = "";
+        lastServerData = { notes: [], transactions: [], scenarios: [], events: [] };
         resultsEl.innerHTML = EMPTY_HTML;
         resultLinks = [];
         activeIndex = -1;

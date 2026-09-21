@@ -719,21 +719,21 @@
         </div>
 
         <!-- GLOBAL SEARCH -->
-        <div id="global-search-backdrop" class="global-search-backdrop" hidden>
+        <div id="global-search-backdrop" class="global-search-backdrop" hidden data-is-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin else 'false' }}">
             <div class="global-search-modal" role="dialog" aria-modal="true" aria-label="Search">
                 <div class="global-search-input-row">
                     <i data-lucide="search" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:var(--text-muted); flex-shrink:0;"></i>
                     <input
                         type="text"
                         id="global-search-input"
-                        placeholder="Search notes, transactions, scenarios, events..."
+                        placeholder="Search or jump to a page..."
                         autocomplete="off"
                         spellcheck="false"
                     >
                     <span class="global-search-esc-hint">Esc</span>
                 </div>
                 <div id="global-search-results" class="global-search-results scrollbar-thin">
-                    <p class="global-search-empty">Type to search your notes, transactions, scenarios, and events.</p>
+                    <p class="global-search-empty">Type to search your notes, transactions, scenarios, events, or jump to a page.</p>
                 </div>
             </div>
         </div>
