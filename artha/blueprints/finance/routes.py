@@ -1262,6 +1262,11 @@ def finance_page():
         categories=TRANSACTION_CATEGORIES,
         available_years=available_years,
         available_months=available_months,
+        # All-time, not scoped to the selected month -- the "Categorize
+        # with AI" action (same row as Import statement/Export CSV)
+        # catches up a user's whole history in one click, not just what
+        # happens to be showing right now.
+        uncategorized_count=sum(1 for t in all_tx if t.category is None),
     )
 
 
@@ -2210,6 +2215,68 @@ def _fill_uncategorized_via_ai(rows: list[dict]) -> None:
     for i, category in zip(uncategorized_idx, result.get("categories", [])):
         if category is not None:
             rows[i]["category"] = category
+
+
+# A single click's worth of AI categorization work, bounded the same way
+# a pathologically long bank statement already is (_CATEGORIZE_MAX_ITEMS
+# per call) -- capped at a few calls' worth per request so one click
+# can't tie up a worker indefinitely for an account with an unusually
+# large uncategorized backlog. Any remainder is picked up by clicking
+# the button again, same as it would be on the next add/import anyway.
+_BULK_CATEGORIZE_MAX_AI_BATCHES = 3
+
+
+@finance_bp.route("/finance/categorize_uncategorized", methods=["POST"])
+@login_required
+def categorize_uncategorized():
+    """
+    Retroactive version of the same auto-categorization add_transaction()
+    now applies to every new row: every transaction this user already has
+    sitting at category=None gets one more pass through the identical
+    two-tier keyword-then-AI logic, so catching up a backlog of history
+    never means hand-editing rows one at a time. Never touches a
+    transaction that already has a category, however that category got
+    there.
+    """
+    uid = current_user.id
+    uncategorized = Transaction.query.filter_by(user_id=uid, category=None).all()
+    if not uncategorized:
+        return jsonify({"categorized": 0, "remaining": 0, "message": "Nothing to categorize."})
+
+    keyword_hits = 0
+    ai_candidates: list[tuple[Transaction, dict]] = []
+    for tx in uncategorized:
+        guess = _guess_category(tx.description, tx.type)
+        if guess is not None:
+            tx.category = guess
+            keyword_hits += 1
+        elif tx.type == "expense":
+            ai_candidates.append((tx, {"type": tx.type, "description": tx.description, "category": None}))
+
+    ai_hits = 0
+    batches_run = 0
+    for i in range(0, len(ai_candidates), _CATEGORIZE_MAX_ITEMS):
+        if batches_run >= _BULK_CATEGORIZE_MAX_AI_BATCHES:
+            break
+        chunk = ai_candidates[i:i + _CATEGORIZE_MAX_ITEMS]
+        _fill_uncategorized_via_ai([row for _, row in chunk])
+        for tx, row in chunk:
+            if row["category"] is not None:
+                tx.category = row["category"]
+                ai_hits += 1
+        batches_run += 1
+
+    db.session.commit()
+
+    total = keyword_hits + ai_hits
+    remaining = len(uncategorized) - total
+    if total == 0:
+        message = "Couldn't confidently categorize any of them."
+    elif remaining > 0:
+        message = f"Categorized {total}, {remaining} left. Click again to continue."
+    else:
+        message = f"Categorized {total} transaction{'s' if total != 1 else ''}."
+    return jsonify({"categorized": total, "remaining": remaining, "message": message})
 
 
 @finance_bp.route("/finance/export")

@@ -275,6 +275,12 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
                 Export CSV
             </a>
+            {% if uncategorized_count > 0 %}
+                <button type="button" id="categorize-uncategorized-btn" class="fp-inline-link" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; background:none; border:none; padding:0; cursor:pointer; font-family:inherit;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5l-2 2m-9 9l-2 2m0-13l2 2m9 9l2 2"/></svg>
+                    <span id="categorize-uncategorized-label">Categorize {{ uncategorized_count }} with AI</span>
+                </button>
+            {% endif %}
         </div>
     </div>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:20px; align-items:center;">

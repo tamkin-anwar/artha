@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from artha.extensions import db
 from artha.models import Transaction
+from tests.conftest import make_user
 
 AJAX_HEADERS = {"X-Requested-With": "XMLHttpRequest"}
 
@@ -102,6 +103,70 @@ def test_update_transaction_empty_category_clears_it(auth_client, user):
     assert resp.status_code == 200
     db.session.refresh(tx)
     assert tx.category is None
+
+
+def test_categorize_uncategorized_guesses_from_keywords(auth_client, user):
+    coffee = _add_tx(user, description="Coffee", category=None)
+    rent = _add_tx(user, description="Rent", category=None)
+    already_set = _add_tx(user, description="Groceries run", category="groceries")
+
+    resp = auth_client.post("/finance/categorize_uncategorized")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["categorized"] == 2
+
+    db.session.refresh(coffee)
+    db.session.refresh(rent)
+    db.session.refresh(already_set)
+    assert coffee.category == "dining"
+    assert rent.category == "housing"
+    # Never overwrites a category that was already set, whatever it is.
+    assert already_set.category == "groceries"
+
+
+def test_categorize_uncategorized_with_nothing_to_do(auth_client, user):
+    _add_tx(user, description="Dinner", category="dining")
+
+    resp = auth_client.post("/finance/categorize_uncategorized")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data == {"categorized": 0, "remaining": 0, "message": "Nothing to categorize."}
+
+
+def test_categorize_uncategorized_leaves_unguessable_rows_alone(auth_client, user):
+    # No keyword match, and no ANTHROPIC_API_KEY in tests -- the AI
+    # fallback degrades to None exactly like it does for a single add.
+    tx = _add_tx(user, description="xyzzy plugh 42", category=None)
+
+    resp = auth_client.post("/finance/categorize_uncategorized")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["categorized"] == 0
+    assert data["remaining"] == 1
+
+    db.session.refresh(tx)
+    assert tx.category is None
+
+
+def test_categorize_uncategorized_only_touches_current_users_own_transactions(auth_client, user):
+    other = make_user(username="bob")
+    others_tx = Transaction(
+        description="Coffee",
+        amount=Decimal("4.50"),
+        type="expense",
+        user_id=other.id,
+        timestamp=datetime.now(timezone.utc),
+        category=None,
+    )
+    db.session.add(others_tx)
+    db.session.commit()
+
+    resp = auth_client.post("/finance/categorize_uncategorized")
+    assert resp.status_code == 200
+    assert resp.get_json()["categorized"] == 0
+
+    db.session.refresh(others_tx)
+    assert others_tx.category is None
 
 
 def test_undo_delete_restores_category(auth_client, user):

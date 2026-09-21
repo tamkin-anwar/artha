@@ -849,6 +849,66 @@ function applyAllTransactionDatasets() {
     });
 }
 
+// The bulk "Categorize N with AI" action next to Import statement/Export
+// CSV (templates/finance.html) -- a retroactive pass of the exact same
+// keyword-then-AI logic add_transaction() now runs on every new row,
+// applied to whatever's already sitting uncategorized. A simple confirm
+// keeps this consistent with every other AI-driven write in the app
+// requiring an explicit user action first, even though the only thing
+// it can ever do is fill in a currently-empty field.
+function attachCategorizeUncategorizedListener() {
+    const btn = document.getElementById("categorize-uncategorized-btn");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+
+    btn.addEventListener("click", async () => {
+        const label = document.getElementById("categorize-uncategorized-label");
+        const originalText = label ? label.textContent : "";
+        const count = originalText.match(/\d+/)?.[0] || "these";
+
+        if (!window.confirm(`Categorize ${count} uncategorized transactions using AI? This only fills in transactions with no category set.`)) {
+            return;
+        }
+
+        btn.disabled = true;
+        if (label) label.textContent = "Categorizing…";
+
+        try {
+            const res = await fetch("/finance/categorize_uncategorized", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: csrfHeaders(),
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                showToast(data?.message || "Could not categorize transactions", "error");
+                btn.disabled = false;
+                if (label) label.textContent = originalText;
+                return;
+            }
+
+            showToast(data.message || "Done.", "success");
+            if (data.categorized > 0) {
+                // Category touches the row list, the category-budget
+                // breakdown, and "Biggest Expense Category" all at once --
+                // a full reload is the same proven approach the currency
+                // switcher already uses for a change this broad, rather
+                // than hand-patching every affected section in place.
+                window.location.reload();
+            } else {
+                btn.disabled = false;
+                if (label) label.textContent = originalText;
+            }
+        } catch (err) {
+            console.error("Network error during bulk categorization:", err);
+            showToast("Network error while categorizing transactions", "error");
+            btn.disabled = false;
+            if (label) label.textContent = originalText;
+        }
+    });
+}
+
 function initTransactions() {
     const list = document.getElementById("tx-list");
     if (!list) return;
@@ -870,6 +930,8 @@ function initTransactions() {
     if (dateInput) {
         dateInput.value = new Date().toISOString().split("T")[0];
     }
+
+    attachCategorizeUncategorizedListener();
 
     updateSummaryUI();
 
