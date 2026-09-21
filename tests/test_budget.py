@@ -88,17 +88,12 @@ def test_finance_page_shows_over_tier_past_cap(auth_client, user):
     assert b"over budget" in resp.data
 
 
-def test_dashboard_banner_shows_quiet_on_track_state_under_threshold(auth_client, user):
-    # The banner used to be hidden entirely under the warning threshold --
-    # now it shows a quiet "on track" state instead, so the dashboard
-    # always has some budget context rather than only speaking up when
-    # something's wrong.
+def test_dashboard_banner_hidden_when_under_threshold(auth_client, user):
     _add_expense(user, "100")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
-    body = auth_client.get("/").get_data(as_text=True)
-    assert "on track" in body
-    assert "over your" not in body
+    resp = auth_client.get("/")
+    assert b"monthly budget" not in resp.data
 
 
 def test_dashboard_banner_shown_when_over_cap(auth_client, user):
