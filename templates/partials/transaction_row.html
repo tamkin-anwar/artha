@@ -76,8 +76,8 @@
         <select data-id="{{ tx.id }}"
                 class="tx-type min-w-[96px] sm:w-[105px] h-9 field-input"
                 style="font-size:13px; padding:0 8px;">
-            <option value="income" {% if tx.type == "income" %}selected{% endif %}>Income</option>
             <option value="expense" {% if tx.type == "expense" %}selected{% endif %}>Expense</option>
+            <option value="income" {% if tx.type == "income" %}selected{% endif %}>Income</option>
         </select>
 
         <select data-id="{{ tx.id }}"

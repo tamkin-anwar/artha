@@ -15,7 +15,7 @@ from ...extensions import db
 from ...models import Note, Transaction, Event, EventException, User
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
-from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, CURRENCY_SYMBOLS
+from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, is_ajax_request, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES
 from . import dashboard_bp
 
@@ -37,29 +37,40 @@ def healthz():
 def index():
     if request.method == "POST":
         note_content = request.form.get("note", "").strip()
-        if note_content:
-            max_pos = (
-                db.session.query(func.max(Note.position))
-                .filter_by(user_id=current_user.id)
-                .scalar()
-                or 0
-            )
-            derived_title, preview = derive_title_and_preview(note_content)
-            new_note = Note(
-                title=derived_title,
-                content=note_content,
-                preview=preview,
-                user_id=current_user.id,
-                position=int(max_pos) + 1,
-            )
-            try:
-                db.session.add(new_note)
-                db.session.commit()
-                flash("Note added!", "success")
-            except Exception as e:
-                db.session.rollback()
-                log.error("Error adding note: %s", e, exc_info=True)
-                flash("Error adding note", "error")
+        if not note_content:
+            msg = "Note content is required."
+            if is_ajax_request():
+                return jsonify({"message": msg}), 400
+            flash(msg, "error")
+            return redirect(url_for("dashboard.index"))
+
+        max_pos = (
+            db.session.query(func.max(Note.position))
+            .filter_by(user_id=current_user.id)
+            .scalar()
+            or 0
+        )
+        derived_title, preview = derive_title_and_preview(note_content)
+        new_note = Note(
+            title=derived_title,
+            content=note_content,
+            preview=preview,
+            user_id=current_user.id,
+            position=int(max_pos) + 1,
+        )
+        try:
+            db.session.add(new_note)
+            db.session.commit()
+            if is_ajax_request():
+                return jsonify({"message": "Note added!"})
+            flash("Note added!", "success")
+        except Exception as e:
+            db.session.rollback()
+            log.error("Error adding note: %s", e, exc_info=True)
+            msg = "Error adding note"
+            if is_ajax_request():
+                return jsonify({"message": msg}), 500
+            flash(msg, "error")
         return redirect(url_for("dashboard.index"))
 
     uid = current_user.id

@@ -289,6 +289,7 @@
                 <span class="eyebrow">Notes</span>
                 <a href="{{ url_for('notes.notes_page') }}" style="font-size:12px; color:var(--gold); text-decoration:none;">View all →</a>
             </div>
+            <div id="dashboard-notes-panel">
             {% set recent_notes = notes|sort(attribute='id', reverse=true) %}
             {% if recent_notes %}
                 <div style="display:flex; flex-direction:column; gap:2px;">
@@ -303,6 +304,7 @@
             {% else %}
                 <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No notes yet.</p>
             {% endif %}
+            </div>
         </div>
     </div>
 
@@ -434,7 +436,40 @@
                     eventSubmitBtn.disabled = false;
                     return;
                 }
-                window.location.reload();
+
+                showToast("Event added!", "success", 1500);
+
+                // Same in-place refresh as Transaction/Note above, not the
+                // full reload this used to do -- only Today's panel and the
+                // greeting's one-line summary can change from adding an
+                // event (see dashboard_summary's "N events today" clause),
+                // so those are the only two pulled from a fresh fetch.
+                const freshRes = await fetch(window.location.pathname + window.location.search, {
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    cache: "no-store",
+                });
+                if (freshRes.ok) {
+                    const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
+                    ["dashboard-today-panel", "dashboard-summary-line"].forEach((id) => {
+                        const freshEl = freshDoc.getElementById(id);
+                        const liveEl = document.getElementById(id);
+                        if (freshEl && liveEl) liveEl.innerHTML = freshEl.innerHTML;
+                    });
+                    if (window.lucide) window.lucide.createIcons();
+                }
+
+                // Reset to the same sensible next-15-minute-mark default the
+                // form opened with, rather than leaving it on whatever was
+                // just submitted.
+                const defaultStart = new Date();
+                defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
+                const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
+                eventTitleInput.value = "";
+                eventDateInput.value = toDateInputValue(defaultStart);
+                eventStartInput.value = toTimeInputValue(defaultStart);
+                eventEndInput.value = toTimeInputValue(defaultEnd);
+                eventSubmitBtn.disabled = false;
             } catch {
                 showToast("Network error. Check your connection.", "error");
                 eventSubmitBtn.disabled = false;
@@ -443,11 +478,18 @@
 
         if (eventSubmitBtn) {
             eventSubmitBtn.addEventListener("click", submitQuickEvent);
-            eventTitleInput.addEventListener("keydown", (e) => {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    submitQuickEvent();
-                }
+            // This widget is a plain <div>, not a <form> (its fields need
+            // individually-controlled JS validation, see the end-after-
+            // start check above), so Enter never submits it for free the
+            // way a real form would -- wired to every field, not just
+            // Title, so finishing on any one of them behaves the same way.
+            [eventTitleInput, eventDateInput, eventStartInput, eventEndInput].forEach((input) => {
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitQuickEvent();
+                    }
+                });
             });
         }
 
@@ -525,6 +567,56 @@
                 } catch (err) {
                     console.error("Error adding transaction:", err);
                     showToast("Network error while adding transaction", "error");
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
+                }
+            });
+        }
+
+        // Same in-place-update shape as the transaction handler above,
+        // rather than the plain form submit (full page reload + browser
+        // flash message) this used to fall back to -- the only other tab
+        // in this same quick-add card that still worked that way.
+        const quickAddNoteForm = document.getElementById("quick-add-note");
+        if (quickAddNoteForm) {
+            quickAddNoteForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const submitBtn = quickAddNoteForm.querySelector('button[type="submit"]');
+                const noteInput = quickAddNoteForm.querySelector('input[name="note"]');
+                const formData = new FormData(quickAddNoteForm);
+
+                if (submitBtn) submitBtn.disabled = true;
+                try {
+                    const res = await fetch(quickAddNoteForm.action, {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": getCsrfToken() },
+                        body: formData,
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        showToast(data.message || "Error adding note", "error");
+                        return;
+                    }
+
+                    showToast("Note added!", "success", 1500);
+
+                    const freshRes = await fetch(window.location.pathname + window.location.search, {
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                        cache: "no-store",
+                    });
+                    if (freshRes.ok) {
+                        const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
+                        const freshEl = freshDoc.getElementById("dashboard-notes-panel");
+                        const liveEl = document.getElementById("dashboard-notes-panel");
+                        if (freshEl && liveEl) liveEl.innerHTML = freshEl.innerHTML;
+                    }
+
+                    if (noteInput) noteInput.value = "";
+                } catch (err) {
+                    console.error("Error adding note:", err);
+                    showToast("Network error while adding note", "error");
                 } finally {
                     if (submitBtn) submitBtn.disabled = false;
                 }
