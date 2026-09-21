@@ -1011,6 +1011,19 @@ def finance_page():
     month_param = (request.args.get("month") or "").strip()
     all_time = month_param == "all"
 
+    # Which top-level tab renders active/visible server-side -- only
+    # Overview and Transactions are server-rendered (every other tab
+    # starts hidden and is filled in by AJAX once clicked, see
+    # fpLoadBreakdown in finance.html), so those are the only two values
+    # that matter here. Defaults to Overview on a fresh visit, but the
+    # Transactions pane's own month links (and the "Categorize with AI"
+    # reload) carry ?tab=transactions specifically so clicking a month
+    # while already on Transactions doesn't silently bounce back to
+    # Overview on the resulting full-page reload.
+    active_tab = request.args.get("tab") or "overview"
+    if active_tab not in ("overview", "transactions"):
+        active_tab = "overview"
+
     if not all_time and month_param:
         try:
             sel_year, sel_month = (int(part) for part in month_param.split("-", 1))
@@ -1234,6 +1247,7 @@ def finance_page():
     return render_template(
         "finance.html",
         transactions=transactions,
+        active_tab=active_tab,
         income=float(income),
         expense=float(expense),
         balance=float(balance),

@@ -19,8 +19,8 @@
 <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
 
 <div class="fp-toptabs scrollbar-hidden" role="tablist" aria-label="Finance views">
-    <button type="button" id="fp-tab-overview" class="fp-toptab fp-toptab-active" data-fp-tab="overview" role="tab" aria-selected="true" aria-controls="fp-pane-overview" tabindex="0">Overview</button>
-    <button type="button" id="fp-tab-transactions" class="fp-toptab" data-fp-tab="transactions" role="tab" aria-selected="false" aria-controls="fp-pane-transactions" tabindex="-1">Transactions</button>
+    <button type="button" id="fp-tab-overview" class="fp-toptab {{ 'fp-toptab-active' if active_tab == 'overview' }}" data-fp-tab="overview" role="tab" aria-selected="{{ 'true' if active_tab == 'overview' else 'false' }}" aria-controls="fp-pane-overview" tabindex="{{ '0' if active_tab == 'overview' else '-1' }}">Overview</button>
+    <button type="button" id="fp-tab-transactions" class="fp-toptab {{ 'fp-toptab-active' if active_tab == 'transactions' }}" data-fp-tab="transactions" role="tab" aria-selected="{{ 'true' if active_tab == 'transactions' else 'false' }}" aria-controls="fp-pane-transactions" tabindex="{{ '0' if active_tab == 'transactions' else '-1' }}">Transactions</button>
     <button type="button" id="fp-tab-spending" class="fp-toptab" data-fp-tab="spending" role="tab" aria-selected="false" aria-controls="fp-pane-spending" tabindex="-1">Spending</button>
     <button type="button" id="fp-tab-income" class="fp-toptab" data-fp-tab="income" role="tab" aria-selected="false" aria-controls="fp-pane-income" tabindex="-1">Income</button>
     <button type="button" id="fp-tab-cashflow" class="fp-toptab" data-fp-tab="cashflow" role="tab" aria-selected="false" aria-controls="fp-pane-cashflow" tabindex="-1">Cash Flow</button>
@@ -32,8 +32,12 @@
      crowd the top of the transaction list. Given its own tab so
      Transactions can stay a lean list-only view; this pane is
      server-rendered up front just like Transactions, never AJAX-fetched
-     (see fpTabPanes/fpActivateTab below). -->
-<div id="fp-pane-overview" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-overview">
+     (see fpTabPanes/fpActivateTab below). Which of these two panes
+     starts visible is driven by ?tab= (active_tab, see finance_page())
+     rather than always defaulting to Overview -- otherwise any full-page
+     reload triggered from the Transactions tab (a month link, the
+     Categorize-with-AI reload) would silently bounce back to Overview. -->
+<div id="fp-pane-overview" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-overview" {{ '' if active_tab == 'overview' else 'hidden' }}>
 
 <!-- Monthly budget -- the clearest single "where do I stand" number
      (spent vs. cap, one glance), so it leads the Overview tab; the
@@ -240,7 +244,7 @@
 </div>
 <!-- /fp-pane-overview -->
 
-<div id="fp-pane-transactions" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-transactions" hidden>
+<div id="fp-pane-transactions" class="fp-tabpane" role="tabpanel" aria-labelledby="fp-tab-transactions" {{ '' if active_tab == 'transactions' else 'hidden' }}>
 <!-- Month selector -->
 <div class="glass-card" style="padding:12px 14px; margin-bottom:20px; display:flex; align-items:center; gap:8px;">
     <button type="button" id="month-scroll-left" aria-label="Scroll months left" style="background:none; border:none; color:var(--text-secondary); font-size:16px; cursor:pointer; flex-shrink:0; padding:4px;">
@@ -249,14 +253,14 @@
 
     <div id="month-tab-row" class="month-tab-row scrollbar-hidden" style="display:flex; gap:6px; overflow-x:auto; flex:1;">
         <a
-            href="{{ url_for('finance.finance_page', month='all') }}"
+            href="{{ url_for('finance.finance_page', month='all', tab='transactions') }}"
             class="month-tab-pill {{ 'month-tab-active' if all_time }}"
         >
             All time
         </a>
         {% for m in month_tabs %}
             <a
-                href="{{ url_for('finance.finance_page', month=m.value) }}"
+                href="{{ url_for('finance.finance_page', month=m.value, tab='transactions') }}"
                 class="month-tab-pill {{ 'month-tab-active' if (not all_time and m.value == selected_month_value) }}"
                 data-month="{{ m.value }}"
             >
@@ -1856,6 +1860,22 @@ var fpTabPanes = {
     recurring: fpPane("recurring"),
 };
 
+// Only Overview and Transactions are server-rendered (every other tab
+// starts hidden and is filled in by AJAX), so those are the only two
+// values finance_page() reads back from ?tab= -- keeping the URL in
+// sync with whichever of the two is showing means a later full-page
+// reload triggered *from* Transactions (a month link, the
+// Categorize-with-AI reload below) lands back on Transactions instead
+// of silently bouncing to Overview's default. replaceState (not
+// pushState) so switching tabs client-side doesn't spam the browser's
+// back/forward history with one entry per tab click.
+function fpSyncTabInUrl(target) {
+    if (target !== "overview" && target !== "transactions") return;
+    var url = new URL(window.location.href);
+    url.searchParams.set("tab", target);
+    history.replaceState(null, "", url);
+}
+
 function fpActivateTab(btn, focus) {
     var target = btn.dataset.fpTab;
     fpTopTabs.forEach(function (b) {
@@ -1878,6 +1898,15 @@ function fpActivateTab(btn, focus) {
     if (target !== "transactions" && target !== "overview" && !fpLoadedViews[target]) {
         fpLoadedViews[target] = true;
         fpLoadBreakdown(target);
+    }
+    fpSyncTabInUrl(target);
+    // The month-tab-row's own scroll-to-current-month effect (below)
+    // runs once at parse time, which is a no-op when Transactions starts
+    // `hidden` (an element inside a display:none container has nothing
+    // to scroll) -- re-run it now that the pane is actually visible, the
+    // same "measure only once visible" fix Chart.js panes already need.
+    if (target === "transactions" && typeof scrollMonthRowToActive === "function") {
+        scrollMonthRowToActive();
     }
 }
 
@@ -1934,16 +1963,26 @@ if (scrollRow && leftBtn && rightBtn) {
     rightBtn.addEventListener("click", function () {
         scrollRow.scrollBy({ left: 220, behavior: "smooth" });
     });
-    // Land on the selected tab, not the start of the row. "nearest" (not
-    // "center") because the selected tab is usually the current month —
-    // i.e. the last one in the row — and centering an edge item against a
-    // narrow mobile viewport has nothing to center against on one side,
-    // leaving the tab itself clipped instead of just scrolled into view.
+}
+
+// Land on the selected tab, not the start of the row. "nearest" (not
+// "center") because the selected tab is usually the current month — i.e.
+// the last one in the row — and centering an edge item against a narrow
+// mobile viewport has nothing to center against on one side, leaving the
+// tab itself clipped instead of just scrolled into view. A function
+// declaration (hoisted, unlike a `var ... = function`) so fpActivateTab
+// above can call it regardless of script order -- it's a no-op here at
+// parse time when the Transactions pane starts `hidden` (nothing to
+// scroll inside display:none), so fpActivateTab re-runs it the moment
+// the pane actually becomes visible.
+function scrollMonthRowToActive() {
+    if (!scrollRow) return;
     var activeTab = scrollRow.querySelector(".month-tab-active");
     if (activeTab) {
         activeTab.scrollIntoView({ inline: "nearest", block: "nearest" });
     }
 }
+scrollMonthRowToActive();
 
 // Delegated on document (not bound to the button directly) because
 // #fp-recurring-count's subtree gets replaced via innerHTML by
