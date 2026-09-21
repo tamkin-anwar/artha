@@ -608,6 +608,23 @@ function attachRowListeners(row) {
         });
     }
 
+    const categoryLabel = row.querySelector(".tx-category-label");
+    if (categoryLabel) {
+        categoryLabel.addEventListener("click", () => {
+            // The category <select> is hidden until the row's edit form
+            // has focus-within (see transaction_row.html's <style>) -- a
+            // plain click on this button doesn't reliably grant it focus
+            // in every browser (Safari doesn't focus a <button> on click
+            // the way Chrome/Firefox do), so this focuses the description
+            // span explicitly first, the same trigger clicking into the
+            // description itself already uses, then hands focus on to the
+            // select once it's visible so the click both reveals *and*
+            // opens it in one step instead of requiring a second click.
+            if (desc) desc.focus();
+            if (categorySelect) categorySelect.focus();
+        });
+    }
+
     const recurrenceInterval = row.querySelector(".tx-recurrence-interval");
     if (recurrenceInterval) {
         recurrenceInterval.addEventListener("change", (e) => {
