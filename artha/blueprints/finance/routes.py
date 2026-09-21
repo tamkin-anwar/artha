@@ -2217,13 +2217,24 @@ def _fill_uncategorized_via_ai(rows: list[dict]) -> None:
             rows[i]["category"] = category
 
 
-# A single click's worth of AI categorization work, bounded the same way
-# a pathologically long bank statement already is (_CATEGORIZE_MAX_ITEMS
-# per call) -- capped at a few calls' worth per request so one click
-# can't tie up a worker indefinitely for an account with an unusually
-# large uncategorized backlog. Any remainder is picked up by clicking
-# the button again, same as it would be on the next add/import anyway.
-_BULK_CATEGORIZE_MAX_AI_BATCHES = 3
+# Deliberately much smaller than import's own _CATEGORIZE_MAX_ITEMS
+# (200): the model is asked to return one category per description, in
+# the same order, and categorize_transactions() throws the *entire*
+# response away the moment that count doesn't line up exactly (safer
+# than risking a silently-misaligned answer) -- import rarely has
+# enough uncategorized rows in one statement to ever hit that ceiling,
+# but a real backlog easily does, and at 200 items a single dropped or
+# duplicated entry in the model's own output loses the whole batch, not
+# just one row. A smaller batch is both less likely to misalign at all
+# and caps the damage to a few rows when it does.
+_BULK_CATEGORIZE_BATCH_SIZE = 40
+# 10 * 40 = 400 per click -- smaller than the old 3 * 200 = 600 ceiling,
+# trading a bit of per-click coverage for keeping worst-case request
+# time (up to 10 sequential AI calls) further from whatever timeout the
+# hosting platform's own reverse proxy enforces. A backlog bigger than
+# 400 just takes one more click, same as any other remainder already
+# does.
+_BULK_CATEGORIZE_MAX_AI_BATCHES = 10
 
 
 @finance_bp.route("/finance/categorize_uncategorized", methods=["POST"])
@@ -2244,33 +2255,54 @@ def categorize_uncategorized():
         return jsonify({"categorized": 0, "remaining": 0, "message": "Nothing to categorize."})
 
     keyword_hits = 0
-    ai_candidates: list[tuple[Transaction, dict]] = []
+    ai_candidates: list[Transaction] = []
     for tx in uncategorized:
         guess = _guess_category(tx.description, tx.type)
         if guess is not None:
             tx.category = guess
             keyword_hits += 1
         elif tx.type == "expense":
-            ai_candidates.append((tx, {"type": tx.type, "description": tx.description, "category": None}))
+            ai_candidates.append(tx)
+
+    # Committed here, before a single AI call -- the free keyword pass
+    # must never be lost to a later AI batch failing, which is exactly
+    # what a single commit at the very end used to risk.
+    db.session.commit()
 
     ai_hits = 0
+    ai_failures = 0
     batches_run = 0
-    for i in range(0, len(ai_candidates), _CATEGORIZE_MAX_ITEMS):
+    for i in range(0, len(ai_candidates), _BULK_CATEGORIZE_BATCH_SIZE):
         if batches_run >= _BULK_CATEGORIZE_MAX_AI_BATCHES:
             break
-        chunk = ai_candidates[i:i + _CATEGORIZE_MAX_ITEMS]
-        _fill_uncategorized_via_ai([row for _, row in chunk])
-        for tx, row in chunk:
+        chunk = ai_candidates[i:i + _BULK_CATEGORIZE_BATCH_SIZE]
+        rows = [{"type": tx.type, "description": tx.description, "category": None} for tx in chunk]
+        try:
+            _fill_uncategorized_via_ai(rows)
+        except Exception as exc:  # noqa: BLE001 - one bad batch must not sink the rest
+            log.error("Bulk AI categorization batch failed: %s", exc, exc_info=True)
+            ai_failures += 1
+            batches_run += 1
+            continue
+
+        batch_hits = 0
+        for tx, row in zip(chunk, rows):
             if row["category"] is not None:
                 tx.category = row["category"]
-                ai_hits += 1
+                batch_hits += 1
+        if batch_hits:
+            # Committed per batch, not once at the end -- a later batch
+            # throwing (network blip, a malformed response) must never
+            # roll back categories an earlier batch already found.
+            db.session.commit()
+        ai_hits += batch_hits
         batches_run += 1
-
-    db.session.commit()
 
     total = keyword_hits + ai_hits
     remaining = len(uncategorized) - total
-    if total == 0:
+    if total == 0 and ai_failures > 0:
+        message = "AI categorization is having trouble right now. Try again in a moment."
+    elif total == 0:
         message = "Couldn't confidently categorize any of them."
     elif remaining > 0:
         message = f"Categorized {total}, {remaining} left. Click again to continue."

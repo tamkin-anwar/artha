@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from artha.extensions import db
 from artha.models import Transaction
@@ -167,6 +169,97 @@ def test_categorize_uncategorized_only_touches_current_users_own_transactions(au
 
     db.session.refresh(others_tx)
     assert others_tx.category is None
+
+
+def test_categorize_uncategorized_keeps_keyword_hits_even_if_ai_batch_fails(auth_client, user):
+    # "Coffee" resolves for free via the keyword list; "Some Merchant"
+    # has no keyword match and needs the AI fallback. Committing the
+    # keyword pass before any AI call runs (see categorize_uncategorized)
+    # means an AI failure must never cost the free win alongside it --
+    # that's exactly the bug reported live: a whole backlog stuck at the
+    # same count click after click because one failing batch discarded
+    # everything, keyword hits included.
+    coffee = _add_tx(user, description="Coffee", category=None)
+    needs_ai = _add_tx(user, description="Some Merchant", category=None)
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.side_effect = RuntimeError("boom")
+        resp = auth_client.post("/finance/categorize_uncategorized")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["categorized"] == 1
+    assert data["remaining"] == 1
+
+    db.session.refresh(coffee)
+    db.session.refresh(needs_ai)
+    assert coffee.category == "dining"
+    assert needs_ai.category is None
+
+
+def test_categorize_uncategorized_uses_ai_for_what_keywords_miss(auth_client, user):
+    tx = _add_tx(user, description="Some Merchant", category=None)
+
+    def route_by_tool(**kwargs):
+        assert kwargs["tool_choice"]["name"] == "assign_categories"
+        return SimpleNamespace(
+            content=[SimpleNamespace(
+                type="tool_use", name="assign_categories",
+                input={"categories": ["shopping"]},
+            )],
+            usage=SimpleNamespace(input_tokens=20, output_tokens=5),
+        )
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.side_effect = route_by_tool
+        resp = auth_client.post("/finance/categorize_uncategorized")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["categorized"] == 1
+    assert data["remaining"] == 0
+
+    db.session.refresh(tx)
+    assert tx.category == "shopping"
+
+
+def test_categorize_uncategorized_one_bad_ai_batch_does_not_lose_an_earlier_good_one(auth_client, user):
+    # Force two AI batches (_BULK_CATEGORIZE_BATCH_SIZE=40): the first
+    # call succeeds, the second raises. The first batch's results must
+    # survive that -- each batch commits on its own, not one commit at
+    # the very end that a later failure would roll back.
+    first_batch = [_add_tx(user, description=f"Merchant A{i}", category=None) for i in range(40)]
+    second_batch = [_add_tx(user, description=f"Merchant B{i}", category=None) for i in range(5)]
+
+    call_count = {"n": 0}
+
+    def route_by_tool(**kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return SimpleNamespace(
+                content=[SimpleNamespace(
+                    type="tool_use", name="assign_categories",
+                    input={"categories": ["shopping"] * 40},
+                )],
+                usage=SimpleNamespace(input_tokens=100, output_tokens=40),
+            )
+        raise RuntimeError("second batch network blip")
+
+    with patch("artha.services.ai_service._get_client") as mock_get_client:
+        mock_get_client.return_value.messages.create.side_effect = route_by_tool
+        resp = auth_client.post("/finance/categorize_uncategorized")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["categorized"] == 40
+    assert data["remaining"] == 5
+
+    for tx in first_batch:
+        db.session.refresh(tx)
+        assert tx.category == "shopping"
+    for tx in second_batch:
+        db.session.refresh(tx)
+        assert tx.category is None
 
 
 def test_undo_delete_restores_category(auth_client, user):
