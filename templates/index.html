@@ -71,15 +71,20 @@
     </div>
 
     <div id="dashboard-budget-banner">
-    {% if budget.has_budget and budget.tier != 'ok' %}
+    {% if budget.has_budget %}
         {% set is_over = budget.tier == 'over' %}
-        <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ 'var(--red-dim)' if is_over else 'var(--gold-dim)' }}; border:1px solid {{ 'var(--red)' if is_over else 'var(--gold)' }}; color:{{ 'var(--red)' if is_over else 'var(--gold)' }}; font-size:13px;">
-            <i data-lucide="{{ 'alert-octagon' if is_over else 'alert-triangle' }}" aria-hidden="true" style="width:16px; height:16px; stroke-width:2; flex-shrink:0;"></i>
+        {% set is_warning = budget.tier == 'warning' %}
+        {% set tier_color = 'var(--red)' if is_over else ('var(--gold)' if is_warning else 'var(--emerald)') %}
+        {% set tier_dim = 'var(--red-dim)' if is_over else ('var(--gold-dim)' if is_warning else 'var(--emerald-dim)') %}
+        <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ tier_dim }}; border:1px solid {{ tier_color }}; color:{{ tier_color }}; font-size:13px;">
+            <i data-lucide="{{ 'alert-octagon' if is_over else ('alert-triangle' if is_warning else 'circle-check') }}" aria-hidden="true" style="width:16px; height:16px; stroke-width:2; flex-shrink:0;"></i>
             <span style="flex:1; min-width:0;">
                 {% if is_over %}
                     You're <span class="dashboard-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
-                {% else %}
+                {% elif is_warning %}
                     You've spent {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
+                {% else %}
+                    You've used {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget, on track.
                 {% endif %}
             </span>
             <a href="{{ url_for('finance.finance_page') }}" style="color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
