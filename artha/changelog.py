@@ -28,6 +28,18 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-09-22",
         "category": "new",
+        "title": "See your real net worth, not just this month's spending",
+        "body": "Add your accounts, checking, savings, credit cards, loans, even an estimated value for a house or car, and Artha tracks your total net worth over time on a new Accounts page and right on the dashboard.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "improved",
+        "title": "Small animation and empty-state polish across the app",
+        "body": "Modals now close with the same smooth motion they open with, and an empty Scenarios list finally has real guidance instead of a bare sentence, part of a wider consistency pass across Notes, Scenarios, and Calendar.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "new",
         "title": "See what's safe to spend, right on your dashboard",
         "body": "A new Safe to Spend figure factors in your budget, what you've spent so far, and any bills still coming due this month, so you know what's actually left to spend, not just what's left in the cap.",
     },
