@@ -1,4 +1,7 @@
+from datetime import date, datetime, timezone
 from decimal import Decimal
+
+import pytest
 
 from artha.extensions import db
 from artha.models import Transaction
@@ -146,3 +149,86 @@ def test_budget_status_warning_tier_at_boundary():
 def test_budget_status_over_tier_at_boundary():
     result = budget_status(Decimal("1000"), Decimal("1000"))
     assert result["tier"] == "over"
+
+
+# --- "Safe to spend" (dashboard) ---
+
+
+def test_dashboard_safe_to_spend_absent_without_a_budget(auth_client, user):
+    _add_expense(user, "100")
+    body = auth_client.get("/").get_data(as_text=True)
+    # ">Safe to Spend<", not the bare phrase -- the template's own HTML
+    # comment above the card mentions "Safe to Spend" too, and that
+    # comment renders regardless of whether the card itself does.
+    assert ">Safe to Spend<" not in body
+
+
+def test_dashboard_safe_to_spend_is_cap_minus_spent_with_no_upcoming_bills(auth_client, user):
+    _add_expense(user, "500")
+    auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
+
+    body = auth_client.get("/").get_data(as_text=True)
+    assert ">Safe to Spend<" in body
+    assert 'data-money-value="1500.0"' in body
+
+
+def test_dashboard_safe_to_spend_nets_out_an_upcoming_recurring_bill(auth_client, user):
+    today = date.today()
+    # A day-of-month that (a) exists in every month, including February,
+    # and (b) is still ahead of today -- lets the "template" transaction
+    # below live in a genuinely different month (so it doesn't also
+    # count toward this month's "spent") while next_due_date() still
+    # resolves it to later *this* month, not skipped as flaky near
+    # month-end instead of using a frozen clock for one date-relative case.
+    target_day = today.day + 1
+    if target_day > 28:
+        pytest.skip("Needs a day-of-month that exists in every month and is still ahead of today.")
+
+    _add_expense(user, "500")
+    auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
+
+    prev_month = today.month - 1 or 12
+    prev_year = today.year if today.month > 1 else today.year - 1
+    upcoming_template = Transaction(
+        description="Upcoming Rent",
+        amount=Decimal("300"),
+        type="expense",
+        user_id=user.id,
+        timestamp=datetime(prev_year, prev_month, target_day, 12, 0, tzinfo=timezone.utc),
+        is_recurring=True,
+    )
+    db.session.add(upcoming_template)
+    db.session.commit()
+
+    body = auth_client.get("/").get_data(as_text=True)
+    # 2000 cap - 500 already spent - 300 upcoming = 1200
+    assert 'data-money-value="1200.0"' in body
+    assert "in upcoming bills" in body
+
+
+def test_dashboard_safe_to_spend_ignores_a_bill_already_posted_this_month(auth_client, user):
+    # A recurring bill whose latest occurrence already landed earlier
+    # this month must not be double-counted -- it's already inside
+    # "spent", and next_due_date() from today should resolve to *next*
+    # month for it, not this one.
+    today = date.today()
+    if today.day < 2:
+        pytest.skip("Needs at least one earlier day this month to date the already-posted bill on.")
+
+    _add_expense(user, "500")
+    auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
+
+    already_posted = Transaction(
+        description="Rent",
+        amount=Decimal("300"),
+        type="expense",
+        user_id=user.id,
+        timestamp=datetime(today.year, today.month, today.day - 1, 12, 0, tzinfo=timezone.utc),
+        is_recurring=True,
+    )
+    db.session.add(already_posted)
+    db.session.commit()
+
+    body = auth_client.get("/").get_data(as_text=True)
+    # 2000 cap - (500 + 300 already spent) - 0 upcoming = 1200, not 900.
+    assert 'data-money-value="1200.0"' in body

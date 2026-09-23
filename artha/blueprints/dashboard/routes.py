@@ -270,6 +270,36 @@ def index():
     )
     budget = budget_status(budget_cap, expense_decimal)
 
+    # ------------------------------------------------------------------
+    # "Safe to spend" -- the YNAB-inspired figure from CLAUDE.md's
+    # Competitive ambition section (Batch 2), done passively: no
+    # methodology to opt into, it just reflects the rest of this
+    # month's budget headroom. Deliberately not just cap-minus-spent
+    # (that's already the existing Monthly Budget bar) -- it also nets
+    # out recurring bills still expected to land before month-end,
+    # reusing templates_by_key (built above for renewals_this_week)
+    # with a wider window: through the last day of the month rather
+    # than the next 7 days. next_due_date() returning a date already
+    # this month but before today would mean that occurrence already
+    # posted (and is therefore already inside `spent`), so it's
+    # naturally excluded here without any extra dedup logic. Only set
+    # when a budget actually exists -- there's no ceiling to be "safe"
+    # against otherwise.
+    # ------------------------------------------------------------------
+    safe_to_spend = None
+    safe_to_spend_upcoming = 0.0
+    if budget["has_budget"]:
+        month_last_day = (month_end - timedelta(days=1)).date()
+        upcoming_usd = Decimal("0")
+        for (desc, ttype), tx in templates_by_key.items():
+            if ttype != "expense":
+                continue
+            due = next_due_date(tx, today)
+            if due is not None and today <= due <= month_last_day:
+                upcoming_usd += tx.value_in_usd
+        safe_to_spend_upcoming = float(convert_usd_to(upcoming_usd, display_currency, rates))
+        safe_to_spend = budget["cap"] - budget["spent"] - safe_to_spend_upcoming
+
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
 
@@ -290,6 +320,8 @@ def index():
         renewals_total=renewals_total,
         dashboard_summary=dashboard_summary,
         budget=budget,
+        safe_to_spend=safe_to_spend,
+        safe_to_spend_upcoming=safe_to_spend_upcoming,
         categories=TRANSACTION_CATEGORIES,
     )
 

@@ -87,6 +87,31 @@
     {% endif %}
     </div>
 
+    <!-- Safe to Spend -- the rest of this month's budget headroom after
+         upcoming recurring bills, not just cap-minus-spent-so-far (that's
+         the existing Monthly Budget bar on Finance). A stat card, not an
+         alert banner, so it reads as a headline figure rather than a
+         warning -- only rendered when a budget actually exists, since
+         there's nothing to be "safe" against otherwise. -->
+    <div id="dashboard-safe-to-spend-panel">
+    {% if safe_to_spend is not none %}
+        <div class="glass-card dashboard-card-in" style="padding:20px; margin-bottom:16px;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <div class="eyebrow" style="margin-bottom:8px;">Safe to Spend</div>
+                    <div class="stat-number dashboard-money {{ 'money-negative' if safe_to_spend < 0 else 'money-gold' }}" style="font-size:32px; font-family:'JetBrains Mono',monospace;" data-money-value="{{ safe_to_spend }}">${{ '%.2f'|format(safe_to_spend) }}</div>
+                </div>
+                <p style="font-size:12px; color:var(--text-secondary); margin:0; text-align:right;">
+                    for the rest of {{ today.strftime('%B') }}
+                    {% if safe_to_spend_upcoming > 0 %}
+                        <br>after <span class="dashboard-money" data-money-value="{{ safe_to_spend_upcoming }}">${{ '%.2f'|format(safe_to_spend_upcoming) }}</span> in upcoming bills
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+    </div>
+
     <!-- Quick add -->
     <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
         <div style="display:flex; gap:8px; margin-bottom:12px;">
@@ -537,6 +562,10 @@
                         [
                             "finance-income", "finance-expense", "finance-balance",
                             "dashboard-tx-count", "dashboard-budget-banner",
+                            // A new/edited transaction (spend, or marking one
+                            // recurring so it now counts as an upcoming bill)
+                            // changes this month's remaining headroom too.
+                            "dashboard-safe-to-spend-panel",
                             // Marking a transaction recurring here can change
                             // what Today/Renewals show (a bill due today or
                             // this week) — without these, checking "recurring"

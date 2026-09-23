@@ -475,7 +475,7 @@
                     autocomplete="off"
                 >
             </div>
-            <select id="tx-category-filter" class="field-input" style="height:36px; font-size:13px; max-width:170px;">
+            <select id="tx-category-filter" class="field-input" style="height:36px; font-size:13px; min-width:150px; max-width:170px; flex-shrink:0;">
                 <option value="">All categories</option>
                 <option value="__uncategorized__">Uncategorized</option>
                 {% for key, meta in categories.items() %}
