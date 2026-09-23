@@ -28,6 +28,91 @@ expenses, shared views) unless explicitly asked; the single-owner data model
 (`Transaction.user_id`, `Note.user_id`, etc.) is the intended product shape,
 not a gap to fix.
 
+## Competitive ambition (added 2026-09-22)
+
+Long-term goal, not a one-off task: Artha should become one of the
+genuinely top personal finance apps, and specifically the most
+beautiful app on iOS — not just the most beautiful *finance* app.
+Judge visual/interaction work against Apple Design Award criteria
+(Interaction: intuitive, effortless controls tailored to the
+platform; Visuals and Graphics: cohesive theme, polished animation),
+not "does this look fine for a budgeting app."
+
+Grounded in researched 2026 user sentiment on the three apps most
+worth learning from — steal what people love, skip what they don't:
+
+- **Copilot Money** — the design bar to chase: typography/motion/
+  color/information-density polish that feels like a native app, not
+  a fintech dashboard; AI categorization that "trains" on the user's
+  own corrections and remembers them per-merchant (Artha's two-tier
+  keyword-then-AI categorizer is the seed of this — extending it to
+  remember a user's own per-merchant corrections, not just the global
+  keyword list, is the natural next step). Avoid its real complaints:
+  iOS-only (alienates the other half of a household — worth
+  remembering given the Swift-app note below), no free tier with a
+  card-required trial that silently auto-converts, weak multi-
+  currency/international support (Artha already has this — protect
+  it, don't regress it chasing Copilot's polish), and "training" the
+  categorizer feeling like unpaid setup work instead of something
+  that happens invisibly in the background.
+- **Monarch Money** — most-loved for being a genuine all-in-one
+  dashboard (net worth trajectory across accounts, not just this
+  month's budget) and for doing couples/shared access well ("two
+  apps for the price of one"). That couples angle directly conflicts
+  with this doc's existing single-owner-by-design rule above — don't
+  silently build toward it; it needs an explicit product decision
+  from Tamkin first, never an assumption. Avoid its complaints:
+  brittle bank-sync (Plaid re-auth breaking on smaller institutions)
+  and a short trial. Artha has no live bank sync at all (manual entry
+  + one-shot statement import) — that's an existing structural
+  immunity to this whole complaint category, not a gap to fix by
+  bolting on fragile sync.
+- **YNAB** — most-loved for genuinely changing behavior (real
+  debt-payoff stories), because it's proactive, not passive. Worth
+  stealing the *spirit* (nudges, a clear "here's what's safe to
+  spend" figure) without the complaints: a steep mandatory learning
+  curve, forced constant active engagement, and "improvements" that
+  added complexity long-time users never asked for. Artha should stay
+  usable passively (quick-add, auto-categorize) while offering deeper
+  engagement as opt-in, never required.
+
+**Platform decision (researched and settled 2026-09-22): the web app
+does not get rewritten or re-platformed to chase "most beautiful."**
+Researched what Copilot and Monarch are actually built with: Copilot
+(the app Tamkin named as the bar) is fully native Swift/UIKit, with
+newer features (Cash Flow) in SwiftUI/Swift Charts — its macOS app is
+the same Swift codebase with a few Mac-specific views swapped in.
+Monarch is React Native + Python/Django — well-regarded, but it's not
+the app people call "the most beautiful," Copilot is. The conclusion
+that follows: Copilot's polish (physics-based animation, native
+gestures, ProMotion-smooth scrolling, haptics, native widgets) comes
+from native platform primitives a browser cannot fully replicate —
+rewriting this Flask/Jinja web app into a different web stack (React
+or otherwise) would not close that gap, since the result is still a
+website in a browser either way. It would also be a real-user-facing
+risk for a live app with ~8-10 people's actual financial data, for a
+reward that doesn't reach the stated goal. Confirmed directly with
+Tamkin after laying out this reasoning — keep the web app on
+Flask/Jinja/vanilla JS, keep polishing it (the batch-based UI/UX work
+already underway), and treat "most beautiful app on iOS" as solved by
+an eventual **separate, additive native Swift/SwiftUI app**, not a
+web rewrite. That native app is still "someday maybe," not scheduled —
+see the build-plan memory below for what to do differently once it
+actually starts.
+
+**When the native Swift app project actually starts**, do not
+re-research or re-litigate this decision — go straight to building
+per [[project_artha_competitive_ambition]] (auto-memory, not this
+repo), which holds the fuller context: which specific things to steal
+from Copilot vs. avoid, that SwiftUI (not UIKit) is the right choice
+since it's Apple's actively-invested-in framework and is what
+Copilot's own newer work already moved to, that this is a new client
+built against the existing Flask backend as its API (not a port of
+the Jinja templates), and that the web app stays a first-class
+citizen alongside it rather than being sunset — Copilot's own biggest
+user complaint is being iOS-only and shutting out non-Apple users,
+and Artha shouldn't repeat that.
+
 ## Architecture
 
 - Flask + SQLAlchemy, one blueprint per feature area, under
