@@ -26,6 +26,36 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-09-22",
+        "category": "new",
+        "title": "See what's safe to spend, right on your dashboard",
+        "body": "A new Safe to Spend figure factors in your budget, what you've spent so far, and any bills still coming due this month, so you know what's actually left to spend, not just what's left in the cap.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "new",
+        "title": "⌘K now takes you anywhere in Artha, not just to search results",
+        "body": "Press ⌘K and type a page name, like \"spending\" or \"recurring,\" and jump straight there, alongside your usual search results.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "improved",
+        "title": "Adding a note or event on the dashboard feels instant",
+        "body": "Adding a quick note used to reload the whole page. Notes and events now save in place with the same instant feedback transactions already had.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "improved",
+        "title": "Categorizing a transaction now sticks for that merchant",
+        "body": "Fix a transaction's category once, and Artha remembers it for that merchant going forward, the next time it sees the same one it'll use your correction instead of guessing again.",
+    },
+    {
+        "date": "2026-09-22",
+        "category": "new",
+        "title": "Money, reorganized: Overview and Transactions are now separate",
+        "body": "The Transactions tab was getting crowded with savings rate, budget, and trend charts on top of the actual list. Those moved to a new Overview tab, so Transactions is just the list, plus a search box and category filter right above it to narrow things down instantly.",
+    },
+    {
         "date": "2026-09-15",
         "category": "new",
         "title": "Get a push the moment you go over budget",
