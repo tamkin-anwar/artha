@@ -126,10 +126,11 @@
         background: var(--bg-card);
         color: var(--text-secondary);
         cursor: pointer;
-        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
         white-space: nowrap;
     }
     .notes-chip:hover { background: var(--bg-hover); }
+    .notes-chip:active { transform: scale(0.96); }
     .notes-chip.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
 
     /* Groups the Archived/Trash/Back/New-note links so only the group as
@@ -150,7 +151,7 @@
         padding: 9px 16px;
         text-decoration: none;
         white-space: nowrap;
-        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
     }
     /* lucide.createIcons() replaces the <i data-lucide> element with an
        <svg> outright (not a child of it), so a selector targeting `i`
@@ -160,6 +161,7 @@
        elsewhere in the app (e.g. .finance-stat-icon svg). */
     .notes-archive-link svg { width: 14px; height: 14px; }
     .notes-archive-link:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .notes-archive-link:active { transform: scale(0.96); }
 
     .notes-new-btn {
         box-sizing: border-box;
@@ -275,17 +277,19 @@
     .note-pin-btn svg, .note-pin-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-pin-btn { opacity: 0.85; }
     .note-pin-btn:hover { opacity: 1 !important; }
+    .note-pin-btn:active { transform: scale(0.85); }
     .note-pin-btn.active { opacity: 1; color: var(--gold); }
 
     .note-delete-btn {
         background: none; border: none; padding: 8px; margin: -8px;
         color: var(--text-muted); opacity: 0.5;
         cursor: pointer; line-height: 0; flex-shrink: 0;
-        transition: opacity 0.15s ease, color 0.15s ease;
+        transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
     }
     .note-delete-btn svg, .note-delete-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-delete-btn { opacity: 0.85; }
     .note-delete-btn:hover { opacity: 1 !important; color: var(--red); }
+    .note-delete-btn:active { transform: scale(0.85); }
     /* In the active view this same trash icon archives rather than
        permanently deletes, so its hover shouldn't read as destructive —
        gold (matching the old dedicated archive button) instead of red. */
@@ -295,11 +299,12 @@
         background: none; border: none; padding: 8px; margin: -8px;
         color: var(--text-muted); opacity: 0.5;
         cursor: pointer; line-height: 0; flex-shrink: 0;
-        transition: opacity 0.15s ease, color 0.15s ease;
+        transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
     }
     .note-archive-btn svg, .note-archive-btn i { width: 15px; height: 15px; }
     .note-card:hover .note-archive-btn { opacity: 0.85; }
     .note-archive-btn:hover { opacity: 1 !important; color: var(--gold); }
+    .note-archive-btn:active { transform: scale(0.85); }
 
     .note-card-ghost { opacity: 0.4; }
     .note-card-chosen { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18); transform: scale(1.02); cursor: grabbing; }
@@ -483,10 +488,11 @@
     .note-modal-close, .note-modal-pin-btn {
         background: none; border: none; color: var(--text-muted);
         cursor: pointer; padding: 6px; margin: -6px 0 0; border-radius: 8px;
-        transition: background 0.12s ease, color 0.12s ease;
+        transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
         flex-shrink: 0;
     }
     .note-modal-close:hover, .note-modal-pin-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .note-modal-close:active, .note-modal-pin-btn:active { transform: scale(0.88); }
     .note-modal-close svg, .note-modal-close i, .note-modal-pin-btn svg, .note-modal-pin-btn i { width: 18px; height: 18px; display: block; }
     .note-modal-close { margin-right: -6px; }
     .note-modal-pin-btn.active { color: var(--gold); }
@@ -510,6 +516,7 @@
         transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s ease;
     }
     .note-color-swatch:hover { transform: scale(1.12); }
+    .note-color-swatch:active { transform: scale(0.94); }
     .note-color-swatch.active { border-color: var(--text-primary); transform: scale(1.15); }
     .note-color-swatch[data-color=""] { background: var(--bg-card); border-color: var(--border-subtle); }
     .note-color-swatch[data-color="sage"]  { background: var(--note-sage-text); }
@@ -523,9 +530,10 @@
         font-size: 11.5px; font-weight: 500; padding: 5px 10px; border-radius: 999px;
         border: 1px solid var(--border-subtle); background: var(--bg-card);
         color: var(--text-secondary); cursor: pointer;
-        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
     }
     .note-tag-opt:hover { background: var(--bg-hover); }
+    .note-tag-opt:active { transform: scale(0.94); }
     .note-tag-opt.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
     .note-tag-opt-new { border-style: dashed; color: var(--text-muted); }
     .note-tag-opt-new:hover { color: var(--gold); border-color: var(--gold); }
@@ -564,6 +572,7 @@
     .notes-tb-btn svg, .notes-tb-btn i { width: 14px; height: 14px; }
     .notes-tb-btn-text { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
     .notes-tb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .notes-tb-btn:active { transform: scale(0.88); }
     .notes-tb-btn.active { background: var(--gold-dim); color: var(--gold); }
 
     [data-tooltip]:hover::after {

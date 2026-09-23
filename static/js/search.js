@@ -189,14 +189,25 @@ function initGlobalSearch() {
     }
 
     function closeSearch() {
-        if (backdrop.hidden) return;
-        backdrop.hidden = true;
+        if (backdrop.hidden || backdrop.classList.contains("modal-closing")) return;
         clearTimeout(debounceTimer);
         currentRequestId++;
         // Whichever trigger is actually visible at the current viewport
         // width gets focus back — the other one is display:none and a
         // focus() call on it is a silent no-op, so this can't double-focus.
+        // Focus moves immediately (not gated on the close animation) so
+        // keyboard users aren't left waiting on a 150ms fade before they
+        // can tab onward.
         (mobileTrigger && mobileTrigger.offsetParent ? mobileTrigger : trigger).focus();
+        // Animates shut instead of a bare hidden=true snap -- matches the
+        // fade+pop it already opens with (see .modal-closing in style.css).
+        backdrop.classList.add("modal-closing");
+        backdrop.addEventListener("animationend", function onDone(e) {
+            if (e.target !== backdrop) return;
+            backdrop.removeEventListener("animationend", onDone);
+            backdrop.hidden = true;
+            backdrop.classList.remove("modal-closing");
+        });
     }
 
     trigger.addEventListener("click", openSearch);

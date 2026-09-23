@@ -645,6 +645,21 @@
     }
     .csv-import-backdrop:not([hidden]) {
         display: flex; align-items: center; justify-content: center;
+        /* Same open/close pair every other modal in the app uses (see
+           modal-fade-in/-pop-in and their .modal-closing counterparts in
+           style.css) -- this one had neither before the app-wide polish
+           pass, a plain [hidden] snap both ways. */
+        animation: modal-fade-in 0.15s ease-out;
+    }
+    .csv-import-backdrop.modal-closing { animation: modal-fade-out 0.15s ease-in forwards; }
+    .csv-import-backdrop.modal-closing .csv-import-modal { animation: modal-pop-out 0.15s cubic-bezier(0.4,0,1,1) forwards; }
+    @media (prefers-reduced-motion: reduce) {
+        .csv-import-backdrop:not([hidden]),
+        .csv-import-backdrop.modal-closing,
+        .csv-import-modal,
+        .csv-import-backdrop.modal-closing .csv-import-modal {
+            animation: none !important;
+        }
     }
     .csv-import-step-preview:not([hidden]) {
         display: flex; flex-direction: column; min-height: 0; flex: 1;
@@ -657,6 +672,7 @@
         border-radius: 20px;
         padding: 24px 26px;
         box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 4px 16px rgba(0,0,0,0.16);
+        animation: modal-pop-in 0.18s cubic-bezier(0.16,1,0.3,1);
     }
     .dark .csv-import-modal { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
     .csv-import-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-shrink:0; }

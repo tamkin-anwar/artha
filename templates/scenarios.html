@@ -2,6 +2,31 @@
 {% block title %}Scenarios{% endblock %}
 {% block content %}
 
+<style>
+    /* Empty state (found 2026-09-23, the app-wide polish pass): used to
+       be a bare sentence on a plain glass-card -- no icon, no framing,
+       the clearest instance of that gap found across the app. Matches
+       the icon-circle + Fraunces title + sub-copy shape Notes' own
+       empty state already established (notes.html's .notes-empty-*),
+       given its own scenario-scoped classes rather than reusing Notes'
+       directly, since each page's CSS here stays self-contained. */
+    .scenario-empty-state {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: 10px;
+        padding: 56px 20px;
+        color: var(--text-muted);
+    }
+    .scenario-empty-icon {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--gold); margin-bottom: 6px;
+    }
+    .scenario-empty-icon svg { width: 22px; height: 22px; }
+    .scenario-empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-primary); margin: 0; }
+    .scenario-empty-sub { font-size: 13px; max-width: 320px; margin: 0; }
+</style>
+
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
         <script type="module">
@@ -50,12 +75,21 @@
             {% set verdict = verdicts[scenario.id] %}
             {% include "_scenario_detail_panel.html" %}
         {% else %}
-            <div class="glass-card" style="padding:40px; text-align:center;">
-                <p style="color:var(--text-secondary);">No scenarios{% if status_filter %} with status "{{ status_filter }}"{% endif %} yet.</p>
+            <div class="glass-card scenario-empty-state">
+                <div class="scenario-empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </div>
+                {% if status_filter %}
+                    <p class="scenario-empty-title">No {{ status_filter }} scenarios</p>
+                    <p class="scenario-empty-sub">Nothing's been {{ status_filter }} yet.</p>
+                {% else %}
+                    <p class="scenario-empty-title">Model your first what-if</p>
+                    <p class="scenario-empty-sub">See the real effect of a decision on your finances before you make it, a pay cut, a move, paying off debt early.</p>
+                {% endif %}
                 <a
                     href="{{ url_for('scenarios.add') }}"
                     class="btn-primary"
-                    style="display:inline-block; margin-top:16px; padding:10px 16px; font-size:14px; text-decoration:none;"
+                    style="display:inline-block; margin-top:8px; padding:10px 16px; font-size:14px; text-decoration:none;"
                 >
                     Create your first scenario
                 </a>

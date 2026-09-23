@@ -59,9 +59,19 @@ function initCsvImport() {
         document.addEventListener("keydown", onKeydown);
     }
 
+    // Animates shut instead of the bare hidden=true snap this used to be
+    // -- matches the fade+pop it now opens with (see .modal-closing in
+    // this modal's own <style> block in finance.html).
     function closeModal() {
-        backdrop.hidden = true;
+        if (backdrop.hidden || backdrop.classList.contains("modal-closing")) return;
         document.removeEventListener("keydown", onKeydown);
+        backdrop.classList.add("modal-closing");
+        backdrop.addEventListener("animationend", function onDone(e) {
+            if (e.target !== backdrop) return;
+            backdrop.removeEventListener("animationend", onDone);
+            backdrop.hidden = true;
+            backdrop.classList.remove("modal-closing");
+        });
     }
 
     function onKeydown(e) {

@@ -32,10 +32,15 @@
         font: inherit;
         color: inherit;
         overflow: hidden;
+        transition: background 0.12s ease;
     }
     #calendar-grid .cal-day-cell:nth-child(7n) { border-right: 1px solid var(--border-subtle); }
     #calendar-grid .cal-day-cell:nth-last-child(-n+7) { border-bottom: 1px solid var(--border-subtle); }
     .cal-day-cell:hover { background: var(--bg-hover); }
+    /* Tapping a day used to give zero feedback until the detail panel
+       actually finished updating -- a brief, immediate press tint so
+       mobile taps feel acknowledged right away. */
+    .cal-day-cell:active { background: var(--bg-hover); filter: brightness(0.94); }
     .cal-day-cell.cal-day-weekend { background: rgba(255,255,255,0.02); }
     .cal-day-cell.cal-day-weekend:hover { background: var(--bg-hover); }
     .cal-day-cell.cal-day-out-of-month .cal-day-number { color: var(--text-muted); opacity: 0.4; }
@@ -63,8 +68,10 @@
         font-size: 18px; line-height: 1; padding: 4px 8px; text-decoration: none;
         display: inline-flex; align-items: center; justify-content: center;
         border-radius: 8px;
+        transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
     }
     .cal-nav-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .cal-nav-btn:active { transform: scale(0.88); }
     .cal-tx-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
     .cal-tx-row:last-child { border-bottom: none; }
     .cal-type-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; }
@@ -178,6 +185,7 @@
         transition: transform 0.12s ease;
     }
     .cal-event-modal-color:hover { transform: scale(1.08); }
+    .cal-event-modal-color:active { transform: scale(0.92); }
     .cal-event-modal-color.selected { border-color: var(--text-primary); }
     .cal-event-modal-color.selected::after {
         content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bg-surface);
@@ -185,8 +193,10 @@
     .cal-event-modal-actions { display: flex; justify-content: space-between; align-items: center; }
     .cal-event-modal-actions-right { display: flex; gap: 8px; align-items: center; }
     .cal-event-modal-delete { background: none; border: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 6px 4px; }
-    .cal-event-modal-cancel { background: none; border: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; padding: 8px 14px; border-radius: 8px; }
+    .cal-event-modal-cancel { background: none; border: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; padding: 8px 14px; border-radius: 8px; transition: background 0.12s ease, transform 0.12s ease; }
     .cal-event-modal-cancel:hover { background: var(--bg-hover); }
+    .cal-event-modal-cancel:active { transform: scale(0.96); }
+    .cal-event-modal-delete:active { opacity: 0.6; }
     .cal-event-modal-save { padding: 8px 20px; font-size: 13.5px; }
 
     .cal-day-name-short { display: none; }
@@ -194,6 +204,20 @@
     @keyframes cal-slide-up {
         from { opacity: 0; transform: translateY(16px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    /* Used to be scoped inside the mobile media query below, so switching
+       days on desktop hard-swapped the whole panel via innerHTML with
+       zero transition -- the exact same interaction was smoothed on
+       mobile only. Moved here (found 2026-09-23, the app-wide polish
+       pass) so both get it; the JS toggle that (re)triggers it
+       (calendar.html's own script, "Restart the slide-up animation on
+       every render") already runs unconditionally, this was the only
+       reason it was a no-op on desktop. */
+    #day-detail-content.cal-panel-enter {
+        animation: cal-slide-up 0.3s ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        #day-detail-content.cal-panel-enter { animation: none !important; }
     }
 
     /* Mobile (<768px): stack the grid above the day panel instead of side
@@ -231,9 +255,6 @@
             padding: 6px 10px !important;
             font-size: 12px !important;
         }
-        #day-detail-content.cal-panel-enter {
-            animation: cal-slide-up 0.3s ease-out;
-        }
     }
 </style>
 
@@ -254,7 +275,7 @@
 
 <div style="display:grid; grid-template-columns:65% 35%; gap:24px; align-items:start;" class="cal-layout">
     <!-- LEFT: month grid -->
-    <div class="glass-card cal-month-card" style="padding:20px; background:var(--bg-surface);">
+    <div class="glass-card cal-month-card dashboard-card-in" style="padding:20px; background:var(--bg-surface);">
         <!-- What the dots mean — nothing else on the grid explains this,
              and unlike an event's own color (a free personal choice, no
              fixed meaning to label), income/expense/recurring are a fixed
@@ -295,7 +316,7 @@
     </div>
 
     <!-- RIGHT: day detail panel -->
-    <div class="glass-card" style="padding:24px; min-height:420px; display:flex; flex-direction:column; gap:18px;">
+    <div class="glass-card dashboard-card-in" style="padding:24px; min-height:420px; display:flex; flex-direction:column; gap:18px;">
         <div id="day-detail-content"></div>
 
         {% if upcoming_recurring %}
@@ -440,9 +461,15 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         html += '</div>';
 
         if (!txs.length && !notesDue.length) {
+            // "Drag above" (not a second Add-event button) since the
+            // schedule grid right above this is already the actual
+            // affordance for putting something on this exact day -- a
+            // duplicate CTA here would just be two paths to the same
+            // place instead of filling a real gap.
             html += '<div style="text-align:center; padding:40px 12px; color:var(--text-muted);">';
             html += '<i data-lucide="calendar" aria-hidden="true" style="width:28px; height:28px; stroke-width:1.5; margin-bottom:10px; display:inline-block;"></i>';
-            html += '<div style="font-size:13px;">Nothing scheduled this day</div>';
+            html += '<div style="font-size:13px;">Nothing on the books for this day</div>';
+            html += '<div style="font-size:12px; margin-top:4px;">Drag above to block out time for something</div>';
             html += '</div>';
         } else {
             if (txs.length) {
@@ -498,11 +525,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         // more overlapping blocks from a single click.
         wireGridCreateDrag(document.getElementById("schedule-grid"), dateStr);
 
-        // Restart the slide-up animation on every render (mobile only —
-        // the keyframe is scoped inside the max-width:767px media query,
-        // so this is a harmless no-op on desktop). Removing the class,
-        // forcing a reflow, then re-adding it is what makes the animation
-        // replay on every day switch instead of just the first paint.
+        // Restart the slide-up animation on every render, desktop and
+        // mobile alike (the keyframe used to be scoped inside the
+        // max-width:767px media query, making this a no-op on desktop --
+        // fixed 2026-09-23). Removing the class, forcing a reflow, then
+        // re-adding it is what makes the animation replay on every day
+        // switch instead of just the first paint.
         container.classList.remove("cal-panel-enter");
         void container.offsetWidth;
         container.classList.add("cal-panel-enter");

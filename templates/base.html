@@ -788,8 +788,20 @@
                     backdrop.hidden = false;
                     textarea.focus();
                 }
+                // Animates shut instead of the bare hidden=true snap this
+                // used to be -- matches the fade+pop it already opens
+                // with (see .modal-closing in style.css). animationend
+                // instead of a fixed setTimeout so it can never drift out
+                // of sync with the CSS duration.
                 function close() {
-                    backdrop.hidden = true;
+                    if (backdrop.hidden || backdrop.classList.contains("modal-closing")) return;
+                    backdrop.classList.add("modal-closing");
+                    backdrop.addEventListener("animationend", function onDone(e) {
+                        if (e.target !== backdrop) return;
+                        backdrop.removeEventListener("animationend", onDone);
+                        backdrop.hidden = true;
+                        backdrop.classList.remove("modal-closing");
+                    });
                 }
 
                 fab.addEventListener("click", open);

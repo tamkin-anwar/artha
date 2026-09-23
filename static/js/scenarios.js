@@ -138,13 +138,22 @@ function initCompareModal() {
 
     function openModal() {
         renderPicker();
-        overlay.style.display = "flex";
-        overlay.classList.remove("hidden");
+        overlay.hidden = false;
     }
 
+    // Animates shut instead of the instant class-and-inline-style snap
+    // this used to be -- matches the fade+pop it now opens with (see
+    // .modal-closing and #compare-modal-overlay's own <style> block in
+    // _scenario_page_header.html).
     function closeModal() {
-        overlay.classList.add("hidden");
-        overlay.style.display = "none";
+        if (overlay.hidden || overlay.classList.contains("modal-closing")) return;
+        overlay.classList.add("modal-closing");
+        overlay.addEventListener("animationend", function onDone(e) {
+            if (e.target !== overlay) return;
+            overlay.removeEventListener("animationend", onDone);
+            overlay.hidden = true;
+            overlay.classList.remove("modal-closing");
+        });
     }
 
     openBtn.addEventListener("click", openModal);
@@ -153,7 +162,7 @@ function initCompareModal() {
         if (e.target === overlay) closeModal();
     });
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && !overlay.classList.contains("hidden")) closeModal();
+        if (e.key === "Escape" && !overlay.hidden) closeModal();
     });
 }
 

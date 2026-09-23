@@ -118,7 +118,7 @@
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div class="glass-card" style="padding:16px;">
+        <div class="glass-card scenario-card-3" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
                 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if immediate_cash_impact > 0 %}var(--emerald){% elif immediate_cash_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
@@ -127,7 +127,7 @@
             >{{ "%+.2f"|format(immediate_cash_impact) }}</p>
             <p class="eyebrow" style="margin-top:4px;">Immediate Cash Impact</p>
         </div>
-        <div class="glass-card" style="padding:16px;">
+        <div class="glass-card scenario-card-4" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
                 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if monthly_cash_flow > 0 %}var(--emerald){% elif monthly_cash_flow < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
@@ -136,7 +136,7 @@
             >{{ "%+.2f"|format(monthly_cash_flow) }}</p>
             <p class="eyebrow" style="margin-top:4px;">Monthly Cash Flow</p>
         </div>
-        <div class="glass-card" style="padding:16px;">
+        <div class="glass-card scenario-card-5" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
                 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if scenario.net_monthly_impact > 0 %}var(--emerald){% elif scenario.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
@@ -145,7 +145,7 @@
             >{{ "%+.2f"|format(scenario.net_monthly_impact) }}</p>
             <p class="eyebrow" style="margin-top:4px;">Net Monthly Impact</p>
         </div>
-        <div class="glass-card" style="padding:16px;">
+        <div class="glass-card scenario-card-6" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
                 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if scenario.net_yearly_impact > 0 %}var(--emerald){% elif scenario.net_yearly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
@@ -157,7 +157,7 @@
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="glass-card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+        <div class="glass-card scenario-card-7" style="padding:16px; display:flex; align-items:center; gap:12px;">
             <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{% if scenario.net_monthly_impact >= 0 %}var(--emerald){% else %}var(--red){% endif %};"></span>
             <div class="min-w-0">
                 <p class="eyebrow">Savings Goal Impact</p>
@@ -170,14 +170,14 @@
                 >{{ "%+.2f"|format(scenario.net_monthly_impact) }}/mo</p>
             </div>
         </div>
-        <div class="glass-card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+        <div class="glass-card scenario-card-8" style="padding:16px; display:flex; align-items:center; gap:12px;">
             <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{% if verdict.risk_level == 'low' %}var(--emerald){% elif verdict.risk_level == 'high' %}var(--red){% else %}var(--amber){% endif %};"></span>
             <div class="min-w-0">
                 <p class="eyebrow">Risk Level</p>
                 <p style="font-size:14px; font-weight:600; color:var(--text-primary);" class="capitalize">{{ verdict.risk_level }}</p>
             </div>
         </div>
-        <div class="glass-card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+        <div class="glass-card scenario-card-9" style="padding:16px; display:flex; align-items:center; gap:12px;">
             <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{% if scenario.status == 'active' %}var(--emerald){% elif scenario.status == 'archived' %}var(--text-muted){% elif scenario.status == 'completed' %}var(--gold){% else %}var(--amber){% endif %};"></span>
             <div class="min-w-0">
                 <p class="eyebrow">Status</p>

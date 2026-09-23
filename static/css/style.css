@@ -376,6 +376,14 @@ select.field-input {
 }
 
 /* Scenario list cards (sidebar) */
+.scenario-list-card {
+  transition: border-color 0.15s ease, transform 0.12s ease;
+  /* No per-card stagger (unlike the detail panel's numbered cards) --
+     this list can run long, and staggering every row would make
+     scrolling to a scenario near the bottom feel like a wait rather
+     than an entrance. */
+  animation: scenario-card-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 .scenario-list-card:hover {
   border-color: rgba(212,168,67,0.4) !important;
 }
@@ -390,6 +398,17 @@ select.field-input {
 }
 .scenario-card-1 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .scenario-card-2 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both; }
+/* Extended to the rest of the detail panel's cards (found 2026-09-23,
+   the app-wide polish pass) -- only the two above used to animate in,
+   with the stat grid and status row underneath just appearing instantly,
+   which read as more unfinished than no entrance animation at all. */
+.scenario-card-3 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.11s both; }
+.scenario-card-4 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both; }
+.scenario-card-5 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.21s both; }
+.scenario-card-6 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.26s both; }
+.scenario-card-7 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.31s both; }
+.scenario-card-8 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.36s both; }
+.scenario-card-9 { animation: scenario-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.41s both; }
 
 /* Scenario detail — before/after net comparison bars */
 .scenario-bar-track {
@@ -507,12 +526,13 @@ select.field-input {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
 .cost-tab-btn svg { width: 14px; height: 14px; stroke-width: 2.25; flex-shrink: 0; }
 .cost-tab-btn:hover {
   background: var(--bg-hover);
 }
+.cost-tab-btn:active { transform: scale(0.96); }
 .cost-tab-btn.cost-tab-active {
   background: var(--gold);
   color: #000;
@@ -1346,8 +1366,32 @@ body.mobile-menu-open {
    ========================= */
 
 @media (prefers-reduced-motion: reduce) {
+    /* The Feedback and Global Search modals' open/close animations were
+       never covered by a reduced-motion rule, even before this pass
+       added the close side -- found and fixed alongside it 2026-09-23. */
+    .feedback-modal-backdrop,
+    .feedback-modal-backdrop.modal-closing,
+    .feedback-modal,
+    .feedback-modal-backdrop.modal-closing .feedback-modal,
+    .global-search-backdrop,
+    .global-search-backdrop.modal-closing,
+    .global-search-modal,
+    .global-search-backdrop.modal-closing .global-search-modal {
+        animation: none !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
     .scenario-card-1,
     .scenario-card-2,
+    .scenario-card-3,
+    .scenario-card-4,
+    .scenario-card-5,
+    .scenario-card-6,
+    .scenario-card-7,
+    .scenario-card-8,
+    .scenario-card-9,
+    .scenario-list-card,
     .scenario-bar-fill {
         animation: none !important;
     }
@@ -1454,6 +1498,24 @@ body.mobile-menu-open {
     from { opacity: 0; transform: scale(0.96) translateY(6px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
 }
+/* Every modal's own backdrop/panel classes already animate in with the
+   pair above; these are their close-side counterparts (found 2026-09-23,
+   the app-wide polish pass) — every modal in the app used to animate
+   open but snap shut instantly via a bare [hidden]=true, an asymmetry
+   that reads as unfinished next to the considered open. Applied via a
+   ".modal-closing" class added just before hiding (see each modal's own
+   JS), removed once the animation finishes — never left in the base
+   rule, since a still-hidden modal has no animation to play on its next
+   open otherwise. Shared here since modal-fade-in/-pop-in already are;
+   each modal's own backdrop/panel selectors apply these by compound
+   selector (".foo-backdrop.modal-closing") so they reliably outrank the
+   base ".foo-backdrop { animation: modal-fade-in ... }" rule regardless
+   of source order. */
+@keyframes modal-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-pop-out {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to { opacity: 0; transform: scale(0.96) translateY(6px); }
+}
 .feedback-modal-backdrop {
     position: fixed; inset: 0; z-index: 200;
     display: flex; align-items: center; justify-content: center;
@@ -1463,6 +1525,8 @@ body.mobile-menu-open {
     animation: modal-fade-in 0.15s ease-out;
 }
 .feedback-modal-backdrop[hidden] { display: none; }
+.feedback-modal-backdrop.modal-closing { animation: modal-fade-out 0.15s ease-in forwards; }
+.feedback-modal-backdrop.modal-closing .feedback-modal { animation: modal-pop-out 0.15s cubic-bezier(0.4,0,1,1) forwards; }
 .feedback-modal {
     width: 100%; max-width: 400px;
     background: var(--bg-surface);
@@ -1504,6 +1568,8 @@ body.mobile-menu-open {
     animation: modal-fade-in 0.15s ease-out;
 }
 .global-search-backdrop[hidden] { display: none; }
+.global-search-backdrop.modal-closing { animation: modal-fade-out 0.15s ease-in forwards; }
+.global-search-backdrop.modal-closing .global-search-modal { animation: modal-pop-out 0.15s cubic-bezier(0.4,0,1,1) forwards; }
 .global-search-modal {
     width: 100%; max-width: 560px; max-height: 70vh;
     display: flex; flex-direction: column;

@@ -1,3 +1,10 @@
+<style>
+    /* Delete button had no CSS hook at all before the app-wide polish
+       pass -- inline styles only, no hover or press feedback. */
+    .scenario-delete-btn { color: var(--text-muted); transition: color 0.15s ease, transform 0.12s ease; }
+    .scenario-delete-btn:hover { color: var(--red); }
+    .scenario-delete-btn:active { transform: scale(0.85); }
+</style>
 <aside class="w-full lg:w-[280px] shrink-0 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto" style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
     {% if scenarios %}
         <div class="space-y-2">
@@ -36,7 +43,8 @@
                             type="submit"
                             title="Delete"
                             aria-label="Delete scenario"
-                            style="background:none; border:none; color:var(--text-muted); line-height:0; cursor:pointer; padding:4px; display:flex;"
+                            class="scenario-delete-btn"
+                            style="background:none; border:none; line-height:0; cursor:pointer; padding:4px; display:flex;"
                         >
                             <i data-lucide="trash-2" aria-hidden="true" style="width:14px; height:14px; stroke-width:1.75;"></i>
                         </button>
@@ -45,6 +53,9 @@
             {% endfor %}
         </div>
     {% else %}
-        <p style="font-size:14px; color:var(--text-secondary); text-align:center; padding:32px 0;">No scenarios yet.</p>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:32px 12px; color:var(--text-muted);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:26px; height:26px; color:var(--gold);"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            <p style="font-size:13px; margin:0;">No scenarios yet.</p>
+        </div>
     {% endif %}
 </aside>
