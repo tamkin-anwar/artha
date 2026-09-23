@@ -3,8 +3,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from artha.blueprints.finance.routes import _guess_category, _merchant_key
 from artha.extensions import db
-from artha.models import Transaction
+from artha.models import MerchantCategoryRule, Transaction
 from tests.conftest import make_user
 
 AJAX_HEADERS = {"X-Requested-With": "XMLHttpRequest"}
@@ -272,3 +273,112 @@ def test_undo_delete_restores_category(auth_client, user):
     restored = Transaction.query.filter_by(user_id=user.id).first()
     assert restored is not None
     assert restored.category == "housing"
+
+
+# --- Per-merchant categorization memory ---
+
+
+def test_merchant_key_normalizes_store_numbers_and_case():
+    assert _merchant_key("STARBUCKS #4821 SEATTLE WA") == _merchant_key("Starbucks #9921 Seattle WA")
+
+
+def test_merchant_key_empty_for_blank_description():
+    assert _merchant_key("   ") == ""
+    assert _merchant_key(None) == ""
+
+
+def test_guess_category_prefers_remembered_rule_over_keyword():
+    # "Starbucks" would normally keyword-match "dining" -- a remembered
+    # rule for this exact merchant should win anyway.
+    rules = {_merchant_key("Starbucks"): "shopping"}
+    assert _guess_category("Starbucks", "expense", rules=rules) == "shopping"
+    assert _guess_category("Starbucks", "expense") == "dining"
+
+
+def test_add_transaction_with_explicit_category_remembers_merchant(auth_client, user):
+    auth_client.post(
+        "/add_transaction",
+        data={"description": "Blue Bottle Coffee #12", "amount": "6.00", "type": "expense", "category": "shopping"},
+        follow_redirects=True,
+    )
+    rule = MerchantCategoryRule.query.filter_by(user_id=user.id).first()
+    assert rule is not None
+    assert rule.category == "shopping"
+
+    # A second, later transaction from the same merchant (different
+    # store number, no explicit category) picks up the remembered
+    # category instead of "dining" from the keyword list.
+    auth_client.post(
+        "/add_transaction",
+        data={"description": "Blue Bottle Coffee #99", "amount": "5.50", "type": "expense"},
+        follow_redirects=True,
+    )
+    txs = Transaction.query.filter_by(user_id=user.id).order_by(Transaction.id).all()
+    assert txs[1].category == "shopping"
+
+
+def test_add_transaction_without_explicit_category_does_not_remember(auth_client, user):
+    # "Coffee" keyword-guesses to "dining" -- that's not a user
+    # correction, so no rule should be created from it.
+    auth_client.post(
+        "/add_transaction",
+        data={"description": "Coffee", "amount": "4.50", "type": "expense"},
+        follow_redirects=True,
+    )
+    assert MerchantCategoryRule.query.filter_by(user_id=user.id).count() == 0
+
+
+def test_update_transaction_category_change_remembers_merchant(auth_client, user):
+    tx = _add_tx(user, description="Acme Corp Payroll Co", category=None)
+    auth_client.post(
+        f"/update_transaction/{tx.id}",
+        json={"description": tx.description, "amount": str(tx.amount), "type": tx.type, "category": "subscriptions"},
+    )
+    rule = MerchantCategoryRule.query.filter_by(user_id=user.id).first()
+    assert rule is not None
+    assert rule.category == "subscriptions"
+
+    # Correcting it again updates the same rule rather than stacking a
+    # second one for the same merchant.
+    auth_client.post(
+        f"/update_transaction/{tx.id}",
+        json={"description": tx.description, "amount": str(tx.amount), "type": tx.type, "category": "other"},
+    )
+    assert MerchantCategoryRule.query.filter_by(user_id=user.id).count() == 1
+    db.session.refresh(rule)
+    assert rule.category == "other"
+
+
+def test_update_transaction_resaving_same_category_does_not_duplicate_rule(auth_client, user):
+    tx = _add_tx(user, description="Acme Corp Payroll Co", category="subscriptions")
+    # Autosave triggered by an unrelated field edit still sends the
+    # row's current (unchanged) category -- must not create a rule from
+    # a value that was never actually corrected in this request.
+    auth_client.post(
+        f"/update_transaction/{tx.id}",
+        json={"description": "Acme Corp Payroll Co (renamed)", "amount": str(tx.amount), "type": tx.type, "category": "subscriptions"},
+    )
+    assert MerchantCategoryRule.query.filter_by(user_id=user.id).count() == 0
+
+
+def test_categorize_uncategorized_uses_remembered_merchant_category(auth_client, user):
+    db.session.add(MerchantCategoryRule(user_id=user.id, merchant_key=_merchant_key("Some Merchant"), category="entertainment"))
+    db.session.commit()
+
+    tx = _add_tx(user, description="Some Merchant", category=None)
+    resp = auth_client.post("/finance/categorize_uncategorized")
+    assert resp.status_code == 200
+    assert resp.get_json()["categorized"] == 1
+
+    db.session.refresh(tx)
+    assert tx.category == "entertainment"
+
+
+def test_merchant_category_rules_deleted_with_user(app, user):
+    db.session.add(MerchantCategoryRule(user_id=user.id, merchant_key="acme", category="shopping"))
+    db.session.commit()
+
+    db.session.delete(user)
+    db.session.commit()
+
+    assert MerchantCategoryRule.query.count() == 0

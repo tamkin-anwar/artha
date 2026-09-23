@@ -18,6 +18,7 @@ from ...extensions import db
 from ...models import Transaction, User, PushSubscription
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
+from ...models.merchant_category_rule import MerchantCategoryRule
 from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
 from ...services.push_service import send_push
 from ...utils import (
@@ -125,13 +126,93 @@ _CATEGORY_KEYWORDS = {
 }
 
 
-def _guess_category(description: str, t_type: str) -> str | None:
+
+# ---------------------------------------------------------------------------
+# Per-merchant categorization memory -- a user's own "I categorized this
+# merchant as X" corrections, checked before the global keyword list in
+# _guess_category() below. The Competitive-ambition-driven counterpart to
+# Copilot Money's "trains on your own activity" categorizer (see CLAUDE.md):
+# the two-tier keyword-then-AI categorizer already existed, this adds a
+# tier ahead of both that's personal to the user instead of a shared global
+# list.
+# ---------------------------------------------------------------------------
+
+_MERCHANT_KEY_NOISE_RE = re.compile(r"[^a-z0-9 ]+")
+_MERCHANT_KEY_WORD_LIMIT = 4
+
+
+def _merchant_key(description: str) -> str:
+    """Normalizes a free-text description down to a stable "who was
+    this" fragment for MerchantCategoryRule lookups. Not full NLP --
+    just enough that "STARBUCKS #4821 SEATTLE WA" and "Starbucks #9921
+    Seattle WA" land on the same key, which plain exact-string matching
+    wouldn't catch: lowercase, strip punctuation, drop any token that's
+    purely digits (store/transaction/reference numbers, which vary
+    between visits to the same merchant regardless of how many digits
+    long they are), keep the first few remaining words. Returns "" for
+    a description that normalizes away to nothing, which callers treat
+    as "no key to look up or remember."."""
+    desc = (description or "").lower()
+    desc = _MERCHANT_KEY_NOISE_RE.sub(" ", desc)
+    words = [w for w in desc.split() if not w.isdigit()]
+    return " ".join(words[:_MERCHANT_KEY_WORD_LIMIT])
+
+
+def _load_merchant_rules(user_id: int) -> dict[str, str]:
+    """One query per request/batch, not one per description -- callers
+    that categorize many rows in a loop (categorize_uncategorized, the
+    import preview functions) pass the resulting dict into
+    _guess_category() instead of hitting the DB per row."""
+    return {
+        r.merchant_key: r.category
+        for r in MerchantCategoryRule.query.filter_by(user_id=user_id).all()
+    }
+
+
+def _remembered_category_for(user_id: int, description: str) -> str | None:
+    """Single-row equivalent of _load_merchant_rules, for call sites
+    categorizing exactly one transaction (add_transaction) where
+    fetching every rule just to look up one key would be wasteful."""
+    key = _merchant_key(description)
+    if not key:
+        return None
+    rule = MerchantCategoryRule.query.filter_by(user_id=user_id, merchant_key=key).first()
+    return rule.category if rule else None
+
+
+def _remember_merchant_category(user_id: int, description: str, category: str) -> None:
+    """Records (or updates) this user's own correction for this
+    merchant, called only where a category was *explicitly* chosen by
+    a person (or an AI-Assistant proposal the person then confirmed),
+    never from a keyword or bulk-AI guess -- learning from the
+    categorizer's own guesses would just be circular. Caller commits;
+    this only adds to the session."""
+    if not category:
+        return
+    key = _merchant_key(description)
+    if not key:
+        return
+    rule = MerchantCategoryRule.query.filter_by(user_id=user_id, merchant_key=key).first()
+    if rule:
+        rule.category = category
+    else:
+        db.session.add(MerchantCategoryRule(user_id=user_id, merchant_key=key, category=category))
+
+
+def _guess_category(description: str, t_type: str, rules: dict[str, str] | None = None) -> str | None:
     """Best-effort category from a free-text description — used to
     pre-fill CSV-import rows so most of a statement doesn't need manual
     categorizing. Returns None (not "other") when nothing matches, so the
-    caller can tell "confidently uncategorized" apart from "no guess"."""
+    caller can tell "confidently uncategorized" apart from "no guess".
+    `rules` (from _load_merchant_rules) is checked first when given --
+    a user's own remembered correction for this merchant outranks the
+    global keyword list."""
     if t_type == "income":
         return "income"
+    if rules:
+        remembered = rules.get(_merchant_key(description))
+        if remembered:
+            return remembered
     desc = (description or "").lower()
     for category, keywords in _CATEGORY_KEYWORDS.items():
         if any(kw in desc for kw in keywords):
@@ -328,17 +409,25 @@ def add_transaction():
     category = request.form.get("category") or None
     if category not in TRANSACTION_CATEGORIES:
         category = None
+    # Only a real, explicit category survives past here -- remembered
+    # below once the transaction is actually saved. Only the AI
+    # Assistant's confirmed add_transaction proposal sends this today
+    # (see ai_service.py's add_transaction tool); the plain add-forms
+    # have no category field of their own.
+    explicit_category = category is not None
 
     # Auto-categorize a manual add exactly like an imported statement row
     # already gets categorized -- same two-tier shape as import_preview():
-    # the free/instant keyword guess first (also resolves "income"), the
-    # AI fallback only for what that leaves genuinely uncategorized. The
-    # add-transaction form has no category field of its own today, so
-    # this is the only chance a manual entry (recurring bills included,
-    # since they're created through this same route) gets categorized
-    # without the user doing it by hand afterward.
+    # a user's own remembered per-merchant correction first (see
+    # _remembered_category_for), then the free/instant keyword guess
+    # (also resolves "income"), then the AI fallback only for what that
+    # leaves genuinely uncategorized. The add-transaction form has no
+    # category field of its own today, so this is the only chance a
+    # manual entry (recurring bills included, since they're created
+    # through this same route) gets categorized without the user doing
+    # it by hand afterward.
     if category is None:
-        category = _guess_category(description, t_type)
+        category = _remembered_category_for(current_user.id, description) or _guess_category(description, t_type)
     if category is None and t_type == "expense":
         guess_row = {"type": t_type, "description": description, "category": None}
         _fill_uncategorized_via_ai([guess_row])
@@ -383,6 +472,8 @@ def add_transaction():
 
     try:
         db.session.add(new_tx)
+        if explicit_category and category is not None:
+            _remember_merchant_category(current_user.id, description, category)
         db.session.commit()
         if t_type == "expense":
             _check_budget_overage_alerts(current_user.id)
@@ -444,7 +535,16 @@ def update_transaction(transaction_id):
     # must never silently clear an existing category.
     if "category" in data:
         category = data.get("category") or None
-        tx.category = category if category in TRANSACTION_CATEGORIES else None
+        new_category = category if category in TRANSACTION_CATEGORIES else None
+        # transactions.js's saveTransaction() always includes the row's
+        # current category in the payload on every autosave, not just
+        # ones where the user actually touched the category select --
+        # only remember when the value genuinely changed, so editing an
+        # unrelated field (amount, description) doesn't "re-teach" a
+        # merchant its own already-stored category on every save.
+        if new_category is not None and new_category != tx.category:
+            _remember_merchant_category(tx.user_id, desc, new_category)
+        tx.category = new_category
 
     # currency itself only changes if explicitly sent (no UI does this
     # today — .tx-amount always edits the native amount in its existing
@@ -2268,10 +2368,11 @@ def categorize_uncategorized():
     if not uncategorized:
         return jsonify({"categorized": 0, "remaining": 0, "message": "Nothing to categorize."})
 
+    merchant_rules = _load_merchant_rules(uid)
     keyword_hits = 0
     ai_candidates: list[Transaction] = []
     for tx in uncategorized:
-        guess = _guess_category(tx.description, tx.type)
+        guess = _guess_category(tx.description, tx.type, rules=merchant_rules)
         if guess is not None:
             tx.category = guess
             keyword_hits += 1

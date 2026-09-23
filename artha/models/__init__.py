@@ -13,8 +13,9 @@ from .push_subscription import PushSubscription
 from .conversation import Conversation
 from .message import Message
 from .recovery_code import RecoveryCode
+from .merchant_category_rule import MerchantCategoryRule
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
-    "Conversation", "Message", "RecoveryCode",
+    "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule",
 ]
