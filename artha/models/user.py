@@ -105,6 +105,12 @@ class User(UserMixin, db.Model):
     merchant_category_rules = db.relationship(
         "MerchantCategoryRule", backref="user", lazy="dynamic", cascade="all, delete-orphan"
     )
+    accounts = db.relationship(
+        "Account", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    net_worth_snapshots = db.relationship(
+        "NetWorthSnapshot", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
     # Cleared and re-set the moment a login succeeds against this account —
     # see login() in blueprints/auth/routes.py. Logging back in during the
     # 30-day window is the undo for a deletion request, so nothing else

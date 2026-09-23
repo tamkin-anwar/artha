@@ -98,6 +98,7 @@
         {% set current_view = request.args.get('view') %}
         {% set is_dashboard_active = request.endpoint == 'dashboard.index' and not current_view %}
         {% set is_finance_active = request.endpoint == 'finance.finance_page' %}
+        {% set is_accounts_active = request.endpoint and request.endpoint.startswith('accounts.') %}
         {% set is_notes_active = request.endpoint == 'notes.notes_page' %}
         {% set is_calculator_active = request.endpoint == 'dashboard.calculator_page' %}
         {% set is_calendar_active = request.endpoint == 'dashboard.calendar_page' %}
@@ -129,6 +130,9 @@
                     </a>
                     <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
                         <i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance
+                    </a>
+                    <a href="{{ url_for('accounts.index') }}" class="nav-link {{ 'nav-active' if is_accounts_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
+                        <i data-lucide="landmark" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Accounts
                     </a>
                     <a href="{{ url_for('ai.page') }}" class="nav-link {{ 'nav-active' if is_ai_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
                         <i data-lucide="sparkles" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> AI Assistant
@@ -496,6 +500,7 @@
 
                     <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'nav-active' if is_dashboard_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="layout-dashboard" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Dashboard</a>
                     <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance</a>
+                    <a href="{{ url_for('accounts.index') }}" class="nav-link {{ 'nav-active' if is_accounts_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="landmark" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Accounts</a>
                     <a href="{{ url_for('ai.page') }}" class="nav-link {{ 'nav-active' if is_ai_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="sparkles" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> AI Assistant</a>
                     <a href="{{ url_for('scenarios.index') }}" class="nav-link {{ 'nav-active' if is_scenarios_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="git-branch" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Scenarios</a>
                     <a href="{{ url_for('notes.notes_page') }}" class="nav-link {{ 'nav-active' if is_notes_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="file-text" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Notes</a>

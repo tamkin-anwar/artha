@@ -17,6 +17,7 @@ from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
 from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, is_ajax_request, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES
+from ..accounts.routes import net_worth_summary
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
@@ -303,6 +304,14 @@ def index():
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
 
+    # Net worth (total assets minus liabilities, as of right now) is a
+    # different figure from Net Balance above (income minus expenses,
+    # this month only) — deliberately not reusing that card's gold styling
+    # or label so the two aren't mistaken for each other. None (card
+    # hidden entirely) until the user has actually added an account —
+    # same "nothing to show yet" gating as Safe to Spend.
+    net_worth = net_worth_summary(current_user)
+
     return render_template(
         "index.html",
         notes=notes,
@@ -322,6 +331,7 @@ def index():
         budget=budget,
         safe_to_spend=safe_to_spend,
         safe_to_spend_upcoming=safe_to_spend_upcoming,
+        net_worth=net_worth,
         categories=TRANSACTION_CATEGORIES,
     )
 

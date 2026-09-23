@@ -112,6 +112,30 @@
     {% endif %}
     </div>
 
+    <!-- Net Worth -- total assets minus liabilities, as of right now.
+         Deliberately not gold (Net Balance/Safe to Spend's color) and not
+         labeled "balance" anywhere near it, so it never reads as the same
+         figure as this month's cash flow. Hidden entirely until the user
+         has added at least one account -- there's nothing to total yet. -->
+    {% if net_worth %}
+        <a href="{{ url_for('accounts.index') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px; margin-bottom:16px; display:block;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        <span class="finance-stat-icon stat-icon-violet">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </span>
+                        <span class="eyebrow">Net Worth</span>
+                    </div>
+                    <div class="stat-number dashboard-money {{ 'money-negative' if net_worth.net_worth < 0 else 'money-positive' }}" style="font-size:32px; font-family:'JetBrains Mono',monospace;" data-money-value="{{ net_worth.net_worth }}">${{ '%.2f'|format(net_worth.net_worth) }}</div>
+                </div>
+                <p style="font-size:12px; color:var(--text-secondary); margin:0; text-align:right;">
+                    {{ net_worth.account_count }} account{{ 's' if net_worth.account_count != 1 }}, as of today
+                </p>
+            </div>
+        </a>
+    {% endif %}
+
     <!-- Quick add -->
     <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
         <div style="display:flex; gap:8px; margin-bottom:12px;">

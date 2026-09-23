@@ -14,6 +14,7 @@ from decimal import Decimal
 
 from artha.extensions import db
 from artha.models import Event, PushSubscription, Feedback
+from artha.models.account import Account, NetWorthSnapshot
 from artha.models.budget import Budget
 from artha.models.category_budget import CategoryBudget
 from artha.models.scenario import Scenario
@@ -49,6 +50,8 @@ def test_deleting_a_user_removes_their_events_subscriptions_and_scenarios(app, u
     db.session.add(Budget(user_id=user.id, monthly_cap=Decimal("2000")))
     db.session.add(CategoryBudget(user_id=user.id, category="dining", monthly_cap=Decimal("300")))
     db.session.add(Feedback(user_id=user.id, category="bug", message="Something broke"))
+    db.session.add(Account(user_id=user.id, name="Checking", account_type="checking", currency="USD", current_balance=Decimal("500")))
+    db.session.add(NetWorthSnapshot(user_id=user.id, snapshot_date=now.date(), total_assets_usd=Decimal("500"), total_liabilities_usd=Decimal("0")))
     db.session.commit()
 
     user_id = user.id
@@ -62,6 +65,8 @@ def test_deleting_a_user_removes_their_events_subscriptions_and_scenarios(app, u
     assert Budget.query.filter_by(user_id=user_id).count() == 0
     assert CategoryBudget.query.filter_by(user_id=user_id).count() == 0
     assert Feedback.query.filter_by(user_id=user_id).count() == 0
+    assert Account.query.filter_by(user_id=user_id).count() == 0
+    assert NetWorthSnapshot.query.filter_by(user_id=user_id).count() == 0
 
     # No orphans anywhere in these tables (belt-and-braces: the user_id
     # filters above would already have caught a dangling row).
@@ -71,3 +76,5 @@ def test_deleting_a_user_removes_their_events_subscriptions_and_scenarios(app, u
     assert Budget.query.count() == 0
     assert CategoryBudget.query.count() == 0
     assert Feedback.query.count() == 0
+    assert Account.query.count() == 0
+    assert NetWorthSnapshot.query.count() == 0

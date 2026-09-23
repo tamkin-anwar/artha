@@ -14,8 +14,9 @@ from .conversation import Conversation
 from .message import Message
 from .recovery_code import RecoveryCode
 from .merchant_category_rule import MerchantCategoryRule
+from .account import Account, NetWorthSnapshot
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
-    "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule",
+    "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule", "Account", "NetWorthSnapshot",
 ]

@@ -23,6 +23,7 @@ const GROUPS = [
 const BASE_PAGES = [
     { title: "Dashboard", keywords: "home", url: "/" },
     { title: "Finance", keywords: "money", url: "/finance" },
+    { title: "Accounts", keywords: "net worth assets liabilities balance", url: "/accounts/" },
     { title: "Finance · Overview", keywords: "savings rate budget trend biggest category", url: "/finance?tab=overview" },
     { title: "Finance · Transactions", keywords: "list add transaction search filter", url: "/finance?tab=transactions" },
     { title: "Finance · Spending", keywords: "breakdown category expenses", url: "/finance?tab=spending" },

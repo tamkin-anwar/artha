@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+
+<style>
+    /* Same icon-circle + Fraunces title + sub-copy empty state shape as
+       Scenarios' own .scenario-empty-* (see scenarios.html) -- kept as
+       this page's own classes rather than shared, matching the existing
+       "each page's CSS stays self-contained" convention. */
+    .accounts-empty-state {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: 10px;
+        padding: 56px 20px;
+        color: var(--text-muted);
+    }
+    .accounts-empty-icon {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--violet); margin-bottom: 6px;
+    }
+    .accounts-empty-icon svg { width: 22px; height: 22px; }
+    .accounts-empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-primary); margin: 0; }
+    .accounts-empty-sub { font-size: 13px; max-width: 340px; margin: 0; }
+
+    .account-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        transition: background 0.12s ease;
+    }
+    .account-row:hover { background: var(--bg-hover); }
+    .account-row + .account-row { border-top: 1px solid var(--border-subtle); }
+
+    .account-stale-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+    .account-stale-fresh { color: var(--text-muted); }
+    .account-stale-aging { color: var(--amber); background: var(--amber-dim); }
+    .account-stale-stale { color: var(--red); background: var(--red-dim); }
+
+    .account-icon-btn {
+        width: 30px; height: 30px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--text-muted); text-decoration: none;
+        transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+        background: none; border: none; cursor: pointer;
+    }
+    .account-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .account-icon-btn:active { transform: scale(0.9); }
+    .account-icon-btn svg { width: 15px; height: 15px; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .account-row, .account-icon-btn { transition: none !important; }
+    }
+</style>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <script type="module">
+            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+            document.addEventListener('DOMContentLoaded', function () {
+                {% for category, message in messages %}
+                    showToast({{ message|tojson }}, {{ category|tojson }});
+                {% endfor %}
+            });
+        </script>
+    {% endif %}
+{% endwith %}
+
+<div class="flex flex-wrap items-start justify-between gap-4 mb-8">
+    <div>
+        <div class="eyebrow" style="margin-bottom:6px;">ACCOUNTS</div>
+        <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0;">Net Worth</h1>
+        <p style="color:var(--text-secondary); font-size:14px; margin-top:4px;">Everything you own, minus everything you owe</p>
+    </div>
+    <a href="{{ url_for('accounts.add') }}" class="btn-primary" style="padding:10px 16px; font-size:14px; text-decoration:none;">
+        + Add Account
+    </a>
+</div>
+
+{% if not asset_rows and not liability_rows %}
+    <div class="glass-card accounts-empty-state">
+        <div class="accounts-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M14 9h1"/><path d="M14 13h1"/><path d="M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4"/></svg>
+        </div>
+        <p class="accounts-empty-title">Add your first account</p>
+        <p class="accounts-empty-sub">Checking, savings, a credit card, a loan, an estimated value for a house or car. See your real net worth, not just this month's spending.</p>
+        <a href="{{ url_for('accounts.add') }}" class="btn-primary" style="display:inline-block; margin-top:8px; padding:10px 16px; font-size:14px; text-decoration:none;">
+            Add your first account
+        </a>
+    </div>
+{% else %}
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
+                <span class="eyebrow">Total Assets</span>
+            </div>
+            <div class="stat-number money-positive" data-money-value="{{ total_assets }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ '%.2f'|format(total_assets) }}</div>
+        </div>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
+                <span class="eyebrow">Total Liabilities</span>
+            </div>
+            <div class="stat-number money-negative" data-money-value="{{ total_liabilities }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ '%.2f'|format(total_liabilities) }}</div>
+        </div>
+        <div class="glass-card dashboard-card-in" style="padding:20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <span style="width:8px; height:8px; border-radius:50%; background:var(--violet); display:inline-block;"></span>
+                <span class="eyebrow">Net Worth</span>
+            </div>
+            <div class="stat-number {{ 'money-negative' if net_worth < 0 else 'money-positive' }}" data-money-value="{{ net_worth }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ '%.2f'|format(net_worth) }}</div>
+        </div>
+    </div>
+
+    {% if chart_points|length >= 2 %}
+        <div class="glass-card dashboard-card-in" style="padding:20px; margin-bottom:24px;">
+            <div class="eyebrow" style="margin-bottom:12px;">Trend</div>
+            <div style="height:200px; position:relative;">
+                <canvas id="net-worth-trend-chart"></canvas>
+            </div>
+        </div>
+        <script type="application/json" id="net-worth-chart-data">{{ chart_points|tojson }}</script>
+    {% else %}
+        <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:24px; font-size:13px; color:var(--text-secondary);">
+            Come back after a few balance updates to see your net worth trend over time.
+        </div>
+    {% endif %}
+
+    <div class="flex flex-col lg:flex-row gap-6">
+        <div class="glass-card dashboard-card-in flex-1 min-w-0" style="padding:8px 16px;">
+            <div class="eyebrow" style="padding:12px 0 4px;">Assets</div>
+            {% if not asset_rows %}
+                <p style="font-size:13px; color:var(--text-muted); padding:8px 0 16px;">No asset accounts yet.</p>
+            {% endif %}
+            {% for row in asset_rows %}
+                {% set a = row.account %}
+                <div class="account-row">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:14px; color:var(--text-primary); font-weight:500;">{{ a.name }}</div>
+                        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">{{ a.type_label }}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);" data-money-currency="{{ a.currency }}">{{ a.currency }} {{ '%.2f'|format(a.current_balance) }}</div>
+                        {% if row.staleness == 'fresh' %}
+                            <div class="account-stale-badge account-stale-fresh">Updated recently</div>
+                        {% elif row.staleness == 'aging' %}
+                            <div class="account-stale-badge account-stale-aging">Update this balance</div>
+                        {% else %}
+                            <div class="account-stale-badge account-stale-stale">Balance is stale</div>
+                        {% endif %}
+                    </div>
+                    <div style="display:flex; gap:4px; flex-shrink:0;">
+                        <a href="{{ url_for('accounts.edit', account_id=a.id) }}" class="account-icon-btn" aria-label="Edit {{ a.name }}" title="Edit">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </a>
+                        <form method="POST" action="{{ url_for('accounts.delete', account_id=a.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="account-icon-btn" aria-label="Delete {{ a.name }}" title="Delete">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="glass-card dashboard-card-in flex-1 min-w-0" style="padding:8px 16px;">
+            <div class="eyebrow" style="padding:12px 0 4px;">Liabilities</div>
+            {% if not liability_rows %}
+                <p style="font-size:13px; color:var(--text-muted); padding:8px 0 16px;">No liability accounts yet.</p>
+            {% endif %}
+            {% for row in liability_rows %}
+                {% set a = row.account %}
+                <div class="account-row">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:14px; color:var(--text-primary); font-weight:500;">{{ a.name }}</div>
+                        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">{{ a.type_label }}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);" data-money-currency="{{ a.currency }}">{{ a.currency }} {{ '%.2f'|format(a.current_balance) }}</div>
+                        {% if row.staleness == 'fresh' %}
+                            <div class="account-stale-badge account-stale-fresh">Updated recently</div>
+                        {% elif row.staleness == 'aging' %}
+                            <div class="account-stale-badge account-stale-aging">Update this balance</div>
+                        {% else %}
+                            <div class="account-stale-badge account-stale-stale">Balance is stale</div>
+                        {% endif %}
+                    </div>
+                    <div style="display:flex; gap:4px; flex-shrink:0;">
+                        <a href="{{ url_for('accounts.edit', account_id=a.id) }}" class="account-icon-btn" aria-label="Edit {{ a.name }}" title="Edit">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </a>
+                        <form method="POST" action="{{ url_for('accounts.delete', account_id=a.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="account-icon-btn" aria-label="Delete {{ a.name }}" title="Delete">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+
+{% if chart_points|length >= 2 %}
+<script type="module">
+    import { onThemeChange, getCurrentTheme } from "{{ url_for('static', filename='js/theme.js') }}";
+
+    function getCSSVariable(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function renderNetWorthChart() {
+        const canvas = document.getElementById("net-worth-trend-chart");
+        const dataEl = document.getElementById("net-worth-chart-data");
+        if (!canvas || !dataEl || typeof Chart === "undefined") return;
+
+        const points = JSON.parse(dataEl.textContent);
+        const violet = getCSSVariable("--violet") || "#7c3aed";
+        const legendColor = getCSSVariable("--text-secondary") || "#5b6478";
+        const gridColor = getCSSVariable("--border-subtle") || "rgba(0,0,0,0.08)";
+
+        if (canvas._chart) canvas._chart.destroy();
+
+        canvas._chart = new Chart(canvas, {
+            type: "line",
+            data: {
+                labels: points.map(p => p.date),
+                datasets: [{
+                    data: points.map(p => p.net_worth),
+                    borderColor: violet,
+                    backgroundColor: violet + "22",
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    borderWidth: 2,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: legendColor, maxTicksLimit: 6 } },
+                    y: { grid: { color: gridColor }, ticks: { color: legendColor } },
+                },
+            },
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", renderNetWorthChart);
+    onThemeChange(() => setTimeout(renderNetWorthChart, 50));
+</script>
+{% endif %}
+{% endblock %}

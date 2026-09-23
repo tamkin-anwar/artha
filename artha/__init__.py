@@ -77,6 +77,7 @@ def create_app(config_name: str = "default") -> Flask:
     # ------------------------------------------------------------------
     from .models import User, Note, Transaction, Feedback, Budget, PushSubscription  # noqa: F401
     from .models.scenario import Scenario  # noqa: F401
+    from .models.account import Account, NetWorthSnapshot  # noqa: F401
 
     @login_manager.user_loader
     def load_user(user_id: str):
@@ -95,6 +96,7 @@ def create_app(config_name: str = "default") -> Flask:
     from .blueprints.admin import admin_bp
     from .blueprints.push import push_bp
     from .blueprints.search import search_bp
+    from .blueprints.accounts import accounts_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -106,6 +108,7 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(push_bp)
     app.register_blueprint(search_bp)
+    app.register_blueprint(accounts_bp)
 
     # ------------------------------------------------------------------
     # Service worker — served from the site root (not /static/...) so its
