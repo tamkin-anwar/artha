@@ -9,8 +9,8 @@ than one file.
 ## What Artha is
 
 A personal finance and productivity "Personal OS" — Flask app, self-hosted,
-no tracking. Live at arthaapp.com. Genuinely multi-user: roughly 8-10 real
-people (friends and family, several outside the US) each running an
+no tracking. Live at arthaapp.com. Genuinely multi-user: 20+ real people
+(as of 2026-10-05; friends and family, several outside the US) each running an
 independent account with fully siloed data, not a shared household tool.
 
 Built by Anwar Creative Studio (Tamkin Anwar), almost entirely with Claude
@@ -21,7 +21,7 @@ commit as "when the project started."
 ## Product direction
 
 Artha is built to be sellable and used by anyone, not just Tamkin — advise
-and design for growing the real ~8-10 user base, not one person's workflow.
+and design for growing the real 20+ user base, not one person's workflow.
 Each user's data is fully siloed (own transactions, own notes, own
 scenarios). Don't propose shared/household features (joint budgets, split
 expenses, shared views) unless explicitly asked; the single-owner data model
@@ -90,7 +90,7 @@ from native platform primitives a browser cannot fully replicate —
 rewriting this Flask/Jinja web app into a different web stack (React
 or otherwise) would not close that gap, since the result is still a
 website in a browser either way. It would also be a real-user-facing
-risk for a live app with ~8-10 people's actual financial data, for a
+risk for a live app with 20+ people's actual financial data, for a
 reward that doesn't reach the stated goal. Confirmed directly with
 Tamkin after laying out this reasoning — keep the web app on
 Flask/Jinja/vanilla JS, keep polishing it (the batch-based UI/UX work

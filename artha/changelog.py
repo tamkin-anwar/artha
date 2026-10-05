@@ -69,24 +69,30 @@ CHANGELOG_ENTRIES = [
     },
     {
         "date": "2026-09-22",
-        "category": "new",
-        "title": "⌘K now takes you anywhere in Artha, not just to search results",
-        "body": "Press ⌘K and type a page name, like \"spending\" or \"recurring,\" and jump straight there, alongside your usual search results.",
-    },
-    {
-        "date": "2026-09-22",
-        "category": "improved",
-        "title": "Adding a note or event on the dashboard feels instant",
-        "body": "Adding a quick note used to reload the whole page. Notes and events now save in place with the same instant feedback transactions already had.",
-    },
-    {
-        "date": "2026-09-22",
         "category": "improved",
         "title": "Categorizing a transaction now sticks for that merchant",
         "body": "Fix a transaction's category once, and Artha remembers it for that merchant going forward, the next time it sees the same one it'll use your correction instead of guessing again.",
     },
     {
-        "date": "2026-09-22",
+        "date": "2026-09-20",
+        "category": "new",
+        "title": "⌘K now takes you anywhere in Artha, not just to search results",
+        "body": "Press ⌘K and type a page name, like \"spending\" or \"recurring,\" and jump straight there, alongside your usual search results.",
+    },
+    {
+        "date": "2026-09-20",
+        "category": "improved",
+        "title": "Adding a note or event on the dashboard feels instant",
+        "body": "Adding a quick note used to reload the whole page. Notes and events now save in place with the same instant feedback transactions already had.",
+    },
+    {
+        "date": "2026-09-20",
+        "category": "new",
+        "title": "Transactions sort themselves into categories",
+        "body": "New transactions, recurring bills included, get a category the moment you add them. Already have a backlog of uncategorized ones? One click on Finance sorts them all with AI.",
+    },
+    {
+        "date": "2026-09-20",
         "category": "new",
         "title": "Money, reorganized: Overview and Transactions are now separate",
         "body": "The Transactions tab was getting crowded with savings rate, budget, and trend charts on top of the actual list. Those moved to a new Overview tab, so Transactions is just the list, plus a search box and category filter right above it to narrow things down instantly.",
