@@ -55,6 +55,7 @@ def test_set_timezone_updates_account(auth_client, user):
 
 
 def test_set_timezone_rejects_unknown_zone(auth_client, user):
+    original = user.timezone
     resp = auth_client.post("/set_timezone", json={"timezone": "Not/AZone"})
     assert resp.status_code == 400
-    assert user.timezone is None
+    assert user.timezone == original

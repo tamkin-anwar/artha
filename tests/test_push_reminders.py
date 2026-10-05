@@ -133,6 +133,9 @@ def test_send_renewal_reminders_respects_notify_bills_due_false(app, user):
     # "now" as plain UTC (utils.user_now's own fallback) — match its hour
     # exactly so the command's per-user reminder_hour gate always fires
     # regardless of what wall-clock time this test happens to run at.
+    # No timezone on purpose: exercises user_now()'s UTC fallback, which
+    # is the basis the hour above is computed in.
+    user.timezone = None
     user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 
@@ -215,6 +218,9 @@ def test_send_renewal_reminders_respects_notify_events_due_false(app, user):
     db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
     db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/z", p256dh="a", auth="b"))
     user.notify_events_due = False
+    # No timezone on purpose: exercises user_now()'s UTC fallback, which
+    # is the basis the hour above is computed in.
+    user.timezone = None
     user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 
@@ -246,6 +252,9 @@ def test_send_renewal_reminders_combines_bill_and_note_in_one_push(app, user):
     ))
     db.session.add(Note(title="Call the dentist", content="x", user_id=user.id, due_date=today))
     db.session.add(PushSubscription(user_id=user.id, endpoint="https://example.com/x", p256dh="a", auth="b"))
+    # No timezone on purpose: exercises user_now()'s UTC fallback, which
+    # is the basis the hour above is computed in.
+    user.timezone = None
     user.reminder_hour = datetime.now(timezone.utc).hour
     db.session.commit()
 

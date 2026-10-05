@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime, timezone
 
 import pytest
@@ -48,9 +49,9 @@ def _reset_limiter(app):
 def current_period_timestamp() -> datetime:
     """The timestamp the app itself would stamp on a transaction added
     "now" with no explicit date: the *local* calendar date (date.today(),
-    the clock every "this month" filter in finance/routes.py and
-    utils.current_month_bounds() runs on) pinned to noon UTC, exactly like
-    _resolve_transaction_timestamp() in finance/routes.py.
+    which matches utils.user_today() for test users -- see make_user())
+    pinned to noon UTC, exactly like _resolve_transaction_timestamp() in
+    finance/routes.py.
 
     Test helpers must use this rather than datetime.now(timezone.utc) for
     "current period" rows: a bare UTC now lands on the *next* calendar day
@@ -63,7 +64,24 @@ def current_period_timestamp() -> datetime:
     return datetime(today.year, today.month, today.day, 12, 0, tzinfo=timezone.utc)
 
 
+def _machine_iana_zone():
+    """The IANA zone this machine's own clock runs in (e.g.
+    "America/Los_Angeles"), read off /etc/localtime's symlink target, or
+    None if that can't be determined."""
+    target = os.path.realpath("/etc/localtime")
+    marker = "zoneinfo/"
+    return target.split(marker, 1)[1] if marker in target else None
+
+
 def make_user(username="alice", password="password123", email=None, **extra):
+    # Every "today"/"this month" the app computes is the user's own local
+    # date (utils.user_today), which falls back to UTC for a user with no
+    # timezone -- while the tests themselves reason in date.today(), this
+    # machine's local date. Giving test users this machine's own zone keeps
+    # the two in agreement at any hour; without it, any date-relative test
+    # flips whenever the suite runs in the gap between local and UTC
+    # midnight. A test that cares about a specific zone still passes one.
+    extra.setdefault("timezone", _machine_iana_zone())
     user = User(username=username, email=email or f"{username}@example.com", **extra)
     user.set_password(password)
     _db.session.add(user)

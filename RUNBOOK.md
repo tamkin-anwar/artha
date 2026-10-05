@@ -34,6 +34,20 @@ commands and flags Render is actually configured to run should get written
 down somewhere durable (this file, once someone can see the Render
 dashboard to confirm them) rather than staying dashboard-only indefinitely.
 
+Confirmed from the web service's own deploy logs (2026-09-22):
+
+- **Pre-deploy command:** `flask --app wsgi db upgrade`. This is the step
+  that applies a new migration on every push. A failed migration shows up
+  here, before the new version ever goes live.
+- **Workers:** Render sets `WEB_CONCURRENCY=1` by default, so gunicorn runs
+  a single worker. That matters for rate limiting: Flask-Limiter uses
+  in-memory storage (see `artha/extensions.py`), which is only accurate
+  with one worker. Raising the worker count would multiply every limit,
+  including the AI spend limits, by the worker count unless a shared store
+  (Redis) is added at the same time.
+
+The exact build and start commands are still dashboard-only.
+
 ## Environment variables
 
 Set in Render's dashboard (Environment tab), never committed here.
@@ -51,11 +65,14 @@ Set in Render's dashboard (Environment tab), never committed here.
 
 ## Recurring maintenance
 
-- `flask send-renewal-reminders` needs to run once a day (configured as a
-  Render Cron Job, not something a normal page load triggers) to actually
-  send the day's due bills/notes/events as push notifications. If push
-  reminders stop arriving, check that this cron job still exists and ran
-  successfully, before assuming it's an application bug.
+- `flask send-renewal-reminders` needs to run **every hour** (Render Cron
+  Job `artha-renewal-reminders`, schedule `0 * * * *`), not once a day:
+  each user picks their own reminder hour in their own timezone, and the
+  job only sends to whoever's local hour matches on that run. A stale
+  once-daily schedule means only users whose chosen hour happens to line
+  up ever get notified. If push reminders stop arriving, check that this
+  cron job still exists, still runs hourly, and ran successfully, before
+  assuming it's an application bug.
 
 ## If the site is down
 

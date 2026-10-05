@@ -26,6 +26,30 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-10-04",
+        "category": "fixed",
+        "title": "Repeating bills now show up even if you didn't open Finance that day",
+        "body": "Weekly and every-two-weeks bills only used to appear if Finance happened to be open on the exact day they were due, and a monthly bill could be skipped for a month you never opened it. Every bill that's come due now lands on its own date, keeps the category you gave it, and appears on the dashboard too.",
+    },
+    {
+        "date": "2026-10-04",
+        "category": "fixed",
+        "title": "Safe to Spend counts every bill left this month",
+        "body": "A weekly bill still due three more times this month used to be counted once. Safe to Spend now subtracts every remaining one, and never counts a bill twice.",
+    },
+    {
+        "date": "2026-10-04",
+        "category": "fixed",
+        "title": "Your month now ends at your own midnight",
+        "body": "Near the end of each month, the dashboard and Finance could switch to the next month hours early, or late, depending on your timezone. They now flip over at your own midnight.",
+    },
+    {
+        "date": "2026-10-04",
+        "category": "fixed",
+        "title": "Money shows in your currency on every page",
+        "body": "Accounts, Calendar, and Scenarios could show a dollar sign next to amounts in another currency. They now use your chosen currency, and anything paid in a different one shows exactly what it cost in that currency.",
+    },
+    {
         "date": "2026-09-22",
         "category": "new",
         "title": "See your real net worth, not just this month's spending",

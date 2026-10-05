@@ -50,7 +50,7 @@ from datetime import datetime, timedelta
 from flask import Response, jsonify, render_template, request, stream_with_context
 from flask_login import current_user, login_required
 
-from ...extensions import db
+from ...extensions import db, ai_limit, AI_CHAT_LIMIT, AI_INSIGHTS_LIMIT
 from ...models import Conversation, Message
 from ...services.ai_service import AIService
 from . import ai_bp
@@ -196,6 +196,7 @@ def new_conversation():
 
 @ai_bp.post("/chat")
 @login_required
+@ai_limit(AI_CHAT_LIMIT)
 def chat():
     """
     Non-streaming chat.
@@ -234,6 +235,7 @@ def chat():
 
 @ai_bp.post("/insights")
 @login_required
+@ai_limit(AI_INSIGHTS_LIMIT)
 def insights():
     """
     Auto-generate a financial health report.
@@ -273,6 +275,7 @@ def insights():
 
 @ai_bp.post("/chat/stream")
 @login_required
+@ai_limit(AI_CHAT_LIMIT)
 def stream_chat():
     """
     SSE streaming chat.

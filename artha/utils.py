@@ -5,6 +5,7 @@ from decimal import Decimal
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
+import nh3
 from flask import request
 
 # The closed set of currencies Artha supports display/entry in — matches
@@ -113,6 +114,25 @@ def next_due_date(template_tx, from_date: date) -> date | None:
     return None
 
 
+def recurring_occurrences(template_tx, start: date, end: date, limit: int = 60) -> list[date]:
+    """Every occurrence date of a recurring series inside [start, end],
+    oldest first -- next_due_date() stepped forward one occurrence at a
+    time. next_due_date() alone only ever answers "the next one," which
+    undercounts any weekly/biweekly series (several occurrences per month)
+    wherever a caller actually needs all of them. `limit` caps a
+    pathological range the same way _generate_recurring_events caps its
+    own walk."""
+    dates: list[date] = []
+    cursor = start
+    while cursor <= end and len(dates) < limit:
+        due = next_due_date(template_tx, cursor)
+        if due is None or due > end:
+            break
+        dates.append(due)
+        cursor = due + timedelta(days=1)
+    return dates
+
+
 # ---------------------------------------------------------------------------
 # Note title/preview derivation
 #
@@ -154,6 +174,72 @@ class _PlainTextExtractor(HTMLParser):
 
 def looks_like_html(text: str) -> bool:
     return bool(_LOOKS_LIKE_HTML_RE.search(text or ""))
+
+
+# ---------------------------------------------------------------------------
+# Note HTML sanitizing
+#
+# Note.content is raw innerHTML from the contenteditable editor, rendered
+# back as live HTML (notes.html's |safe template, the editor/card
+# innerHTML). Only a note's owner ever sees it, so this was never a hole
+# another user could reach -- but an AI-proposed note is content the user
+# didn't type themselves, and pasted web content can carry anything, so
+# both the save path and the read path run it through nh3 (bindings for
+# Mozilla's ammonia; bleach, the older choice, is archived and
+# unmaintained). The allowlist is exactly what the editor itself produces:
+# formatBlock headings, execCommand bold/italic/underline/strike, links,
+# inline code, lists, and checklists (div.note-checklist-item > input
+# checkbox + span.note-checklist-text, checked state as the `checked`
+# attribute plus a `.checked` class). Anything else is dropped, never
+# escaped into visible markup.
+# ---------------------------------------------------------------------------
+
+_NOTE_TAGS = {
+    "p", "div", "br", "span", "hr",
+    "b", "strong", "i", "em", "u", "s", "strike", "del",
+    "h1", "h2", "h3",
+    "ul", "ol", "li",
+    "a", "code", "pre", "blockquote",
+    "input",
+}
+_NOTE_ATTRIBUTES = {
+    "a": {"href", "title"},
+    "input": {"checked", "aria-label"},
+    # `class` is governed by _NOTE_CLASSES alone -- ammonia rejects a
+    # blanket class attribute alongside a per-tag class allowlist.
+    "*": {"style"},
+}
+# A checkbox, and only a non-editable one: no text inputs, no other types.
+_NOTE_TAG_ATTRIBUTE_VALUES = {
+    "input": {"type": {"checkbox"}, "contenteditable": {"false"}},
+}
+_NOTE_CLASSES = {
+    "div": {"note-checklist-item", "checked"},
+    "span": {"note-checklist-text"},
+}
+# Keeps simple pasted emphasis readable without letting a style attribute
+# reposition or hide anything.
+_NOTE_STYLE_PROPERTIES = {
+    "color", "background-color", "font-weight", "font-style", "text-decoration", "text-align",
+}
+
+
+def sanitize_note_html(content: str) -> str:
+    """Note content safe to render as HTML. Plain text (a dashboard
+    quick-add note, a legacy markdown-ish note) is returned untouched --
+    running it through an HTML sanitizer would escape a literal "<" or "&"
+    a second time when it's later rendered as text."""
+    if not content or not looks_like_html(content):
+        return content
+    return nh3.clean(
+        content,
+        tags=_NOTE_TAGS,
+        attributes=_NOTE_ATTRIBUTES,
+        tag_attribute_values=_NOTE_TAG_ATTRIBUTE_VALUES,
+        allowed_classes=_NOTE_CLASSES,
+        filter_style_properties=_NOTE_STYLE_PROPERTIES,
+        url_schemes={"http", "https", "mailto"},
+    )
 
 
 def html_to_plain_text(raw: str) -> str:
@@ -212,13 +298,17 @@ def derive_title_and_preview(content: str):
     return title, preview
 
 
-def current_month_bounds() -> tuple[datetime, datetime]:
-    """Return (start, end) datetimes bounding the current calendar month,
-    for `Transaction.timestamp >= start, Transaction.timestamp < end`
-    filtering. Shared by the dashboard and /api/finance_totals so both
+def current_month_bounds(today: date) -> tuple[datetime, datetime]:
+    """Return (start, end) datetimes bounding the calendar month `today`
+    falls in, for `Transaction.timestamp >= start, Transaction.timestamp <
+    end` filtering. Shared by the dashboard and /api/finance_totals so both
     default to "this month" the same way the /finance page's month tabs
-    already do (see _month_start in finance/routes.py)."""
-    today = date.today()
+    already do (see _month_start in finance/routes.py).
+
+    `today` must be the user's own local date (user_today()), not the
+    server's: this used to read date.today() itself, so on Render (UTC) a
+    Pacific-time user saw next month's empty totals for the last ~7 hours
+    of every month, while the rest of the dashboard was still on theirs."""
     start = datetime(today.year, today.month, 1)
     if today.month == 12:
         end = datetime(today.year + 1, 1, 1)

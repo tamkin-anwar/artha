@@ -153,6 +153,11 @@ def index():
         accounts_view.append({
             "account": a,
             "staleness": _staleness_tier(a.balance_updated_at),
+            # Shown as a muted "≈" line under a balance held in a different
+            # currency than the one the user displays everything in, so
+            # it's visible how that account feeds the converted totals.
+            "is_foreign": (a.currency or "USD") != display_currency,
+            "display_balance": float(convert_amount(a.current_balance, a.currency or "USD", display_currency, rates)),
         })
     asset_rows = [row for row in accounts_view if not row["account"].is_liability]
     liability_rows = [row for row in accounts_view if row["account"].is_liability]

@@ -14,7 +14,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
-from ...extensions import db
+from ...extensions import db, ai_limit, AI_BULK_CATEGORIZE_LIMIT, AI_IMPORT_LIMIT
 from ...models import Transaction, User, PushSubscription
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
@@ -26,6 +26,8 @@ from ...utils import (
     current_month_bounds,
     budget_status,
     next_due_date,
+    recurring_occurrences,
+    user_today,
     CURRENCY_CODES,
     CURRENCY_SYMBOLS,
     csv_formula_safe,
@@ -254,7 +256,10 @@ def _resolve_transaction_timestamp(date_str: str | None) -> datetime:
         except ValueError:
             parsed = None
     if parsed is None:
-        parsed = date.today()
+        # The user's own local date, not the server's UTC one -- otherwise
+        # a transaction added with no explicit date in the evening (US) or
+        # early morning (Asia) lands on the wrong calendar day.
+        parsed = user_today(current_user)
     return datetime(parsed.year, parsed.month, parsed.day, 12, 0, 0, tzinfo=timezone.utc)
 
 
@@ -321,7 +326,7 @@ def _check_budget_overage_alerts(user_id: int) -> None:
         if not subs:
             return
 
-        today = date.today()
+        today = user_today(owner)
         month_start, month_end = _current_month_bounds_local(today)
 
         expenses = Transaction.query.filter(
@@ -481,7 +486,7 @@ def add_transaction():
             return render_template(
                 "partials/transaction_row.html",
                 tx=new_tx,
-                today_date=date.today().strftime("%Y-%m-%d"),
+                today_date=user_today(current_user).strftime("%Y-%m-%d"),
                 categories=TRANSACTION_CATEGORIES,
             )
         flash("Transaction added!", "success")
@@ -721,7 +726,7 @@ def undo_delete_transaction():
         row_html = render_template(
             "partials/transaction_row.html",
             tx=restored,
-            today_date=date.today().strftime("%Y-%m-%d"),
+            today_date=user_today(current_user).strftime("%Y-%m-%d"),
             categories=TRANSACTION_CATEGORIES,
         )
         return jsonify({"message": "Transaction restored.", "row_html": row_html})
@@ -765,44 +770,59 @@ def toggle_recurring(transaction_id):
         return jsonify({"message": "Database error"}), 500
 
 
-@finance_bp.route("/finance/generate-recurring", methods=["POST"])
-@login_required
-def generate_recurring():
-    """
-    Auto-generate the next due copy of every recurring transaction that
-    doesn't already have one. Called silently on every /finance page load.
+# How far back a dormant series is allowed to catch up in one go -- a
+# year of missed weekly bills or monthly ones, not every occurrence since
+# a series was first created. Same "cap the backlog, never flood" idea
+# _generate_recurring_events' MAX_GENERATED applies to calendar events.
+_RECURRING_CATCHUP_DAYS = 366
+_RECURRING_CATCHUP_MONTHS = 12
 
-    A monthly series (recurrence_interval is None, the default — every
-    recurring transaction predating that column) still uses its original
-    dedup rule exactly as before: "already exists" means any transaction
-    with the same description + type falls within the current calendar
-    month, regardless of whether that transaction was itself auto-
-    generated. A weekly/biweekly series dedupes tighter, against its own
-    exact computed occurrence date (recurring_month doubles as that exact
-    date for those two intervals — see Transaction.recurring_month's own
-    comment) rather than a whole-month window, since several real
-    occurrences can legitimately land in the same calendar month.
 
-    A series past its own recurring_end_date generates nothing further
-    and has is_recurring cleared on its template here, so it stops
-    showing as an active recurring rule once it's actually finished
-    rather than looking perpetually "still recurring" with nothing left
-    to generate.
+def _add_months(d: date, months: int) -> date:
+    month_index = d.month - 1 + months
+    return date(d.year + month_index // 12, month_index % 12 + 1, 1)
+
+
+def generate_due_recurring(user) -> dict:
     """
-    uid = current_user.id
-    today = date.today()
-    month_start = _month_start(today.year, today.month)
-    next_month_start = _month_start(
-        today.year + 1 if today.month == 12 else today.year,
-        1 if today.month == 12 else today.month + 1,
-    )
+    Create every recurring-transaction occurrence that's come due since
+    each series' most recent row, each on its own original date, oldest
+    first -- not just "this period's" copy. Runs on every /finance and
+    Dashboard load (see generate_recurring() and dashboard.index()).
+
+    Walking forward from the series' *latest* row, never its first one,
+    is deliberate: an occurrence the user deleted on purpose sits behind
+    that row and is never recreated. Lookback is capped at
+    _RECURRING_CATCHUP_DAYS/_MONTHS so a long-forgotten series catches
+    up on its last year, not its entire history.
+
+    Before this, a weekly/biweekly occurrence only ever got created if
+    Finance happened to be opened on its exact due day (one
+    next_due_date() call from today, skipped if that landed in the
+    future), and a monthly bill was lost outright for any month Finance
+    wasn't opened at all.
+
+    Dedup is unchanged: a weekly/biweekly occurrence matches on its exact
+    date (recurring_month == due, or any row timestamped that day); a
+    monthly one matches any transaction with the same description + type
+    anywhere in that calendar month, generated or hand-entered. The
+    uq_transaction_recurring_month constraint still backstops two
+    near-simultaneous loads racing each other.
+
+    A series whose next occurrence falls past its own recurring_end_date
+    has is_recurring cleared on its latest row, so it stops showing as an
+    active rule once it's actually finished.
+    """
+    uid = user.id
+    today = user_today(user)
+    current_month_start = _month_start(today.year, today.month)
 
     recurring_txs = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
 
     # Recurring transactions accumulate one row per period (each generated
     # copy stays is_recurring=True so it keeps showing the recurring UI).
-    # Collapse to one representative row per unique (description, type) —
-    # the most recent — so a "Netflix" template with 6 months of history
+    # Collapse to one representative row per unique (description, type) --
+    # the most recent -- so a "Netflix" template with 6 months of history
     # doesn't get processed 6 times.
     templates_by_key: dict[tuple[str, str], Transaction] = {}
     for tx in recurring_txs:
@@ -810,13 +830,6 @@ def generate_recurring():
         current = templates_by_key.get(key)
         if current is None or (tx.timestamp and current.timestamp and tx.timestamp > current.timestamp):
             templates_by_key[key] = tx
-
-    existing_this_month = Transaction.query.filter(
-        Transaction.user_id == uid,
-        Transaction.timestamp >= month_start,
-        Transaction.timestamp < next_month_start,
-    ).all()
-    existing_keys_this_month = {(t.description, t.type) for t in existing_this_month}
 
     max_pos = (
         db.session.query(func.max(Transaction.position))
@@ -829,114 +842,146 @@ def generate_recurring():
     skipped = 0
     ended = 0
 
+    def _exists_on_day(key, day: date) -> bool:
+        day_start = datetime(day.year, day.month, day.day, 0, 0, 0)
+        return db.session.query(Transaction.id).filter(
+            Transaction.user_id == uid,
+            Transaction.description == key[0],
+            Transaction.type == key[1],
+        ).filter(
+            db.or_(
+                Transaction.recurring_month == day,
+                db.and_(Transaction.timestamp >= day_start, Transaction.timestamp < day_start + timedelta(days=1)),
+            )
+        ).first() is not None
+
+    def _exists_in_month(key, month_start: date) -> bool:
+        return db.session.query(Transaction.id).filter(
+            Transaction.user_id == uid,
+            Transaction.description == key[0],
+            Transaction.type == key[1],
+            Transaction.timestamp >= month_start,
+            Transaction.timestamp < _add_months(month_start, 1),
+        ).first() is not None
+
     for key, template_tx in templates_by_key.items():
         interval = template_tx.recurrence_interval
+        end_date = template_tx.recurring_end_date
+        last_date = template_tx.timestamp.date()
+        # (occurrence date, recurring_month value) for each copy to create.
+        targets: list[tuple[date, date]] = []
+        series_ended = False
 
         if interval in ("weekly", "biweekly"):
-            due = next_due_date(template_tx, today)
-            if due is None:
-                # Past its own recurring_end_date -- this series is done.
-                template_tx.is_recurring = False
-                ended += 1
-                continue
-            if due > today:
-                skipped += 1
-                continue
-            # Matches on recurring_month == due (a prior machine-generated
-            # occurrence) OR the raw timestamp actually falling on `due`
-            # (the series' own anchor/template row, which never gets a
-            # recurring_month itself) -- without the second half, a
-            # template whose own anchor date already equals the newly
-            # computed due date would get "generated" a second time,
-            # duplicating the very occurrence the anchor already is.
-            due_start = datetime(due.year, due.month, due.day, 0, 0, 0)
-            already = Transaction.query.filter(
-                Transaction.user_id == uid,
-                Transaction.description == key[0],
-                Transaction.type == key[1],
-            ).filter(
-                db.or_(
-                    Transaction.recurring_month == due,
-                    db.and_(Transaction.timestamp >= due_start, Transaction.timestamp < due_start + timedelta(days=1)),
-                )
-            ).first()
-            if already is not None:
-                skipped += 1
-                continue
-            target_date = due
+            after_last = last_date + timedelta(days=1)
+            if next_due_date(template_tx, after_last) is None:
+                series_ended = True
+            else:
+                window_start = max(after_last, today - timedelta(days=_RECURRING_CATCHUP_DAYS))
+                for due in recurring_occurrences(template_tx, window_start, today, limit=60):
+                    if _exists_on_day(key, due):
+                        skipped += 1
+                    else:
+                        targets.append((due, due))
+                # Matches on recurring_month == due (a prior machine-
+                # generated occurrence) OR the raw timestamp actually
+                # falling on `due` (the series' own anchor/template row,
+                # which never gets a recurring_month itself) -- see
+                # _exists_on_day. Without the second half, a template
+                # whose anchor date equals a computed due date would be
+                # "generated" a second time, duplicating itself.
         else:
-            if key in existing_keys_this_month:
+            first_month = max(
+                _add_months(_month_start(last_date.year, last_date.month), 1),
+                _add_months(current_month_start, -(_RECURRING_CATCHUP_MONTHS - 1)),
+            )
+            month = first_month
+            while month <= current_month_start:
+                # Preserve the template's own day-of-month (clamped to the
+                # month's length, e.g. day 31 in a 30-day month) rather
+                # than stamping every copy with today's date -- same
+                # clamping next_due_date() uses. The current month's copy
+                # is still created up front even if its day is later this
+                # month, exactly as before.
+                days_in_month = calendar.monthrange(month.year, month.month)[1]
+                target = date(month.year, month.month, min(template_tx.timestamp.day, days_in_month))
+                if end_date and target > end_date:
+                    series_ended = True
+                    break
+                if _exists_in_month(key, month):
+                    skipped += 1
+                else:
+                    targets.append((target, month))
+                month = _add_months(month, 1)
+            if not targets and not series_ended and first_month > current_month_start:
+                # Latest row is already this month's copy -- nothing due.
                 skipped += 1
-                continue
-            if template_tx.recurring_end_date and month_start > template_tx.recurring_end_date:
-                template_tx.is_recurring = False
-                ended += 1
-                continue
 
-            # Preserve the template's own day-of-month (clamped to the
-            # current month's length, e.g. day 31 in a 30-day month)
-            # rather than stamping every generated copy with today's
-            # date — otherwise every recurring bill without a copy yet
-            # this month piles onto whatever day the user happens to
-            # next load /finance, instead of landing on the day it's
-            # actually due. Same clamping already used by the calendar's
-            # upcoming-recurring reminder (see next_due_date() in
-            # artha/utils.py).
-            days_this_month = calendar.monthrange(today.year, today.month)[1]
-            target_day = min(template_tx.timestamp.day, days_this_month)
-            target_date = date(today.year, today.month, target_day)
+        if interval in ("weekly", "biweekly") and not targets and not series_ended:
+            skipped += 1
 
         # Same currency as the template (a recurring bill doesn't change
-        # currency month to month), but usd_value is relocked fresh here
-        # rather than copied — this is a genuinely new transaction being
-        # created right now, so it should lock in *this* moment's rate,
-        # not carry forward a rate from whenever the template was itself
-        # created.
+        # currency month to month), but usd_value is relocked fresh for
+        # each copy rather than copied -- a genuinely new transaction
+        # created right now locks in *this* moment's rate.
         currency = template_tx.native_currency
-        usd_value, usd_rate_locked = lock_usd_value(template_tx.amount, currency)
+        latest_row = template_tx
+        for target_date, recurring_month in targets:
+            usd_value, usd_rate_locked = lock_usd_value(template_tx.amount, currency)
+            max_pos += 1
+            new_tx = Transaction(
+                description=template_tx.description,
+                amount=template_tx.amount,
+                type=template_tx.type,
+                category=template_tx.category,
+                user_id=uid,
+                position=int(max_pos),
+                is_recurring=True,
+                timestamp=datetime(target_date.year, target_date.month, target_date.day, 12, 0, 0, tzinfo=timezone.utc),
+                recurring_month=recurring_month,
+                recurrence_interval=interval,
+                recurring_end_date=end_date,
+                currency=currency,
+                usd_value=usd_value,
+                usd_rate_locked=usd_rate_locked,
+            )
+            # One savepoint per copy: uq_transaction_recurring_month is what
+            # actually stops two near-simultaneous loads from both creating
+            # the same occurrence, and a losing IntegrityError must be
+            # skippable without discarding every other copy in this pass.
+            try:
+                with db.session.begin_nested():
+                    db.session.add(new_tx)
+                generated += 1
+                latest_row = new_tx
+            except IntegrityError:
+                skipped += 1
 
-        max_pos += 1
-        new_tx = Transaction(
-            description=template_tx.description,
-            amount=template_tx.amount,
-            type=template_tx.type,
-            user_id=uid,
-            position=int(max_pos),
-            is_recurring=True,
-            timestamp=_resolve_transaction_timestamp(target_date.strftime("%Y-%m-%d")),
-            recurring_month=month_start if interval not in ("weekly", "biweekly") else target_date,
-            recurrence_interval=interval,
-            recurring_end_date=template_tx.recurring_end_date,
-            currency=currency,
-            usd_value=usd_value,
-            usd_rate_locked=usd_rate_locked,
-        )
-
-        # Committed one at a time (inside a savepoint) rather than as one
-        # batch: the uq_transaction_recurring_month constraint is what
-        # actually stops two near-simultaneous /finance loads from both
-        # generating the same bill, but that only works if a losing
-        # IntegrityError can be caught and skipped without discarding the
-        # other, unrelated templates already generated in this same pass.
-        try:
-            with db.session.begin_nested():
-                db.session.add(new_tx)
-            generated += 1
-        except IntegrityError:
-            db.session.rollback()
-            skipped += 1
+        if series_ended:
+            latest_row.is_recurring = False
+            ended += 1
 
     try:
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         log.error("Error generating recurring transactions: %s", e, exc_info=True)
-        return jsonify({"message": "Error generating recurring transactions"}), 500
+        raise
 
     if generated:
-        _check_budget_overage_alerts(current_user.id)
+        _check_budget_overage_alerts(uid)
 
-    return jsonify({"generated": generated, "skipped": skipped, "ended": ended})
+    return {"generated": generated, "skipped": skipped, "ended": ended}
+
+
+@finance_bp.route("/finance/generate-recurring", methods=["POST"])
+@login_required
+def generate_recurring():
+    """Fired silently on every /finance load -- see generate_due_recurring()."""
+    try:
+        return jsonify(generate_due_recurring(current_user))
+    except Exception:
+        return jsonify({"message": "Error generating recurring transactions"}), 500
 
 
 @finance_bp.get("/api/finance_totals")
@@ -957,7 +1002,7 @@ def finance_totals():
     on load, not sum all-time totals back in.
     """
     uid = current_user.id
-    month_start, month_end = current_month_bounds()
+    month_start, month_end = current_month_bounds(user_today(current_user))
 
     # coalesce(usd_value, amount): transactions can carry different
     # currencies now, so a raw sum of `amount` across them would be
@@ -1107,7 +1152,7 @@ def finance_page():
     display_currency = current_user.preferred_currency or "USD"
     rates = get_rates() if any(t.native_currency != display_currency for t in all_tx) else None
 
-    today = date.today()
+    today = user_today(current_user)
     month_param = (request.args.get("month") or "").strip()
     all_time = month_param == "all"
 
@@ -1455,7 +1500,7 @@ def finance_breakdown():
     rates = get_rates() if display_currency != "USD" else None
     view = (request.args.get("view") or "spending").strip().lower()
     period = (request.args.get("period") or "month").strip().lower()
-    today = date.today()
+    today = user_today(current_user)
     try:
         year = int(request.args.get("year") or today.year)
     except (TypeError, ValueError):
@@ -2353,6 +2398,7 @@ _BULK_CATEGORIZE_MAX_AI_BATCHES = 10
 
 @finance_bp.route("/finance/categorize_uncategorized", methods=["POST"])
 @login_required
+@ai_limit(AI_BULK_CATEGORIZE_LIMIT)
 def categorize_uncategorized():
     """
     Retroactive version of the same auto-categorization add_transaction()
@@ -2448,7 +2494,8 @@ def export_csv():
             sel_year, sel_month = (int(part) for part in month_param.split("-", 1))
             selected_date = _month_start(sel_year, sel_month)
         except (ValueError, TypeError):
-            selected_date = _month_start(date.today().year, date.today().month)
+            today = user_today(current_user)
+            selected_date = _month_start(today.year, today.month)
         next_month = (
             _month_start(selected_date.year + 1, 1)
             if selected_date.month == 12
@@ -2460,7 +2507,7 @@ def export_csv():
         )
         filename_part = selected_date.strftime("%Y-%m")
     else:
-        today = date.today()
+        today = user_today(current_user)
         selected_date = _month_start(today.year, today.month)
         next_month = (
             _month_start(today.year + 1, 1) if today.month == 12 else _month_start(today.year, today.month + 1)
@@ -2494,6 +2541,7 @@ def export_csv():
 
 @finance_bp.route("/finance/import/preview", methods=["POST"])
 @login_required
+@ai_limit(AI_IMPORT_LIMIT)
 def import_preview():
     """
     Parses an uploaded statement (CSV or PDF) and returns what WOULD be

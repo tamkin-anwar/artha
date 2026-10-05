@@ -10,7 +10,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from ...extensions import db
 from ...models import Note
-from ...utils import is_ajax_request, derive_title_and_preview, html_to_plain_text, csv_formula_safe
+from ...utils import is_ajax_request, derive_title_and_preview, html_to_plain_text, csv_formula_safe, sanitize_note_html
 from . import notes_bp
 
 log = logging.getLogger(__name__)
@@ -77,7 +77,9 @@ def _serialize_note(note):
     return {
         "id": note.id,
         "title": note.title,
-        "content": note.content,
+        # Sanitized on the way out too, so a note saved before sanitizing
+        # existed is covered without a data migration.
+        "content": sanitize_note_html(note.content),
         "preview": note.preview,
         "pinned": bool(note.pinned),
         "archived": bool(note.archived),
@@ -121,7 +123,7 @@ def _parse_due_date(raw):
 def notes_page():
     if request.method == "POST":
         title = request.form.get("title", "").strip()
-        content = request.form.get("content", "").strip()
+        content = sanitize_note_html(request.form.get("content", "").strip())
 
         if not content:
             flash("Note content is required.", "error")
@@ -280,7 +282,7 @@ def update_note_fields(note_id):
         explicit_title = (data.get("title") or "").strip()
         changed = True
     if "content" in data:
-        note.content = (data.get("content") or "").strip()
+        note.content = sanitize_note_html((data.get("content") or "").strip())
         changed = True
 
     # title/preview are derived once, here, from whatever content ends up

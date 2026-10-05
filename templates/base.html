@@ -95,8 +95,7 @@
         {% block content %}{% endblock %}
 
     {% else %}
-        {% set current_view = request.args.get('view') %}
-        {% set is_dashboard_active = request.endpoint == 'dashboard.index' and not current_view %}
+        {% set is_dashboard_active = request.endpoint == 'dashboard.index' %}
         {% set is_finance_active = request.endpoint == 'finance.finance_page' %}
         {% set is_accounts_active = request.endpoint and request.endpoint.startswith('accounts.') %}
         {% set is_notes_active = request.endpoint == 'notes.notes_page' %}

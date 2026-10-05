@@ -11,12 +11,12 @@ from icalendar import Alarm, Calendar as ICalendar, Event as ICalEvent
 from sqlalchemy import func
 
 from ...changelog import CHANGELOG_ENTRIES
-from ...extensions import db
+from ...extensions import db, ai_limit, AI_CALCULATOR_LIMIT
 from ...models import Note, Transaction, Event, EventException, User
 from ...models.budget import Budget
 from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
-from ...utils import current_month_bounds, derive_title_and_preview, budget_status, next_due_date, user_today, is_ajax_request, CURRENCY_SYMBOLS
-from ..finance.routes import TRANSACTION_CATEGORIES
+from ...utils import current_month_bounds, derive_title_and_preview, sanitize_note_html, budget_status, next_due_date, recurring_occurrences, user_today, is_ajax_request, CURRENCY_SYMBOLS
+from ..finance.routes import TRANSACTION_CATEGORIES, generate_due_recurring
 from ..accounts.routes import net_worth_summary
 from . import dashboard_bp
 
@@ -37,7 +37,7 @@ def healthz():
 @login_required
 def index():
     if request.method == "POST":
-        note_content = request.form.get("note", "").strip()
+        note_content = sanitize_note_html(request.form.get("note", "").strip())
         if not note_content:
             msg = "Note content is required."
             if is_ajax_request():
@@ -85,6 +85,16 @@ def index():
     # redirect-and-patch dance — this is just right on first render.
     today = user_today(current_user)
 
+    # Recurring bills used to be created only when /finance was opened, so
+    # the Dashboard's own totals and Safe to Spend quietly missed any bill
+    # that had come due since. Same catch-up Finance runs (and the same
+    # "materialize on GET" precedent _generate_recurring_events sets for
+    # Calendar); a failure here must never take the Dashboard down with it.
+    try:
+        generate_due_recurring(current_user)
+    except Exception:
+        db.session.rollback()
+
     notes = (
         Note.query.filter_by(user_id=uid, archived=False)
         .order_by(Note.position.asc(), Note.id.asc())
@@ -94,7 +104,7 @@ def index():
     # default the /finance page's month tabs use. This used to sum every
     # transaction the user ever entered, all-time, which made the cards
     # both misleading and inconsistent with the rest of the app.
-    month_start, month_end = current_month_bounds()
+    month_start, month_end = current_month_bounds(today)
 
     transactions = (
         Transaction.query.filter(
@@ -280,26 +290,42 @@ def index():
     # out recurring bills still expected to land before month-end,
     # reusing templates_by_key (built above for renewals_this_week)
     # with a wider window: through the last day of the month rather
-    # than the next 7 days. next_due_date() returning a date already
-    # this month but before today would mean that occurrence already
-    # posted (and is therefore already inside `spent`), so it's
-    # naturally excluded here without any extra dedup logic. Only set
-    # when a budget actually exists -- there's no ceiling to be "safe"
-    # against otherwise.
+    # than the next 7 days. Every remaining occurrence counts, not just
+    # the next one (a weekly bill can still land 3-4 more times this
+    # month), and any occurrence that already exists as a real
+    # transaction is skipped -- it's already inside `spent`. That second
+    # rule matters: generate_due_recurring() creates each monthly bill's
+    # copy for this month up front, so counting it again here would
+    # subtract the same bill twice. Only set when a budget actually
+    # exists -- there's no ceiling to be "safe" against otherwise.
     # ------------------------------------------------------------------
     safe_to_spend = None
     safe_to_spend_upcoming = 0.0
     if budget["has_budget"]:
         month_last_day = (month_end - timedelta(days=1)).date()
+        posted_in_month = {(t.description, t.type) for t in transactions}
+        posted_on_day = {(t.description, t.type, t.timestamp.date()) for t in transactions}
+        # Two totals: everything still dated today-or-later this month
+        # (what the "after $X in upcoming bills" line tells the user), and
+        # just the part of that not yet posted (what actually gets
+        # subtracted, since a posted-but-future-dated copy is already in
+        # `spent`). Same final figure either way you add it up.
         upcoming_usd = Decimal("0")
+        unposted_usd = Decimal("0")
         for (desc, ttype), tx in templates_by_key.items():
             if ttype != "expense":
                 continue
-            due = next_due_date(tx, today)
-            if due is not None and today <= due <= month_last_day:
+            for due in recurring_occurrences(tx, today, month_last_day):
                 upcoming_usd += tx.value_in_usd
+                if tx.recurrence_interval in ("weekly", "biweekly"):
+                    posted = (desc, ttype, due) in posted_on_day
+                else:
+                    posted = (desc, ttype) in posted_in_month
+                if not posted:
+                    unposted_usd += tx.value_in_usd
         safe_to_spend_upcoming = float(convert_usd_to(upcoming_usd, display_currency, rates))
-        safe_to_spend = budget["cap"] - budget["spent"] - safe_to_spend_upcoming
+        unposted = float(convert_usd_to(unposted_usd, display_currency, rates))
+        safe_to_spend = budget["cap"] - budget["spent"] - unposted
 
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
@@ -515,6 +541,9 @@ def calendar_page():
             "date_label": f"{cal.month_abbr[due.month]} {due.day}",
             "description": desc,
             "amount": float(tx.amount),
+            # The bill's own currency, so its amount is shown exactly as
+            # it's actually charged rather than relabeled with "$".
+            "currency": tx.native_currency,
             "type": ttype,
         }
         recurring_due_by_date[entry["date"]].append(entry)
@@ -622,7 +651,13 @@ def calendar_page():
             {
                 "id": t.id,
                 "description": t.description,
+                # Native amount + its own currency for the row itself;
+                # display_amount (converted to this user's display
+                # currency) only for summing a day's Net, since a raw sum
+                # across currencies is meaningless.
                 "amount": float(t.amount),
+                "currency": t.native_currency,
+                "display_amount": float(convert_usd_to(t.value_in_usd, calendar_display_currency, calendar_rates)),
                 "type": t.type,
                 "is_recurring": t.is_recurring,
             }
@@ -673,6 +708,9 @@ def calendar_page():
         calendar_events=calendar_events,
         recurring_due_by_date=dict(recurring_due_by_date),
         upcoming_recurring=upcoming_recurring,
+        # Server-rendered fallback symbol for the day-cell net chips, until
+        # the page's script reformats them with the real formatter.
+        currency_symbol=CURRENCY_SYMBOLS.get(calendar_display_currency, "$"),
     )
 
 
@@ -1022,6 +1060,7 @@ _CALCULATOR_LINE_MAX_CHARS = 300
 
 @dashboard_bp.route("/calculator/solve", methods=["POST"])
 @login_required
+@ai_limit(AI_CALCULATOR_LIMIT)
 def calculator_solve():
     """
     AI fallback for one Smart Calculator line the client-side

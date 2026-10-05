@@ -143,6 +143,10 @@ def create_app(config_name: str = "default") -> Flask:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
 
+    # Note HTML is rendered raw (|safe) -- see utils.sanitize_note_html.
+    from .utils import sanitize_note_html
+    app.jinja_env.filters["sanitize_note"] = sanitize_note_html
+
     # ------------------------------------------------------------------
     # Error handlers
     # ------------------------------------------------------------------
@@ -159,6 +163,13 @@ def create_app(config_name: str = "default") -> Flask:
     @app.errorhandler(429)
     def handle_rate_limit(e):
         log.info("Rate limit hit: %s", request.path)
+        # An AI endpoint's limit carries its own message (extensions.
+        # ai_limit); every one of those is called via fetch(), so it always
+        # gets JSON -- under both keys, since the AI chat UI reads `error`
+        # and every other caller reads `message`.
+        limit = getattr(e, "limit", None)
+        if limit is not None and limit.error_message:
+            return jsonify({"message": e.description, "error": e.description}), 429
         if is_ajax_request():
             return jsonify({"message": "Too many attempts. Please wait a moment and try again."}), 429
         flash("Too many attempts. Please wait a moment and try again.", "error")

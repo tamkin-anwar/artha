@@ -48,7 +48,7 @@ export function setCurrencyCode(code) {
     return preset.code;
 }
 
-function _format(preset, value) {
+function _format(preset, value, { wholeUnits = false } = {}) {
     const num = Number(value);
     const safeNumber = Number.isFinite(num) ? num : 0;
 
@@ -59,9 +59,12 @@ function _format(preset, value) {
             style: "currency",
             currency: preset.code,
             currencyDisplay: "narrowSymbol",
-            maximumFractionDigits: 2,
+            // wholeUnits: for tight spots (a calendar day cell's net chip)
+            // where "$1,234" fits and "$1,234.56" doesn't.
+            minimumFractionDigits: wholeUnits ? 0 : undefined,
+            maximumFractionDigits: wholeUnits ? 0 : 2,
             numberingSystem: "latn",
-        }).format(safeNumber);
+        }).format(wholeUnits ? Math.round(safeNumber) : safeNumber);
 
         // Some environments show BDT instead of a symbol for Bangladeshi taka
         // Force the taka symbol while keeping locale grouping
@@ -80,8 +83,8 @@ function _format(preset, value) {
 // currency server-side: dashboard/finance stat cards, budgets, chart
 // totals. Money the server hands over pre-converted like this needs no
 // further conversion here, only formatting.
-export function formatMoney(value) {
-    return _format(getCurrencyPreset(), value);
+export function formatMoney(value, options) {
+    return _format(getCurrencyPreset(), value, options);
 }
 
 // Formats `value` in ITS OWN currency, ignoring whatever the user
@@ -92,8 +95,8 @@ export function formatMoney(value) {
 // symbol or converted. Falls back to the globally-selected currency only
 // when `currencyCode` itself is missing (an older element that predates
 // this attribute) rather than guessing.
-export function formatMoneyIn(value, currencyCode) {
-    return _format(safeGetPreset(currencyCode || getCurrencyCode()), value);
+export function formatMoneyIn(value, currencyCode, options) {
+    return _format(safeGetPreset(currencyCode || getCurrencyCode()), value, options);
 }
 
 // Reads data-money-value + data-money-currency off `el` and formats in

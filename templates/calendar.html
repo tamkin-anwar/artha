@@ -308,7 +308,7 @@
                         {% for c in d.event_colors %}<span class="cal-dot" data-event-dot style="background:var(--note-{{ c }}-text);"></span>{% endfor %}
                     </div>
                     {% if d.net != 0 %}
-                        <span class="cal-day-net" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--red)' }}; background:{{ 'var(--emerald-dim)' if d.net > 0 else 'var(--red-dim)' }};">{{ '+' if d.net > 0 else '-' }}${{ '%.0f'|format(d.net|abs) }}</span>
+                        <span class="cal-day-net" data-cal-net="{{ d.net }}" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--red)' }}; background:{{ 'var(--emerald-dim)' if d.net > 0 else 'var(--red-dim)' }};">{{ '+' if d.net > 0 else '-' }}{{ currency_symbol }}{{ '%.0f'|format(d.net|abs) }}</span>
                     {% endif %}
                 </button>
             {% endfor %}
@@ -325,6 +325,7 @@
                 data-description="{{ upcoming_recurring.description }}"
                 data-date-label="{{ upcoming_recurring.date_label }}"
                 data-amount="{{ '%.2f'|format(upcoming_recurring.amount) }}"
+                data-currency="{{ upcoming_recurring.currency }}"
                 style="background:var(--gold-dim); border:1px solid var(--gold); border-radius:10px; padding:12px 14px; font-size:13px; color:var(--gold); margin-top:auto;">
             </div>
         {% endif %}
@@ -395,10 +396,45 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
         return { dayName: dayName, fullDate: fullDate };
     }
 
+    // This is a classic script, so the app's real currency formatter (an
+    // ES module) comes in through a dynamic import -- same bridge
+    // calculator.html and notes.html use. Until it resolves, the fallbacks
+    // below keep the panel readable; once it does, everything money-shaped
+    // on the page is re-rendered with it. This page used to hardcode "$"
+    // everywhere: a converted figure got the wrong symbol for a non-USD
+    // user, and a bill's own native amount (say £20) read as "$20.00".
+    var __currency = null;
+
     function formatMoney(n) {
-        var sign = n < 0 ? "-" : "";
-        return sign + "$" + Math.abs(n).toFixed(2);
+        if (__currency) return __currency.formatMoney(n);
+        return (n < 0 ? "-" : "") + "$" + Math.abs(n).toFixed(2);
     }
+
+    // A single transaction's own amount, in its own currency.
+    function formatMoneyIn(n, code) {
+        if (__currency) return __currency.formatMoneyIn(n, code);
+        return "$" + Math.abs(n).toFixed(2);
+    }
+
+    function formatDayNetChips() {
+        if (!__currency) return;
+        document.querySelectorAll("[data-cal-net]").forEach(function (el) {
+            var net = parseFloat(el.getAttribute("data-cal-net"));
+            if (!Number.isFinite(net)) return;
+            el.textContent = (net >= 0 ? "+" : "-") + __currency.formatMoney(Math.abs(net), { wholeUnits: true });
+        });
+    }
+
+    import("{{ url_for('static', filename='js/currency.js') }}").then(function (mod) {
+        __currency = mod;
+        formatDayNetChips();
+        if (currentSelectedDate) renderDayDetail(currentSelectedDate);
+    });
+
+    document.addEventListener("currency-refresh-ui", function () {
+        formatDayNetChips();
+        if (currentSelectedDate) renderDayDetail(currentSelectedDate);
+    });
 
     function renderDayDetail(dateStr) {
         var container = document.getElementById("day-detail-content");
@@ -440,7 +476,8 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 recurringBanner.style.gap = "8px";
                 recurringBanner.innerHTML = '<i data-lucide="repeat" aria-hidden="true" style="width:14px; height:14px; stroke-width:2; flex-shrink:0;"></i><span>' +
                     escapeHtml(recurringBanner.dataset.description) +
-                    " due " + whenText + " &middot; $" + escapeHtml(recurringBanner.dataset.amount) + "</span>";
+                    " due " + whenText + " &middot; " +
+                    escapeHtml(formatMoneyIn(parseFloat(recurringBanner.dataset.amount), recurringBanner.dataset.currency)) + "</span>";
             } else {
                 recurringBanner.style.display = "none";
             }
@@ -478,14 +515,19 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 html += '<div>';
                 txs.forEach(function (t) {
                     var signedAmount = t.type === "income" ? t.amount : -t.amount;
-                    net += signedAmount;
+                    // Net sums each row's display-currency value, never
+                    // its native amount -- rows can be in different
+                    // currencies. Older cached payloads without it fall
+                    // back to the native amount.
+                    var displayAmount = (typeof t.display_amount === "number") ? t.display_amount : t.amount;
+                    net += t.type === "income" ? displayAmount : -displayAmount;
                     var color = t.type === "income" ? "var(--emerald)" : "var(--red)";
                     html += '<div class="cal-tx-row">';
                     html += '<div style="min-width:0;">';
                     html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:4px;">' + '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + '</span>' + (t.is_recurring ? '<i data-lucide="repeat" aria-hidden="true" style="width:11px; height:11px; stroke-width:2; color:var(--gold); flex-shrink:0;"></i>' : '') + '</div>';
                     html += '<span class="cal-type-badge ' + t.type + '">' + t.type + '</span>';
                     html += '</div>';
-                    html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + "$" + Math.abs(t.amount).toFixed(2) + '</div>';
+                    html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + escapeHtml(formatMoneyIn(Math.abs(t.amount), t.currency)) + '</div>';
                     html += '</div>';
                 });
                 html += '</div>';

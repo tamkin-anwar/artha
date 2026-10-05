@@ -40,14 +40,13 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 import click
-from flask import current_app
 
 from .blueprints.dashboard.routes import _generate_recurring_events
 from .blueprints.notes.routes import TRASH_RETENTION_DAYS
 from .extensions import db
 from .models import Event, Note, PushSubscription, Transaction, User
 from .services.push_service import send_push
-from .utils import next_due_date, user_now, user_today
+from .utils import next_due_date, user_now
 
 log = logging.getLogger(__name__)
 

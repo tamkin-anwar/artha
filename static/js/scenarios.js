@@ -1,5 +1,5 @@
 // static/js/scenarios.js
-import { formatMoney } from "./currency.js";
+import { formatMoney, formatMoneyIn } from "./currency.js";
 
 function applyMoneyFormatting() {
     document.querySelectorAll(".scenario-money[data-money-value]").forEach((el) => {
@@ -8,7 +8,12 @@ function applyMoneyFormatting() {
 
         const signed = el.getAttribute("data-money-signed") === "true";
         const suffix = el.getAttribute("data-money-suffix") || "";
-        const formatted = formatMoney(Math.abs(num));
+        // A figure computed straight from the scenario's own costs carries
+        // data-money-currency (the currency it was saved in); a figure
+        // already converted server-side (the month comparison) doesn't, and
+        // formats in the user's display currency.
+        const currency = el.getAttribute("data-money-currency");
+        const formatted = currency ? formatMoneyIn(Math.abs(num), currency) : formatMoney(Math.abs(num));
 
         el.textContent = (signed ? (num >= 0 ? "+" : "-") + formatted : formatted) + suffix;
     });

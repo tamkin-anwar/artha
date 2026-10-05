@@ -62,7 +62,7 @@
         <i data-lucide="calendar"></i><span></span>
     </div>
     {% endif %}
-    <template class="note-content-src">{{ note.content|safe }}</template>
+    <template class="note-content-src">{{ note.content|sanitize_note|safe }}</template>
 </div>
 {% endmacro %}
 

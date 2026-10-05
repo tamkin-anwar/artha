@@ -2,7 +2,6 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 
-{% set view = request.args.get('view', 'dashboard') %}
 
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -17,49 +16,6 @@
     {% endif %}
 {% endwith %}
 
-{% if view == 'finance' %}
-
-    <div class="eyebrow" style="margin-bottom:8px;">FINANCE</div>
-    <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
-
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
-                <span class="eyebrow">Income</span>
-            </div>
-            <div class="stat-number money-positive" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(income) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
-                <span class="eyebrow">Expenses</span>
-            </div>
-            <div class="stat-number money-negative" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(expense) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block;"></span>
-                <span class="eyebrow">Net Balance</span>
-            </div>
-            <div class="stat-number money-gold" style="font-size:24px;">${{ "%.2f"|format(balance) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--sky); display:inline-block;"></span>
-                <span class="eyebrow">Transactions</span>
-            </div>
-            <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </div>
-    </div>
-
-    {% include "widgets/finance.html" %}
-
-{% else %}
 
     <!-- Greeting -->
     <div style="margin-bottom:16px;">
@@ -677,6 +633,5 @@
         }
     </script>
 
-{% endif %}
 
 {% endblock %}

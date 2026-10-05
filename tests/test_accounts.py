@@ -149,8 +149,9 @@ def test_net_worth_sums_assets_minus_liabilities_same_currency(app, auth_client,
     resp = auth_client.get("/accounts/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    # Net worth = 1000 - 200 = 800
-    assert "$800.00" in body
+    # Net worth = 1000 - 200 = 800, rendered as a raw value the page's
+    # formatter turns into the user's own currency (never a hardcoded "$").
+    assert 'accounts-money" data-money-value="800.0"' in body
 
 
 def test_net_worth_converts_mixed_currency_accounts_correctly(app, auth_client, user):
@@ -161,7 +162,31 @@ def test_net_worth_converts_mixed_currency_accounts_correctly(app, auth_client, 
     resp = auth_client.get("/accounts/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "$100.00" in body
+    assert 'data-money-value="100.0"' in body  # the converted total
+    # The account's own balance stays in its own currency...
+    assert 'data-money-value="80.00" data-money-currency="GBP"' in body
+    # ...with a converted "≈" line under it, since it isn't in USD.
+    assert "&asymp;" in body
+
+
+def test_account_in_the_display_currency_gets_no_converted_line(app, auth_client, user):
+    _add_account(user, name="Checking", currency="USD", balance="50.00")
+
+    body = auth_client.get("/accounts/").get_data(as_text=True)
+
+    assert "&asymp;" not in body
+
+
+def test_accounts_page_never_hardcodes_a_dollar_sign_on_converted_totals(app, auth_client, user):
+    _seed_rates(app)
+    user.preferred_currency = "GBP"
+    db.session.commit()
+    _add_account(user, name="Checking", currency="USD", balance="100.00")  # -> £80
+
+    body = auth_client.get("/accounts/").get_data(as_text=True)
+
+    assert 'data-money-value="80.0"' in body
+    assert "$80" not in body
 
 
 def test_net_worth_summary_is_none_with_no_accounts(app, user):
