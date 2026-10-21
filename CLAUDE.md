@@ -96,9 +96,10 @@ Tamkin after laying out this reasoning — keep the web app on
 Flask/Jinja/vanilla JS, keep polishing it (the batch-based UI/UX work
 already underway), and treat "most beautiful app on iOS" as solved by
 an eventual **separate, additive native Swift/SwiftUI app**, not a
-web rewrite. That native app is still "someday maybe," not scheduled —
-see the build-plan memory below for what to do differently once it
-actually starts.
+web rewrite. **That app started on 2026-10-19** as the `artha-apple`
+repo (one SwiftUI codebase for iPhone and iPad, Mac later; Windows and
+the browser stay on this web app). Its first API is this repo's
+`api` blueprint; see Architecture below.
 
 **When the native Swift app project actually starts**, do not
 re-research or re-litigate this decision — go straight to building
@@ -116,8 +117,28 @@ and Artha shouldn't repeat that.
 ## Architecture
 
 - Flask + SQLAlchemy, one blueprint per feature area, under
-  `artha/blueprints/`: `admin`, `ai`, `auth`, `dashboard`, `feedback`,
-  `finance`, `notes`, `push`, `scenarios`, `search`.
+  `artha/blueprints/`: `accounts`, `admin`, `ai`, `api`, `auth`,
+  `dashboard`, `feedback`, `finance`, `notes`, `push`, `scenarios`,
+  `search`.
+- **`api` is the native app's JSON API** (`/api/v1/...`, added
+  2026-10-20 for the SwiftUI app in the separate `artha-apple` repo).
+  It authenticates with a per-device bearer token (`models/api_token.py`,
+  stored only as a SHA-256 hash), never the web session cookie, which is
+  why the whole blueprint is CSRF-exempt; a web session cookie does not
+  authenticate it either (tested). Errors on `/api/v1/` paths are always
+  JSON `{"error": code, "message": ...}`, including 404/405/429/500 (see
+  `create_app`). Money is serialized as two-decimal strings, never floats.
+  Changing or resetting a password, or requesting account deletion,
+  revokes every token (`ApiToken.revoke_all_for`). **The API reuses the
+  web app's logic instead of reimplementing it**: Today comes from
+  `services/month_snapshot.py`'s `build_month_snapshot` (the Dashboard's
+  Safe to Spend math, extracted so both use one copy), and adding a
+  transaction goes through `finance.routes.create_transaction` (the same
+  validation, currency lock, categorizing and budget alerts as the web
+  form). New endpoints should follow that rule: extract the web route's
+  logic into a shared function and call it from both, never copy it.
+  `templates/privacy.html` doesn't mention the app yet; update it in the
+  same change that ships the app to real users.
 - Models live in `artha/models/`, one file per model, exported through
   `__init__.py`.
 - Money is always `db.Numeric` / `Decimal`, never `float` — an earlier

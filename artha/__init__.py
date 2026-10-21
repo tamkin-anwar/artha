@@ -97,6 +97,12 @@ def create_app(config_name: str = "default") -> Flask:
     from .blueprints.push import push_bp
     from .blueprints.search import search_bp
     from .blueprints.accounts import accounts_bp
+    from .blueprints.api import api_bp
+
+    # The native app's API authenticates with a bearer token only, never a
+    # cookie, so there's nothing for a cross-site request to forge (see
+    # blueprints/api/routes.py's docstring).
+    csrf.exempt(api_bp)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -109,6 +115,7 @@ def create_app(config_name: str = "default") -> Flask:
     app.register_blueprint(push_bp)
     app.register_blueprint(search_bp)
     app.register_blueprint(accounts_bp)
+    app.register_blueprint(api_bp)
 
     # ------------------------------------------------------------------
     # Service worker — served from the site root (not /static/...) so its
@@ -152,6 +159,15 @@ def create_app(config_name: str = "default") -> Flask:
     # ------------------------------------------------------------------
     from .utils import is_ajax_request
 
+    def is_api_request() -> bool:
+        """The native app's API always answers in JSON, errors included --
+        an HTML error page or a redirect to the login form means nothing
+        to an app."""
+        return request.path.startswith("/api/v1/")
+
+    def api_error(status: int, code: str, message: str):
+        return jsonify({"error": code, "message": message}), status
+
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         log.info("CSRF error: %s", getattr(e, "description", ""))
@@ -168,6 +184,8 @@ def create_app(config_name: str = "default") -> Flask:
         # gets JSON -- under both keys, since the AI chat UI reads `error`
         # and every other caller reads `message`.
         limit = getattr(e, "limit", None)
+        if is_api_request():
+            return api_error(429, "rate_limited", "Too many attempts. Wait a minute and try again.")
         if limit is not None and limit.error_message:
             return jsonify({"message": e.description, "error": e.description}), 429
         if is_ajax_request():
@@ -184,12 +202,22 @@ def create_app(config_name: str = "default") -> Flask:
     @app.errorhandler(404)
     def page_not_found(e):
         log.warning("404 at %s", request.path)
+        if is_api_request():
+            return api_error(404, "not_found", "That isn't part of Artha's API.")
         return render_template("404.html"), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        if is_api_request():
+            return api_error(405, "method_not_allowed", "That request method isn't supported here.")
+        return e
 
     @app.errorhandler(500)
     def internal_error(e):
         log.error("500 at %s: %s", request.path, e, exc_info=True)
         db.session.rollback()
+        if is_api_request():
+            return api_error(500, "server_error", "Something went wrong on Artha's side. Try again in a moment.")
         return render_template("500.html"), 500
 
     # ------------------------------------------------------------------

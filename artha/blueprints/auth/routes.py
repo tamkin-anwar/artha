@@ -12,7 +12,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ...extensions import db, limiter
-from ...models import User, RecoveryCode
+from ...models import ApiToken, User, RecoveryCode
 from ...services.email_service import send_password_reset_email, send_account_deletion_email
 from ...utils import CURRENCY_CODES
 from . import auth_bp
@@ -309,6 +309,9 @@ def reset_password(token):
 
         try:
             user.set_password(new_password)
+            # A reset usually means the old password can't be trusted, so
+            # every device signed in to the app has to sign in again too.
+            ApiToken.revoke_all_for(user.id)
             db.session.commit()
             flash("Password reset. You can now log in with your new password.", "success")
             return redirect(url_for("auth.login"))
@@ -405,6 +408,9 @@ def change_password():
 
         try:
             current_user.set_password(new_password)
+            # Same as a reset: changing the password signs the app out on
+            # every device, so a phone someone else has can't stay in.
+            ApiToken.revoke_all_for(current_user.id)
             db.session.commit()
             flash("Password changed successfully.", "success")
             return redirect(url_for("dashboard.index"))
@@ -509,6 +515,9 @@ def delete_account():
     purge_date_str = purge_date.strftime("%B %d, %Y")
 
     current_user.deleted_at = datetime.now(timezone.utc)
+    # Signed out of the app everywhere, matching logout_user() below for
+    # the web. Signing back in (web or app) still cancels the deletion.
+    ApiToken.revoke_all_for(current_user.id)
     db.session.commit()
     send_account_deletion_email(current_user, purge_date_str)
 

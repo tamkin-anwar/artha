@@ -15,8 +15,9 @@ from .message import Message
 from .recovery_code import RecoveryCode
 from .merchant_category_rule import MerchantCategoryRule
 from .account import Account, NetWorthSnapshot
+from .api_token import ApiToken
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
-    "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule", "Account", "NetWorthSnapshot",
+    "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule", "Account", "NetWorthSnapshot", "ApiToken",
 ]

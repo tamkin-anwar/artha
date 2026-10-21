@@ -236,19 +236,24 @@ def _validate_amount(amount_str: str) -> Decimal:
         amount = Decimal(str(amount_str))
     except InvalidOperation:
         raise ValidationError("Invalid amount format.")
+    # "NaN" and "Infinity" parse as Decimals but can't be compared or stored.
+    if not amount.is_finite():
+        raise ValidationError("Invalid amount format.")
     if amount < 0:
         raise ValidationError("Amount must be non-negative.")
     return amount
 
 
-def _resolve_transaction_timestamp(date_str: str | None) -> datetime:
+def _resolve_transaction_timestamp(date_str: str | None, user=None) -> datetime:
     """
     Parse an optional YYYY-MM-DD date string into a datetime pinned to noon
     UTC (avoids the transaction silently landing on the "wrong" calendar
     day near a midnight UTC boundary). Falls back to today — also pinned
-    to noon UTC — if the string is missing or malformed.
+    to noon UTC — if the string is missing or malformed. `user` is whose
+    "today" that is: the signed-in web user by default, passed explicitly
+    by the native app's API (which has no Flask-Login session).
     """
-    date_str = (date_str or "").strip()
+    date_str = (str(date_str) if date_str is not None else "").strip()
     parsed = None
     if date_str:
         try:
@@ -259,7 +264,7 @@ def _resolve_transaction_timestamp(date_str: str | None) -> datetime:
         # The user's own local date, not the server's UTC one -- otherwise
         # a transaction added with no explicit date in the evening (US) or
         # early morning (Asia) lands on the wrong calendar day.
-        parsed = user_today(current_user)
+        parsed = user_today(user if user is not None else current_user)
     return datetime(parsed.year, parsed.month, parsed.day, 12, 0, 0, tzinfo=timezone.utc)
 
 
@@ -273,12 +278,12 @@ def _parse_recurrence_fields(form) -> tuple[str | None, date | None]:
     same leniency _validate_amount's caller-facing siblings use elsewhere
     in this file. A malformed end date is silently dropped rather than
     erroring, since it's optional by nature."""
-    interval = (form.get("recurrence_interval") or "").strip().lower()
+    interval = str(form.get("recurrence_interval") or "").strip().lower()
     if interval not in _RECURRENCE_INTERVALS:
         interval = None
 
     end_date = None
-    end_date_str = (form.get("recurring_end_date") or "").strip()
+    end_date_str = str(form.get("recurring_end_date") or "").strip()
     if end_date_str:
         try:
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
@@ -384,35 +389,38 @@ def _check_budget_overage_alerts(user_id: int) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
-@finance_bp.route("/add_transaction", methods=["POST"])
-@login_required
-def add_transaction():
-    description = request.form.get("description", "").strip()
-    amount_str = request.form.get("amount", "").strip()
-    t_type = request.form.get("type", "").strip()
+def _truthy(value) -> bool:
+    """A form checkbox ("1"/"on" or absent) and a JSON boolean both read
+    correctly; an explicit "false"/"0" from a JSON client reads as False
+    instead of as a non-empty string."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() not in ("", "0", "false", "off", "no")
+
+
+def create_transaction(user, fields) -> Transaction:
+    """Validates, categorizes, currency-locks and saves one manually added
+    transaction for `user`, then runs the budget-overage push check.
+    `fields` is anything with .get(): the web form (add_transaction below)
+    or the native app's JSON body (api/routes.py), so both go through the
+    exact same rules. Raises ValidationError with a message meant for the
+    person; any other exception is a real failure (already rolled back)."""
+    description = str(fields.get("description") or "").strip()
+    amount_str = str(fields.get("amount") if fields.get("amount") is not None else "").strip()
+    t_type = str(fields.get("type") or "").strip()
 
     if not description:
-        msg = "Description is required."
-        return (jsonify({"message": msg}), 400) if is_ajax_request() else (flash(msg, "error"), redirect(url_for("dashboard.index")))[1]
+        raise ValidationError("Description is required.")
 
-    try:
-        amount = _validate_amount(amount_str)
-    except ValidationError as exc:
-        msg = str(exc)
-        if is_ajax_request():
-            return jsonify({"message": msg}), 400
-        flash(msg, "error")
-        return redirect(url_for("dashboard.index"))
+    amount = _validate_amount(amount_str)
 
     if t_type not in ("income", "expense"):
-        msg = "Invalid transaction type."
-        if is_ajax_request():
-            return jsonify({"message": msg}), 400
-        flash(msg, "error")
-        return redirect(url_for("dashboard.index"))
+        raise ValidationError("Invalid transaction type.")
 
-    category = request.form.get("category") or None
-    if category not in TRANSACTION_CATEGORIES:
+    category = fields.get("category") or None
+    if not isinstance(category, str) or category not in TRANSACTION_CATEGORIES:
         category = None
     # Only a real, explicit category survives past here -- remembered
     # below once the transaction is actually saved. Only the AI
@@ -432,7 +440,7 @@ def add_transaction():
     # through this same route) gets categorized without the user doing
     # it by hand afterward.
     if category is None:
-        category = _remembered_category_for(current_user.id, description) or _guess_category(description, t_type)
+        category = _remembered_category_for(user.id, description) or _guess_category(description, t_type)
     if category is None and t_type == "expense":
         guess_row = {"type": t_type, "description": description, "category": None}
         _fill_uncategorized_via_ai([guess_row])
@@ -444,17 +452,17 @@ def add_transaction():
     # amount was typed in while looking at that currency. An
     # unrecognized/missing value falls back the same way /set_currency
     # already does, rather than rejecting the whole transaction over it.
-    currency = (request.form.get("currency") or "").strip().upper()
+    currency = str(fields.get("currency") or "").strip().upper()
     if currency not in CURRENCY_CODES:
-        currency = current_user.preferred_currency or "USD"
+        currency = user.preferred_currency or "USD"
     usd_value, usd_rate_locked = lock_usd_value(amount, currency)
 
-    is_recurring = bool(request.form.get("is_recurring"))
-    recurrence_interval, recurring_end_date = _parse_recurrence_fields(request.form) if is_recurring else (None, None)
+    is_recurring = _truthy(fields.get("is_recurring"))
+    recurrence_interval, recurring_end_date = _parse_recurrence_fields(fields) if is_recurring else (None, None)
 
     max_pos = (
         db.session.query(func.max(Transaction.position))
-        .filter_by(user_id=current_user.id)
+        .filter_by(user_id=user.id)
         .scalar()
         or 0
     )
@@ -462,9 +470,9 @@ def add_transaction():
         description=description,
         amount=amount,
         type=t_type,
-        user_id=current_user.id,
+        user_id=user.id,
         position=int(max_pos) + 1,
-        timestamp=_resolve_transaction_timestamp(request.form.get("date")),
+        timestamp=_resolve_transaction_timestamp(fields.get("date"), user),
         is_recurring=is_recurring,
         recurrence_interval=recurrence_interval,
         recurring_end_date=recurring_end_date,
@@ -478,27 +486,44 @@ def add_transaction():
     try:
         db.session.add(new_tx)
         if explicit_category and category is not None:
-            _remember_merchant_category(current_user.id, description, category)
+            _remember_merchant_category(user.id, description, category)
         db.session.commit()
-        if t_type == "expense":
-            _check_budget_overage_alerts(current_user.id)
+    except Exception:
+        db.session.rollback()
+        raise
+    if t_type == "expense":
+        _check_budget_overage_alerts(user.id)
+    return new_tx
+
+
+@finance_bp.route("/add_transaction", methods=["POST"])
+@login_required
+def add_transaction():
+    try:
+        new_tx = create_transaction(current_user, request.form)
+    except ValidationError as exc:
+        msg = str(exc)
         if is_ajax_request():
-            return render_template(
-                "partials/transaction_row.html",
-                tx=new_tx,
-                today_date=user_today(current_user).strftime("%Y-%m-%d"),
-                categories=TRANSACTION_CATEGORIES,
-            )
-        flash("Transaction added!", "success")
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
         return redirect(url_for("dashboard.index"))
     except Exception as e:
-        db.session.rollback()
         log.error("Error adding transaction: %s", e, exc_info=True)
         msg = "Error adding transaction"
         if is_ajax_request():
             return jsonify({"message": msg}), 500
         flash(msg, "error")
         return redirect(url_for("dashboard.index"))
+
+    if is_ajax_request():
+        return render_template(
+            "partials/transaction_row.html",
+            tx=new_tx,
+            today_date=user_today(current_user).strftime("%Y-%m-%d"),
+            categories=TRANSACTION_CATEGORIES,
+        )
+    flash("Transaction added!", "success")
+    return redirect(url_for("dashboard.index"))
 
 
 @finance_bp.route("/update_transaction/<int:transaction_id>", methods=["POST"])

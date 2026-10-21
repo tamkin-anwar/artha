@@ -13,9 +13,9 @@ from sqlalchemy import func
 from ...changelog import CHANGELOG_ENTRIES
 from ...extensions import db, ai_limit, AI_CALCULATOR_LIMIT
 from ...models import Note, Transaction, Event, EventException, User
-from ...models.budget import Budget
-from ...services.exchange_rate_service import get_rates, convert_usd_to, convert_amount
-from ...utils import current_month_bounds, derive_title_and_preview, sanitize_note_html, budget_status, next_due_date, recurring_occurrences, user_today, is_ajax_request, CURRENCY_SYMBOLS
+from ...services.exchange_rate_service import get_rates, convert_usd_to
+from ...services.month_snapshot import build_month_snapshot
+from ...utils import derive_title_and_preview, sanitize_note_html, next_due_date, user_today, is_ajax_request, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES, generate_due_recurring
 from ..accounts.routes import net_worth_summary
 from . import dashboard_bp
@@ -100,61 +100,14 @@ def index():
         .order_by(Note.position.asc(), Note.id.asc())
         .all()
     )
-    # Dashboard cards are scoped to the current calendar month — same
-    # default the /finance page's month tabs use. This used to sum every
-    # transaction the user ever entered, all-time, which made the cards
-    # both misleading and inconsistent with the rest of the app.
-    month_start, month_end = current_month_bounds(today)
-
-    transactions = (
-        Transaction.query.filter(
-            Transaction.user_id == uid,
-            Transaction.timestamp >= month_start,
-            Transaction.timestamp < month_end,
-        )
-        .order_by(Transaction.position.asc(), Transaction.id.asc())
-        .all()
-    )
-    # coalesce(usd_value, amount), not bare amount: transactions can now
-    # carry different currencies, so summing raw amount across them would
-    # be meaningless. A legacy/USD row (usd_value NULL) still just sums
-    # its own amount, unchanged — see Transaction.value_in_usd's docstring
-    # for why that fallback is correct, not a workaround.
-    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
-    income = (
-        db.session.query(func.sum(usd_amount))
-        .filter(
-            Transaction.user_id == uid,
-            Transaction.type == "income",
-            Transaction.timestamp >= month_start,
-            Transaction.timestamp < month_end,
-        )
-        .scalar()
-        or 0
-    )
-    expense = (
-        db.session.query(func.sum(usd_amount))
-        .filter(
-            Transaction.user_id == uid,
-            Transaction.type == "expense",
-            Transaction.timestamp >= month_start,
-            Transaction.timestamp < month_end,
-        )
-        .scalar()
-        or 0
-    )
-    # Converted from the USD-pivot query result to this user's own
-    # preferred_currency (their currency-less monthly budget cap, further
-    # down, is implicitly in that same currency — see budget_status()'s
-    # call site) so this page's stat cards, and the budget comparison,
-    # both work in the currency the user actually sees everywhere else.
-    display_currency = current_user.preferred_currency or "USD"
-    rates = get_rates() if display_currency != "USD" else None
-    income = convert_usd_to(Decimal(income), display_currency, rates)
-    expense = convert_usd_to(Decimal(expense), display_currency, rates)
-    expense_decimal = expense
-    income = float(income)
-    expense = float(expense)
+    # This month's money picture (spending, income, budget, bills still
+    # due, Safe to Spend), computed by the same function the native app's
+    # API uses -- see services/month_snapshot.py, which also carries the
+    # reasoning behind each figure.
+    snapshot = build_month_snapshot(current_user, today)
+    transactions = snapshot.transactions
+    income = float(snapshot.income)
+    expense = float(snapshot.expense)
     balance = income - expense
 
     # ------------------------------------------------------------------
@@ -208,40 +161,10 @@ def index():
     overdue_notes = [n for n in notes_due_or_overdue if n.due_date < today]
     due_today_notes = [n for n in notes_due_or_overdue if n.due_date == today]
 
-    # ------------------------------------------------------------------
-    # Recurring renewals landing within the next 7 days — same
-    # dedup-by-(description,type)-then-next_due_date() approach as the
-    # calendar page's "upcoming recurring" banner, just widened from one
-    # nearest hit to the whole week for a dashboard callout.
-    # ------------------------------------------------------------------
-    recurring_rows = Transaction.query.filter_by(user_id=uid, is_recurring=True).all()
-    templates_by_key: dict[tuple[str, str], Transaction] = {}
-    for t in recurring_rows:
-        key = (t.description, t.type)
-        current = templates_by_key.get(key)
-        if current is None or (t.timestamp and current.timestamp and t.timestamp > current.timestamp):
-            templates_by_key[key] = t
-
-    renewals_this_week = []
-    for (desc, ttype), tx in templates_by_key.items():
-        due = next_due_date(tx, today)
-        if due is not None and 0 <= (due - today).days <= 7:
-            renewals_this_week.append({
-                "description": desc,
-                "type": ttype,
-                "amount": float(tx.amount),
-                "currency": tx.native_currency,
-                "usd_amount": float(tx.value_in_usd),
-                "due": due,
-                "due_label": "Today" if due == today else f"{cal.month_abbr[due.month]} {due.day}",
-            })
-    renewals_this_week.sort(key=lambda e: e["due"])
-    # usd_amount, not amount: bills due this week can be in different
-    # currencies now, so a raw sum across them would be meaningless.
-    # Converted to this user's own display_currency (defined below,
-    # alongside this month's income/expense) before it's shown.
-    renewals_total_usd = sum(e["usd_amount"] for e in renewals_this_week if e["type"] == "expense")
-    renewals_total = float(convert_usd_to(Decimal(str(renewals_total_usd)), display_currency, rates))
+    # Recurring renewals landing within the next 7 days (built by
+    # build_month_snapshot above, in this user's display currency).
+    renewals_this_week = snapshot.renewals_this_week
+    renewals_total = snapshot.renewals_total
 
     # Surfaced in the Today panel too, not moved out of Renewals This
     # Week — that card still needs every one of them for its own weekly
@@ -268,64 +191,12 @@ def index():
     if renewals_this_week:
         renewals_symbol = CURRENCY_SYMBOLS.get(current_user.preferred_currency, "$")
         summary_parts.append(f"{renewals_symbol}{renewals_total:,.0f} in renewals this week")
-    budget_row = Budget.query.filter_by(user_id=uid).first()
-    # The cap's own currency (its NULL-means-USD fallback, same as
-    # Transaction) converted to display_currency before comparing --
-    # expense_decimal is already in display_currency, and a cap left
-    # unconverted here is exactly the bug a real user hit the day this
-    # shipped: a $5,000 cap silently misread as a 5,000-of-whatever-
-    # you-just-switched-to cap.
-    budget_cap = (
-        convert_amount(budget_row.monthly_cap, budget_row.currency or "USD", display_currency, rates)
-        if budget_row else None
-    )
-    budget = budget_status(budget_cap, expense_decimal)
-
-    # ------------------------------------------------------------------
-    # "Safe to spend" -- the YNAB-inspired figure from CLAUDE.md's
-    # Competitive ambition section (Batch 2), done passively: no
-    # methodology to opt into, it just reflects the rest of this
-    # month's budget headroom. Deliberately not just cap-minus-spent
-    # (that's already the existing Monthly Budget bar) -- it also nets
-    # out recurring bills still expected to land before month-end,
-    # reusing templates_by_key (built above for renewals_this_week)
-    # with a wider window: through the last day of the month rather
-    # than the next 7 days. Every remaining occurrence counts, not just
-    # the next one (a weekly bill can still land 3-4 more times this
-    # month), and any occurrence that already exists as a real
-    # transaction is skipped -- it's already inside `spent`. That second
-    # rule matters: generate_due_recurring() creates each monthly bill's
-    # copy for this month up front, so counting it again here would
-    # subtract the same bill twice. Only set when a budget actually
-    # exists -- there's no ceiling to be "safe" against otherwise.
-    # ------------------------------------------------------------------
-    safe_to_spend = None
-    safe_to_spend_upcoming = 0.0
-    if budget["has_budget"]:
-        month_last_day = (month_end - timedelta(days=1)).date()
-        posted_in_month = {(t.description, t.type) for t in transactions}
-        posted_on_day = {(t.description, t.type, t.timestamp.date()) for t in transactions}
-        # Two totals: everything still dated today-or-later this month
-        # (what the "after $X in upcoming bills" line tells the user), and
-        # just the part of that not yet posted (what actually gets
-        # subtracted, since a posted-but-future-dated copy is already in
-        # `spent`). Same final figure either way you add it up.
-        upcoming_usd = Decimal("0")
-        unposted_usd = Decimal("0")
-        for (desc, ttype), tx in templates_by_key.items():
-            if ttype != "expense":
-                continue
-            for due in recurring_occurrences(tx, today, month_last_day):
-                upcoming_usd += tx.value_in_usd
-                if tx.recurrence_interval in ("weekly", "biweekly"):
-                    posted = (desc, ttype, due) in posted_on_day
-                else:
-                    posted = (desc, ttype) in posted_in_month
-                if not posted:
-                    unposted_usd += tx.value_in_usd
-        safe_to_spend_upcoming = float(convert_usd_to(upcoming_usd, display_currency, rates))
-        unposted = float(convert_usd_to(unposted_usd, display_currency, rates))
-        safe_to_spend = budget["cap"] - budget["spent"] - unposted
+    # Budget and Safe to Spend, also from build_month_snapshot (see its
+    # own comments for how bills still due are netted out without ever
+    # counting the same bill twice).
+    budget = snapshot.budget
+    safe_to_spend = snapshot.safe_to_spend
+    safe_to_spend_upcoming = snapshot.safe_to_spend_upcoming
 
     summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
     dashboard_summary = " · ".join(summary_parts[:3])
