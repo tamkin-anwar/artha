@@ -83,7 +83,7 @@
     <script defer src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
 </head>
 
-<body style="background: var(--bg-page); color: var(--text-primary); font-family: 'Inter', sans-serif;" class="transition-colors duration-300" role="document" data-user-timezone="{{ current_user.timezone or '' if current_user.is_authenticated else '' }}">
+<body style="background: var(--bg-page); color: var(--text-primary); font-family: 'Inter', sans-serif;" class="transition-colors duration-300" role="document" data-user-timezone="{{ current_user.timezone or '' if current_user.is_authenticated else '' }}"{% if current_user.is_authenticated %} data-display-currency="{{ current_user.preferred_currency or 'USD' }}"{% endif %}>
     <noscript>
         <div class="bg-red-100 text-red-800 p-4 text-center font-semibold">
             JavaScript is disabled in your browser. This app requires JavaScript to function properly.
@@ -416,7 +416,6 @@
                                     style="width:100%; font-size:13px;"
                                     role="menuitem"
                                     aria-label="Currency"
-                                    data-user-currency="{{ current_user.preferred_currency or '' }}"
                                 >
                                     <option value="USD">$ USD</option>
                                     <option value="GBP">£ GBP</option>
@@ -580,7 +579,6 @@
                             class="field-input"
                             style="width:100%;"
                             aria-label="Currency"
-                            data-user-currency="{{ current_user.preferred_currency or '' }}"
                         >
                             <option value="USD">$ USD</option>
                             <option value="GBP">£ GBP</option>

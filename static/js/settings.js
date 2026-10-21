@@ -1,34 +1,38 @@
 // static/js/settings.js (module)
 
-import { setCurrencyCode, getCurrencyCode, hasStoredPreference, applyCurrencyToAmountPrefixes } from "./currency.js";
+import { setCurrencyCode, getCurrencyCode, applyCurrencyToAmountPrefixes } from "./currency.js";
 
 function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.content : "";
 }
 
-// The account-wide save itself is still best-effort (this device's own
-// localStorage already has the change either way, so a failed request
-// here just means a *different* device won't see it until the next
-// successful save) -- but a successful save reloads the page on purpose.
+// The account is the source of truth for the display currency (see
+// accountCurrencyCode() in currency.js), so a change only takes effect
+// once the server has saved it -- then the page reloads on purpose.
 // Dashboard/Finance totals, budgets, and comparisons are converted
 // server-side into whichever currency the account is set to (see
-// CLAUDE.md's Multi-currency note); the client-side relabel this
-// triggers before the reload (applyCurrencyEverywhere, still called by
-// the caller) only reformats the *symbol* on numbers already baked into
-// the page at load time, so without this reload those totals stay
-// showing the previous currency's converted figures under a new
-// currency's symbol until the next full page load happens to occur —
-// a real bug a user hit live, not just a cosmetic lag.
+// CLAUDE.md's Multi-currency note); a client-side relabel can only
+// reformat the *symbol* on numbers already baked into the page, so
+// nothing is relabeled before the reload either -- doing so used to
+// flash the previous currency's converted figures under the new
+// currency's symbol, the same bug a user hit live. A failed save puts
+// the selects back on the account's currency instead of leaving them
+// claiming a currency the page isn't actually showing.
 function persistCurrencyToAccount(code) {
+    const revert = () => syncCurrencySelects(getCurrencyCode());
     fetch("/set_currency", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({ code }),
     })
-        .then((res) => { if (res.ok) window.location.reload(); })
-        .catch(() => {});
+        .then((res) => {
+            if (!res.ok) return revert();
+            setCurrencyCode(code);
+            window.location.reload();
+        })
+        .catch(revert);
 }
 
 function setSelectValueIfPresent(selectEl, value) {
@@ -55,11 +59,8 @@ function bindCurrencySelect(selectEl) {
 
     selectEl.addEventListener("change", () => {
         const code = selectEl.value;
-        const saved = setCurrencyCode(code);
-
-        syncCurrencySelects(saved);
-        applyCurrencyEverywhere();
-        persistCurrencyToAccount(saved);
+        syncCurrencySelects(code);
+        persistCurrencyToAccount(code);
     });
 }
 
@@ -91,18 +92,9 @@ function syncTimezoneToAccount() {
 }
 
 function initCurrency() {
-    // A brand-new device (nothing saved in this browser yet) inherits
-    // whatever the account last saved, instead of defaulting to USD — an
-    // already-configured device is left exactly as it is. data-user-currency
-    // is the same value on both selects (base.html renders it from
-    // current_user.preferred_currency), so either one is fine to read.
-    if (!hasStoredPreference()) {
-        const accountCurrency =
-            document.getElementById("currency-select")?.dataset.userCurrency ||
-            document.getElementById("currency-select-mobile")?.dataset.userCurrency;
-        if (accountCurrency) setCurrencyCode(accountCurrency);
-    }
-
+    // getCurrencyCode() already returns the signed-in account's currency
+    // (currency.js reconciled this browser's stored value at import time),
+    // so there's nothing to adopt or choose between here any more.
     const saved = getCurrencyCode();
 
     syncCurrencySelects(saved);
