@@ -1383,31 +1383,8 @@ def finance_page():
     )
     budget = budget_status(budget_cap, current_month_expense)
 
-    # Per-category budgets: same current-month scope as the overall budget
-    # above, just grouped by the raw category slug instead of summed.
-    category_expense_totals: dict[str, Decimal] = defaultdict(Decimal)
-    for t in current_month_txs:
-        if t.type == "expense" and t.category:
-            category_expense_totals[t.category] += t.value_in_usd
-    # Converted once here (not per-transaction above) -- compared against
-    # CategoryBudget.monthly_cap below, which is implicitly in
-    # display_currency same as everything else on this page.
-    for cat in category_expense_totals:
-        category_expense_totals[cat] = convert_usd_to(category_expense_totals[cat], display_currency, rates)
-
     category_budget_rows = CategoryBudget.query.filter_by(user_id=uid).all()
-    category_budgets = [
-        {
-            "category": row.category,
-            "label": TRANSACTION_CATEGORIES.get(row.category, {}).get("label", row.category),
-            "icon": TRANSACTION_CATEGORIES.get(row.category, {}).get("icon"),
-            "status": budget_status(
-                convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates),
-                category_expense_totals.get(row.category, Decimal("0")),
-            ),
-        }
-        for row in category_budget_rows
-    ]
+    category_budgets = category_budget_statuses(category_budget_rows, current_month_txs, display_currency, rates)
     budgeted_categories = {row.category for row in category_budget_rows}
     budgetable_categories = {
         key: val for key, val in TRANSACTION_CATEGORIES.items()
@@ -2748,31 +2725,53 @@ def import_commit():
     })
 
 
-@finance_bp.route("/finance/budget", methods=["POST"])
-@login_required
-def set_budget():
-    """Upsert the signed-in user's single monthly spending cap."""
-    raw = (request.form.get("monthly_cap") or "").strip()
+def category_budget_statuses(rows, month_transactions, display_currency: str, rates) -> list[dict]:
+    """budget_status() for each CategoryBudget row against this month's
+    spending in that category, in display_currency. Shared by the Finance
+    page and the native app's Plan tab (api/routes.py) so both agree."""
+    # Same current-month scope as the overall budget, just grouped by the
+    # raw category slug instead of summed.
+    category_expense_totals: dict[str, Decimal] = defaultdict(Decimal)
+    for t in month_transactions:
+        if t.type == "expense" and t.category:
+            category_expense_totals[t.category] += t.value_in_usd
+    # Converted once here (not per-transaction above) -- compared against
+    # each CategoryBudget.monthly_cap converted into display_currency too.
+    for cat in category_expense_totals:
+        category_expense_totals[cat] = convert_usd_to(category_expense_totals[cat], display_currency, rates)
 
-    try:
-        cap = _validate_amount(raw) if raw else Decimal("0")
-    except ValidationError as exc:
-        msg = str(exc)
-        if is_ajax_request():
-            return jsonify({"message": msg}), 400
-        flash(msg, "error")
-        return redirect(url_for("finance.finance_page"))
+    return [
+        {
+            "category": row.category,
+            "label": TRANSACTION_CATEGORIES.get(row.category, {}).get("label", row.category),
+            "icon": TRANSACTION_CATEGORIES.get(row.category, {}).get("icon"),
+            "status": budget_status(
+                convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates),
+                category_expense_totals.get(row.category, Decimal("0")),
+            ),
+        }
+        for row in rows
+    ]
+
+
+def save_budget(user, raw_cap) -> Decimal:
+    """Upserts `user`'s single monthly spending cap from what they typed
+    (blank or 0 clears it) and commits. Shared by the web form below and
+    the native app's API. Raises ValidationError for a bad amount; any
+    other exception is a real failure (already rolled back)."""
+    raw = str(raw_cap if raw_cap is not None else "").strip()
+    cap = _validate_amount(raw) if raw else Decimal("0")
 
     # Whatever currency was active right now, when this number was typed
     # in -- same signal a manual transaction's own currency comes from.
     # Re-captured on every save (not just creation), since editing the
     # cap number means re-typing it while looking at whatever's
     # currently selected, same as a fresh entry.
-    currency = current_user.preferred_currency or "USD"
+    currency = user.preferred_currency or "USD"
 
-    row = Budget.query.filter_by(user_id=current_user.id).first()
+    row = Budget.query.filter_by(user_id=user.id).first()
     if row is None:
-        row = Budget(user_id=current_user.id, monthly_cap=cap, currency=currency)
+        row = Budget(user_id=user.id, monthly_cap=cap, currency=currency)
         db.session.add(row)
     else:
         row.monthly_cap = cap
@@ -2780,12 +2779,74 @@ def set_budget():
 
     try:
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return cap
+
+
+def save_category_budget(user, category, raw_cap) -> Decimal:
+    """Upserts one category's monthly cap for `user` and commits. Shared
+    by the web form below and the native app's API. Raises ValidationError
+    for an unknown category or an amount that isn't above zero."""
+    category = str(category or "").strip()
+    if category not in TRANSACTION_CATEGORIES or category == "income":
+        raise ValidationError("Choose a valid category to budget.")
+
+    raw = str(raw_cap if raw_cap is not None else "").strip()
+    cap = _validate_amount(raw) if raw else Decimal("0")
+    if cap <= 0:
+        raise ValidationError("Enter an amount greater than zero.")
+
+    # Same currency-capture as save_budget() above.
+    currency = user.preferred_currency or "USD"
+
+    row = CategoryBudget.query.filter_by(user_id=user.id, category=category).first()
+    if row is None:
+        row = CategoryBudget(user_id=user.id, category=category, monthly_cap=cap, currency=currency)
+        db.session.add(row)
+    else:
+        row.monthly_cap = cap
+        row.currency = currency
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return cap
+
+
+def remove_category_budget(user, category) -> bool:
+    """Removes one category's cap for `user`. False when there wasn't one."""
+    row = CategoryBudget.query.filter_by(user_id=user.id, category=str(category or "")).first()
+    if row is None:
+        return False
+    try:
+        db.session.delete(row)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return True
+
+
+@finance_bp.route("/finance/budget", methods=["POST"])
+@login_required
+def set_budget():
+    """Upsert the signed-in user's single monthly spending cap."""
+    try:
+        cap = save_budget(current_user, request.form.get("monthly_cap"))
         msg = "Budget updated." if cap > 0 else "Budget cleared."
         if is_ajax_request():
             return jsonify({"message": msg}), 200
         flash(msg, "success")
+    except ValidationError as exc:
+        msg = str(exc)
+        if is_ajax_request():
+            return jsonify({"message": msg}), 400
+        flash(msg, "error")
     except Exception as e:
-        db.session.rollback()
         log.error("Error saving budget: %s", e, exc_info=True)
         msg = "Error saving budget."
         if is_ajax_request():
@@ -2802,49 +2863,18 @@ def set_category_budget():
     category (CategoryBudget), alongside the single overall Budget above,
     not replacing it."""
     category = (request.form.get("category") or "").strip()
-    if category not in TRANSACTION_CATEGORIES or category == "income":
-        msg = "Choose a valid category to budget."
-        if is_ajax_request():
-            return jsonify({"message": msg}), 400
-        flash(msg, "error")
-        return redirect(url_for("finance.finance_page"))
-
-    raw = (request.form.get("monthly_cap") or "").strip()
     try:
-        cap = _validate_amount(raw) if raw else Decimal("0")
+        save_category_budget(current_user, category, request.form.get("monthly_cap"))
+        msg = f"{TRANSACTION_CATEGORIES[category]['label']} budget saved."
+        if is_ajax_request():
+            return jsonify({"message": msg}), 200
+        flash(msg, "success")
     except ValidationError as exc:
         msg = str(exc)
         if is_ajax_request():
             return jsonify({"message": msg}), 400
         flash(msg, "error")
-        return redirect(url_for("finance.finance_page"))
-
-    if cap <= 0:
-        msg = "Enter an amount greater than zero."
-        if is_ajax_request():
-            return jsonify({"message": msg}), 400
-        flash(msg, "error")
-        return redirect(url_for("finance.finance_page"))
-
-    # Same currency-capture as set_budget() above.
-    currency = current_user.preferred_currency or "USD"
-
-    row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
-    if row is None:
-        row = CategoryBudget(user_id=current_user.id, category=category, monthly_cap=cap, currency=currency)
-        db.session.add(row)
-    else:
-        row.monthly_cap = cap
-        row.currency = currency
-
-    try:
-        db.session.commit()
-        msg = f"{TRANSACTION_CATEGORIES[category]['label']} budget saved."
-        if is_ajax_request():
-            return jsonify({"message": msg}), 200
-        flash(msg, "success")
     except Exception as e:
-        db.session.rollback()
         log.error("Error saving category budget: %s", e, exc_info=True)
         msg = "Error saving budget."
         if is_ajax_request():
@@ -2857,15 +2887,11 @@ def set_category_budget():
 @finance_bp.route("/finance/category-budget/<category>/delete", methods=["POST"])
 @login_required
 def delete_category_budget(category):
-    row = CategoryBudget.query.filter_by(user_id=current_user.id, category=category).first()
-    if row is not None:
-        try:
-            db.session.delete(row)
-            db.session.commit()
+    try:
+        if remove_category_budget(current_user, category):
             flash("Category budget removed.", "success")
-        except Exception as e:
-            db.session.rollback()
-            log.error("Error deleting category budget: %s", e, exc_info=True)
-            flash("Error removing budget.", "error")
+    except Exception as e:
+        log.error("Error deleting category budget: %s", e, exc_info=True)
+        flash("Error removing budget.", "error")
 
     return redirect(url_for("finance.finance_page"))

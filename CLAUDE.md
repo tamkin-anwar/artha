@@ -137,7 +137,10 @@ and Artha shouldn't repeat that.
   `create_transaction`, `update_transaction_fields` and
   `delete_transaction_record` (the same validation, currency lock,
   categorizing, remembered corrections and budget alerts as the web
-  app). New endpoints should follow that rule: extract the web route's
+  app). The app's Plan tab (`/plan`) is `services/month_plan.py` on top
+  of the same snapshot (its "left to spend" is Safe to Spend in parts),
+  and budgets save through `save_budget` / `save_category_budget` /
+  `remove_category_budget`, shared with the web forms. New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
   `templates/privacy.html` doesn't mention the app yet; update it in the
   same change that ships the app to real users.

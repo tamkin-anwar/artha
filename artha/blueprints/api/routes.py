@@ -38,12 +38,18 @@ from ...services.month_snapshot import build_month_snapshot
 from ...utils import next_due_date, user_today
 from ..accounts.routes import net_worth_summary
 from ..auth.routes import _verify_totp_or_recovery_code
+from ...models.category_budget import CategoryBudget
+from ...services.month_plan import bills_this_month, typical_spending
 from ..finance.routes import (
     TRANSACTION_CATEGORIES,
     ValidationError,
+    category_budget_statuses,
     create_transaction,
     delete_transaction_record,
     generate_due_recurring,
+    remove_category_budget,
+    save_budget,
+    save_category_budget,
     update_transaction_fields,
 )
 from . import api_bp
@@ -132,6 +138,28 @@ def _serialize_user(user: User) -> dict:
         "currency": user.preferred_currency or "USD",
         "timezone": user.timezone,
         "two_factor_enabled": bool(user.otp_enabled),
+    }
+
+
+def _catch_up_recurring(user: User, endpoint: str) -> None:
+    """Same catch-up the Dashboard and Finance run before reading this
+    month, so bills that came due since the last visit are counted. A
+    failure here must never take the screen down with it."""
+    try:
+        generate_due_recurring(user)
+    except Exception:
+        db.session.rollback()
+        log.warning("Recurring catch-up failed for user %s on /api/v1/%s", user.id, endpoint, exc_info=True)
+
+
+def _month_info(snap) -> dict:
+    return {
+        "name": cal.month_name[snap.today.month],
+        "start": snap.month_start.date().isoformat(),
+        "end": (snap.month_end - timedelta(days=1)).date().isoformat(),
+        "day": snap.today.day,
+        "days_in_month": snap.days_in_month,
+        "days_left": snap.days_left,
     }
 
 
@@ -232,16 +260,7 @@ def me():
 def today():
     """Everything the app's Today screen shows, in one call."""
     user = g.api_user
-
-    # Same catch-up the Dashboard and Finance run before reading this
-    # month, so bills that came due since the last visit are counted. A
-    # failure here must never take Today down with it.
-    try:
-        generate_due_recurring(user)
-    except Exception:
-        db.session.rollback()
-        log.warning("Recurring catch-up failed for user %s on /api/v1/today", user.id, exc_info=True)
-
+    _catch_up_recurring(user, "today")
     snap = build_month_snapshot(user)
     currency = snap.display_currency
     rates = snap.rates
@@ -339,14 +358,7 @@ def today():
     return jsonify({
         "date": today_date.isoformat(),
         "currency": currency,
-        "month": {
-            "name": cal.month_name[today_date.month],
-            "start": snap.month_start.date().isoformat(),
-            "end": (snap.month_end - timedelta(days=1)).date().isoformat(),
-            "day": today_date.day,
-            "days_in_month": snap.days_in_month,
-            "days_left": snap.days_left,
-        },
+        "month": _month_info(snap),
         "spent": money(snap.expense),
         "income": money(snap.income),
         "budget": budget,
@@ -504,3 +516,162 @@ def categories():
     return jsonify({
         "categories": [{"key": key, "label": meta["label"]} for key, meta in TRANSACTION_CATEGORIES.items()],
     })
+
+
+# ---------------------------------------------------------------------------
+# Plan
+# ---------------------------------------------------------------------------
+
+@api_bp.get("/plan")
+@api_auth_required
+def plan():
+    """The month as a plan: the budget split into bills, everyday spending
+    and what's left (the same math as Today's Safe to Spend, see
+    services/month_plan.py), this month's bills paid and still to come,
+    category limits, and what this person usually spends, to suggest
+    amounts instead of making them guess."""
+    user = g.api_user
+    _catch_up_recurring(user, "plan")
+    snap = build_month_snapshot(user)
+    currency = snap.display_currency
+    rates = snap.rates
+
+    def display(usd: Decimal) -> Decimal:
+        return convert_usd_to(usd, currency, rates)
+
+    month_bills = bills_this_month(snap)
+    bills = []
+    for bill in month_bills.bills:
+        bills.append({
+            "description": bill.description,
+            "amount": money(bill.amount),
+            "currency": bill.currency,
+            "category": bill.category,
+            "category_label": _category_label(bill.category),
+            "date": bill.due.isoformat(),
+            "status": bill.status,
+            "display_amount": money(display(bill.usd_value)) if bill.currency != currency else None,
+        })
+
+    budget = None
+    breakdown = None
+    if snap.budget.get("has_budget"):
+        cap = Decimal(str(snap.budget["cap"]))
+        budget = {
+            "cap": money(cap),
+            "spent": money(snap.budget["spent"]),
+            "percent_used": round(snap.budget["pct"], 1),
+            "tier": snap.budget["tier"],
+        }
+        bills_total = display(month_bills.total_usd)
+        left = Decimal(str(snap.safe_to_spend))
+        breakdown = {
+            "bills": money(bills_total),
+            "everyday_spent": money(max(snap.expense - display(month_bills.posted_usd), Decimal("0"))),
+            "everyday_budget": money(max(cap - bills_total, Decimal("0"))),
+            "left": money(max(left, Decimal("0"))),
+            "over_by": money(max(-left, Decimal("0"))),
+            "per_day": money(max(left, Decimal("0")) / snap.days_left),
+            "status": snap.pace_status,
+        }
+
+    rows = CategoryBudget.query.filter_by(user_id=user.id).all()
+    category_budgets = []
+    for item in category_budget_statuses(rows, snap.transactions, currency, rates):
+        status = item["status"]
+        if not status.get("has_budget"):
+            continue
+        cap = Decimal(str(status["cap"]))
+        spent = Decimal(str(status["spent"]))
+        category_budgets.append({
+            "key": item["category"],
+            "label": item["label"],
+            "cap": money(cap),
+            "spent": money(spent),
+            "left": money(max(cap - spent, Decimal("0"))),
+            "over_by": money(max(spent - cap, Decimal("0"))),
+            "percent_used": round(status["pct"], 1),
+            "tier": status["tier"],
+        })
+    category_budgets.sort(key=lambda c: -c["percent_used"])
+    budgeted = {c["key"] for c in category_budgets}
+
+    typical = typical_spending(user, snap.today, currency, rates)
+
+    return jsonify({
+        "date": snap.today.isoformat(),
+        "currency": currency,
+        "month": _month_info(snap),
+        "spent": money(snap.expense),
+        "income": money(snap.income),
+        "budget": budget,
+        "breakdown": breakdown,
+        "bills": bills,
+        "bills_total": money(display(month_bills.total_usd)),
+        "bills_paid": money(display(month_bills.paid_usd)),
+        "bills_coming": money(display(month_bills.coming_usd)),
+        "category_budgets": category_budgets,
+        "unbudgeted_categories": [
+            {"key": key, "label": meta["label"]}
+            for key, meta in TRANSACTION_CATEGORIES.items()
+            if key != "income" and key not in budgeted
+        ],
+        "typical": None if typical is None else {
+            "months": typical["months"],
+            "overall": money(typical["overall"]),
+            "by_category": {key: money(value) for key, value in typical["by_category"].items()},
+        },
+    })
+
+
+def _json_body():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
+@api_bp.put("/budget")
+@api_auth_required
+def put_budget():
+    """Body: {"monthly_cap": "3400.00"}, in the person's display currency.
+    Zero or blank clears the budget."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the budget as a JSON object.")
+    try:
+        save_budget(g.api_user, data.get("monthly_cap"))
+    except ValidationError as exc:
+        return api_error(400, "invalid_budget", str(exc))
+    except Exception:
+        log.error("Error saving budget via API for user %s", g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save your budget. Try again in a moment.")
+    return "", 204
+
+
+@api_bp.put("/category-budgets/<category>")
+@api_auth_required
+def put_category_budget(category):
+    """Body: {"monthly_cap": "400.00"}, in the person's display currency."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the limit as a JSON object.")
+    try:
+        save_category_budget(g.api_user, category, data.get("monthly_cap"))
+    except ValidationError as exc:
+        return api_error(400, "invalid_budget", str(exc))
+    except Exception:
+        log.error("Error saving category budget via API for user %s", g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save that limit. Try again in a moment.")
+    return "", 204
+
+
+@api_bp.delete("/category-budgets/<category>")
+@api_auth_required
+def delete_category_budget(category):
+    try:
+        removed = remove_category_budget(g.api_user, category)
+    except Exception:
+        log.error("Error removing category budget via API for user %s", g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't remove that limit. Try again in a moment.")
+    if not removed:
+        return api_error(404, "not_found", "There's no limit on that category.")
+    return "", 204

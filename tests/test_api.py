@@ -444,3 +444,80 @@ def test_today_lists_recurring_bills_coming_up(client, user):
     assert spotify[0]["amount"] == "11.99"
     assert spotify[0]["currency"] == "USD"
     assert 0 <= spotify[0]["days_away"] <= 31
+
+
+# ---------------------------------------------------------------------------
+# Plan
+# ---------------------------------------------------------------------------
+
+def test_plan_breaks_the_budget_into_bills_everyday_and_what_is_left(client, user):
+    db.session.add(Budget(user_id=user.id, monthly_cap=Decimal("3400"), currency="USD"))
+    db.session.commit()
+    _add(user, "Trader Joe's", "48.20", category="groceries")
+    _add(user, "Rent", "1650.00", category="housing", is_recurring=True)
+    token = _token(client, user)
+
+    plan = client.get("/api/v1/plan", headers=_auth(token)).get_json()
+    today = client.get("/api/v1/today", headers=_auth(token)).get_json()
+
+    assert plan["budget"]["cap"] == "3400.00"
+    breakdown = plan["breakdown"]
+    assert breakdown["bills"] == "1650.00"
+    assert breakdown["everyday_spent"] == "48.20"
+    assert breakdown["everyday_budget"] == "1750.00"
+    # Same number Today calls Safe to Spend.
+    assert breakdown["left"] == today["safe_to_spend"]["amount"] == "1701.80"
+    assert [(b["description"], b["status"]) for b in plan["bills"]] == [("Rent", "paid")]
+    assert plan["bills_paid"] == "1650.00"
+    assert plan["bills_coming"] == "0.00"
+
+
+def test_plan_without_a_budget_still_lists_bills(client, user):
+    _add(user, "Rent", "1650.00", category="housing", is_recurring=True)
+    token = _token(client, user)
+    plan = client.get("/api/v1/plan", headers=_auth(token)).get_json()
+    assert plan["budget"] is None
+    assert plan["breakdown"] is None
+    assert plan["bills_total"] == "1650.00"
+    assert plan["typical"] is None
+    assert {"key": "dining", "label": "Dining"} in plan["unbudgeted_categories"]
+    assert all(c["key"] != "income" for c in plan["unbudgeted_categories"])
+
+
+def test_put_budget_saves_in_the_display_currency_and_zero_clears_it(client, user):
+    user.preferred_currency = "GBP"
+    db.session.commit()
+    token = _token(client, user)
+
+    assert client.put("/api/v1/budget", headers=_auth(token), json={"monthly_cap": "2500"}).status_code == 204
+    row = Budget.query.filter_by(user_id=user.id).one()
+    assert (row.monthly_cap, row.currency) == (Decimal("2500.00"), "GBP")
+
+    bad = client.put("/api/v1/budget", headers=_auth(token), json={"monthly_cap": "-5"})
+    assert bad.status_code == 400
+    assert bad.get_json()["error"] == "invalid_budget"
+
+    assert client.put("/api/v1/budget", headers=_auth(token), json={"monthly_cap": "0"}).status_code == 204
+    assert client.get("/api/v1/plan", headers=_auth(token)).get_json()["budget"] is None
+
+
+def test_category_limits_can_be_set_shown_and_removed(client, user):
+    _add(user, "Dinner", "120.00", category="dining")
+    token = _token(client, user)
+
+    assert client.put("/api/v1/category-budgets/dining", headers=_auth(token),
+                      json={"monthly_cap": "100"}).status_code == 204
+    plan = client.get("/api/v1/plan", headers=_auth(token)).get_json()
+    assert plan["category_budgets"] == [{
+        "key": "dining", "label": "Dining", "cap": "100.00", "spent": "120.00",
+        "left": "0.00", "over_by": "20.00", "percent_used": 120.0, "tier": "over",
+    }]
+    assert all(c["key"] != "dining" for c in plan["unbudgeted_categories"])
+
+    for category, payload in (("income", {"monthly_cap": "100"}), ("dining", {"monthly_cap": "0"})):
+        resp = client.put(f"/api/v1/category-budgets/{category}", headers=_auth(token), json=payload)
+        assert resp.status_code == 400
+
+    assert client.delete("/api/v1/category-budgets/dining", headers=_auth(token)).status_code == 204
+    assert client.delete("/api/v1/category-budgets/dining", headers=_auth(token)).status_code == 404
+    assert client.get("/api/v1/plan", headers=_auth(token)).get_json()["category_budgets"] == []
