@@ -239,3 +239,16 @@ def register_cli(app):
             db.session.delete(user)
         db.session.commit()
         click.echo(f"Purged {count} account(s) past their deletion grace period.")
+
+    @app.cli.command("create-review-account")
+    def create_review_account_command():
+        """Create (or reset) the sample account Apple's App Review signs in
+        with. See services/review_account.py. Prints the password once;
+        it isn't stored anywhere else, so copy it into App Store Connect
+        right away. Running it again replaces the account and password."""
+        from .services.review_account import REVIEW_USERNAME, create_review_account
+
+        _, password = create_review_account()
+        click.echo("Review account ready. Enter these in App Store Connect:")
+        click.echo(f"  Username: {REVIEW_USERNAME}")
+        click.echo(f"  Password: {password}")
