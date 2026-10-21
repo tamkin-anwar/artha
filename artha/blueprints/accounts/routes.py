@@ -26,36 +26,78 @@ def _get_owned_account(account_id: int) -> Account:
 
 
 def _parse_balance(raw) -> Decimal:
-    raw = (raw or "").strip() or "0"
+    raw = str(raw if raw is not None else "").strip() or "0"
     try:
         value = Decimal(raw)
     except InvalidOperation:
+        raise ValidationError("Balance must be a valid number.")
+    # "NaN" and "Infinity" parse as Decimals but can't be compared or stored.
+    if not value.is_finite():
         raise ValidationError("Balance must be a valid number.")
     if value < 0:
         raise ValidationError("Balance must be zero or positive. A liability's balance is what's owed, not a negative number.")
     return value
 
 
-def _apply_form(account: Account, form) -> None:
-    name = (form.get("name") or "").strip()
+def _apply_form(account: Account, form, partial: bool = False) -> None:
+    """Validates and applies an account's fields. The web form always
+    sends every field. The native app sends only what changed
+    (`partial=True`), so a field it leaves out keeps its value -- and the
+    balance's "updated" time only moves when a balance was actually sent
+    (which is how someone confirms a balance is still right), never on a
+    rename alone. Validates everything before changing anything."""
+    def sent(key: str) -> bool:
+        return not partial or key in form
+
+    name = str(form.get("name") or "").strip() if sent("name") else account.name
     if not name:
         raise ValidationError("Account name is required.")
 
-    account_type = form.get("account_type") or "checking"
+    account_type = (form.get("account_type") or "checking") if sent("account_type") else account.account_type
     if account_type not in ACCOUNT_TYPES:
         raise ValidationError("Unknown account type.")
 
-    currency = (form.get("currency") or "USD").strip().upper()
+    currency = str(form.get("currency") or "USD").strip().upper() if sent("currency") else account.currency
     if currency not in CURRENCY_CODES:
         raise ValidationError("Unsupported currency.")
 
-    balance = _parse_balance(form.get("current_balance"))
+    balance = _parse_balance(form.get("current_balance")) if sent("current_balance") else None
 
-    account.name = name
+    account.name = name[:120]
     account.account_type = account_type
     account.currency = currency
-    account.current_balance = balance
-    account.balance_updated_at = datetime.now(timezone.utc)
+    if balance is not None:
+        account.current_balance = balance
+        account.balance_updated_at = datetime.now(timezone.utc)
+
+
+def save_account(user, account: Account, fields, partial: bool = False) -> Account:
+    """Validates and saves a new or changed account for `user`, then
+    records today's net worth snapshot. Shared by the web forms below and
+    the native app's API. Raises ValidationError with a message meant for
+    the person; any other exception is a real failure (already rolled
+    back)."""
+    _apply_form(account, fields, partial=partial)
+    try:
+        if account.id is None:
+            db.session.add(account)
+        db.session.commit()
+        _upsert_net_worth_snapshot(user)
+    except Exception:
+        db.session.rollback()
+        raise
+    return account
+
+
+def delete_account_record(user, account: Account) -> None:
+    """Deletes one account and records today's net worth snapshot."""
+    try:
+        db.session.delete(account)
+        db.session.commit()
+        _upsert_net_worth_snapshot(user)
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def _account_balances_usd(user_id: int, rates: dict | None = None):
@@ -206,19 +248,13 @@ def add():
 
     account = Account(user_id=current_user.id, currency=current_user.preferred_currency or "USD")
     try:
-        _apply_form(account, request.form)
+        save_account(current_user, account, request.form)
+        flash("Account added!", "success")
+        return redirect(url_for("accounts.index"))
     except ValidationError as exc:
         flash(str(exc), "error")
         return redirect(url_for("accounts.add"))
-
-    try:
-        db.session.add(account)
-        db.session.commit()
-        _upsert_net_worth_snapshot(current_user)
-        flash("Account added!", "success")
-        return redirect(url_for("accounts.index"))
     except Exception as e:
-        db.session.rollback()
         log.error("Error creating account: %s", e, exc_info=True)
         flash("Error creating account.", "error")
         return redirect(url_for("accounts.add"))
@@ -239,18 +275,13 @@ def edit(account_id):
         )
 
     try:
-        _apply_form(account, request.form)
+        save_account(current_user, account, request.form)
+        flash("Account updated!", "success")
+        return redirect(url_for("accounts.index"))
     except ValidationError as exc:
         flash(str(exc), "error")
         return redirect(url_for("accounts.edit", account_id=account_id))
-
-    try:
-        db.session.commit()
-        _upsert_net_worth_snapshot(current_user)
-        flash("Account updated!", "success")
-        return redirect(url_for("accounts.index"))
     except Exception as e:
-        db.session.rollback()
         log.error("Error updating account: %s", e, exc_info=True)
         flash("Error updating account.", "error")
         return redirect(url_for("accounts.edit", account_id=account_id))
@@ -267,15 +298,12 @@ def delete(account_id):
         return redirect(url_for("accounts.index"))
 
     try:
-        db.session.delete(account)
-        db.session.commit()
-        _upsert_net_worth_snapshot(current_user)
+        delete_account_record(current_user, account)
         if is_ajax_request():
             return jsonify({"message": "Account deleted."})
         flash("Account deleted.", "success")
         return redirect(url_for("accounts.index"))
     except Exception as e:
-        db.session.rollback()
         log.error("Error deleting account: %s", e, exc_info=True)
         if is_ajax_request():
             return jsonify({"message": "Error deleting account."}), 500

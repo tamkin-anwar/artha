@@ -33,13 +33,20 @@ from flask import g, jsonify, request
 
 from ...extensions import db, limiter
 from ...models import ApiToken, Transaction, User
-from ...services.exchange_rate_service import convert_usd_to, get_rates
-from ...services.month_snapshot import build_month_snapshot
-from ...utils import next_due_date, user_today
-from ..accounts.routes import net_worth_summary
-from ..auth.routes import _verify_totp_or_recovery_code
+from ...models.account import ACCOUNT_TYPES, Account, NetWorthSnapshot
 from ...models.category_budget import CategoryBudget
+from ...services.exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from ...services.month_plan import bills_this_month, typical_spending
+from ...services.month_snapshot import build_month_snapshot
+from ...utils import CURRENCY_CODES, next_due_date, user_today
+from ..accounts.routes import (
+    ValidationError as AccountValidationError,
+    _account_balances_usd,
+    delete_account_record,
+    net_worth_summary,
+    save_account,
+)
+from ..auth.routes import _verify_totp_or_recovery_code
 from ..finance.routes import (
     TRANSACTION_CATEGORIES,
     ValidationError,
@@ -674,4 +681,158 @@ def delete_category_budget(category):
         return api_error(500, "server_error", "Artha couldn't remove that limit. Try again in a moment.")
     if not removed:
         return api_error(404, "not_found", "There's no limit on that category.")
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Wealth
+# ---------------------------------------------------------------------------
+
+# How the app groups accounts, in the order it shows them.
+ACCOUNT_GROUPS = {
+    "checking": "cash", "savings": "cash",
+    "investment": "investments",
+    "real_estate": "property", "vehicle": "property", "other_asset": "property",
+    "credit_card": "debts", "loan": "debts", "other_liability": "debts",
+}
+
+
+def _serialize_account(account: Account, display_currency: str, rates, now: datetime) -> dict:
+    updated = _as_utc(account.balance_updated_at)
+    data = {
+        "id": account.id,
+        "name": account.name,
+        "type": account.account_type,
+        "type_label": account.type_label,
+        "group": ACCOUNT_GROUPS.get(account.account_type, "property"),
+        "is_liability": account.is_liability,
+        "balance": money(account.current_balance),
+        "currency": account.currency or "USD",
+        "display_balance": None,
+        "updated": updated.date().isoformat() if updated else None,
+        "days_since_update": (now - updated).days if updated else None,
+    }
+    if data["currency"] != display_currency:
+        data["display_balance"] = money(
+            convert_amount(account.current_balance, data["currency"], display_currency, rates)
+        )
+    return data
+
+
+@api_bp.get("/wealth")
+@api_auth_required
+def wealth():
+    """Net worth now and over time, and every account behind it. The same
+    accounts and math as the web Accounts page (accounts/routes.py); each
+    balance stays in its own currency, with totals and history in the
+    person's display currency. History is one point per day a balance
+    changed (NetWorthSnapshot), plus today's live figure."""
+    user = g.api_user
+    currency = user.preferred_currency or "USD"
+    rates = get_rates()
+    now = datetime.now(timezone.utc)
+
+    accounts, assets_usd, liabilities_usd = _account_balances_usd(user.id, rates)
+    assets = convert_usd_to(assets_usd, currency, rates)
+    liabilities = convert_usd_to(liabilities_usd, currency, rates)
+
+    history = []
+    if accounts:
+        today_date = user_today(user)
+        snapshots = (
+            NetWorthSnapshot.query.filter_by(user_id=user.id)
+            .order_by(NetWorthSnapshot.snapshot_date.asc())
+            .all()
+        )
+        history = [
+            {"date": snap.snapshot_date.isoformat(), "net_worth": money(convert_usd_to(snap.net_worth_usd, currency, rates))}
+            for snap in snapshots
+            if snap.snapshot_date < today_date
+        ]
+        history.append({"date": today_date.isoformat(), "net_worth": money(assets - liabilities)})
+
+    return jsonify({
+        "currency": currency,
+        "net_worth": money(assets - liabilities) if accounts else None,
+        "assets": money(assets),
+        "liabilities": money(liabilities),
+        "history": history,
+        "accounts": [_serialize_account(a, currency, rates, now) for a in accounts],
+        "account_types": [
+            {"key": key, "label": meta["label"], "is_liability": meta["liability"], "group": ACCOUNT_GROUPS[key]}
+            for key, meta in ACCOUNT_TYPES.items()
+        ],
+        "currencies": sorted(CURRENCY_CODES),
+    })
+
+
+def _own_account(account_id: int) -> Account | None:
+    account = db.session.get(Account, account_id)
+    if account is None or account.user_id != g.api_user.id:
+        return None
+    return account
+
+
+def _account_response(account: Account, status: int = 200):
+    currency = g.api_user.preferred_currency or "USD"
+    rates = get_rates() if currency != (account.currency or "USD") else None
+    return jsonify({"account": _serialize_account(account, currency, rates, datetime.now(timezone.utc))}), status
+
+
+@api_bp.post("/accounts")
+@api_auth_required
+def add_account():
+    """Body: {"name", "account_type", "currency"?, "current_balance"}. A
+    balance is always positive: what's held for an asset, what's owed for
+    a debt. Currency defaults to the person's display currency."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the account as a JSON object.")
+    user = g.api_user
+    fields = dict(data)
+    fields.setdefault("currency", user.preferred_currency or "USD")
+    account = Account(user_id=user.id)
+    try:
+        save_account(user, account, fields)
+    except AccountValidationError as exc:
+        return api_error(400, "invalid_account", str(exc))
+    except Exception:
+        log.error("Error adding account via API for user %s", user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save that account. Try again in a moment.")
+    return _account_response(account, 201)
+
+
+@api_bp.patch("/accounts/<int:account_id>")
+@api_auth_required
+def edit_account(account_id):
+    """Body: any of {"name", "account_type", "currency", "current_balance"}.
+    Sending a balance (even the same one) marks it as just updated."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the changes as a JSON object.")
+    account = _own_account(account_id)
+    if account is None:
+        return api_error(404, "not_found", "That account doesn't exist anymore.")
+    try:
+        save_account(g.api_user, account, data, partial=True)
+    except AccountValidationError as exc:
+        db.session.rollback()
+        return api_error(400, "invalid_account", str(exc))
+    except Exception:
+        log.error("Error editing account %s via API for user %s", account_id, g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save that change. Try again in a moment.")
+    return _account_response(account)
+
+
+@api_bp.delete("/accounts/<int:account_id>")
+@api_auth_required
+def remove_account(account_id):
+    account = _own_account(account_id)
+    if account is None:
+        return api_error(404, "not_found", "That account doesn't exist anymore.")
+    try:
+        delete_account_record(g.api_user, account)
+    except Exception:
+        log.error("Error deleting account %s via API for user %s", account_id, g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't delete that account. Try again in a moment.")
     return "", 204

@@ -11,6 +11,7 @@ import pytest
 
 from artha.extensions import db
 from artha.models import ApiToken, ExchangeRate, Transaction, User
+from artha.models.account import Account, NetWorthSnapshot
 from artha.models.budget import Budget
 from artha.services.month_snapshot import build_month_snapshot
 from artha.utils import user_today
@@ -521,3 +522,115 @@ def test_category_limits_can_be_set_shown_and_removed(client, user):
     assert client.delete("/api/v1/category-budgets/dining", headers=_auth(token)).status_code == 204
     assert client.delete("/api/v1/category-budgets/dining", headers=_auth(token)).status_code == 404
     assert client.get("/api/v1/plan", headers=_auth(token)).get_json()["category_budgets"] == []
+
+
+# ---------------------------------------------------------------------------
+# Wealth
+# ---------------------------------------------------------------------------
+
+def test_wealth_without_accounts_is_empty_but_lists_types(client, user):
+    token = _token(client, user)
+    body = client.get("/api/v1/wealth", headers=_auth(token)).get_json()
+    assert body["net_worth"] is None
+    assert body["accounts"] == []
+    assert body["history"] == []
+    assert {"key": "credit_card", "label": "Credit Card", "is_liability": True, "group": "debts"} in body["account_types"]
+    assert "BDT" in body["currencies"]
+
+
+def test_accounts_add_up_to_net_worth_in_the_display_currency(client, user):
+    db.session.add(ExchangeRate(base="USD", rates_json=json.dumps(RATES), source="open-er-api"))
+    db.session.commit()
+    token = _token(client, user)
+
+    def add(**fields):
+        resp = client.post("/api/v1/accounts", headers=_auth(token), json=fields)
+        assert resp.status_code == 201, resp.get_json()
+        return resp.get_json()["account"]
+
+    checking = add(name="Chase", account_type="checking", current_balance="5000")
+    add(name="Visa", account_type="credit_card", current_balance="1200")
+    family = add(name="Dhaka savings", account_type="savings", currency="BDT", current_balance="120000")
+
+    assert checking["currency"] == "USD"
+    assert checking["group"] == "cash"
+    assert checking["display_balance"] is None
+    assert family["balance"] == "120000.00"
+    assert family["display_balance"] == "1000.00"  # 120,000 BDT at 120 per USD
+
+    body = client.get("/api/v1/wealth", headers=_auth(token)).get_json()
+    assert body["assets"] == "6000.00"
+    assert body["liabilities"] == "1200.00"
+    assert body["net_worth"] == "4800.00"
+    assert body["history"][-1] == {"date": user_today(user).isoformat(), "net_worth": "4800.00"}
+    # Matches what Today shows as net worth.
+    today = client.get("/api/v1/today", headers=_auth(token)).get_json()
+    assert today["net_worth"]["amount"] == "4800.00"
+
+
+def test_wealth_history_keeps_past_days_and_ends_with_today(client, user):
+    token = _token(client, user)
+    client.post("/api/v1/accounts", headers=_auth(token),
+                json={"name": "Chase", "account_type": "checking", "current_balance": "1000"})
+    yesterday = user_today(user) - timedelta(days=1)
+    db.session.add(NetWorthSnapshot(user_id=user.id, snapshot_date=yesterday,
+                                    total_assets_usd=Decimal("800"), total_liabilities_usd=Decimal("0")))
+    db.session.commit()
+
+    history = client.get("/api/v1/wealth", headers=_auth(token)).get_json()["history"]
+    assert history == [
+        {"date": yesterday.isoformat(), "net_worth": "800.00"},
+        {"date": user_today(user).isoformat(), "net_worth": "1000.00"},
+    ]
+
+
+def test_editing_an_account_changes_only_what_was_sent(client, user):
+    token = _token(client, user)
+    created = client.post("/api/v1/accounts", headers=_auth(token),
+                          json={"name": "Chase", "account_type": "checking", "current_balance": "1000"}).get_json()["account"]
+    account = db.session.get(Account, created["id"])
+    long_ago = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    account.balance_updated_at = long_ago
+    db.session.commit()
+
+    renamed = client.patch(f"/api/v1/accounts/{created['id']}", headers=_auth(token), json={"name": "Chase Total"})
+    assert renamed.status_code == 200
+    body = renamed.get_json()["account"]
+    assert (body["name"], body["balance"], body["updated"]) == ("Chase Total", "1000.00", "2026-01-01")
+
+    # Sending the balance, even unchanged, confirms it as up to date.
+    confirmed = client.patch(f"/api/v1/accounts/{created['id']}", headers=_auth(token),
+                             json={"current_balance": "1000"}).get_json()["account"]
+    assert confirmed["days_since_update"] == 0
+
+
+@pytest.mark.parametrize("payload, message", [
+    ({"name": "", "account_type": "checking", "current_balance": "1"}, "Account name is required."),
+    ({"name": "X", "account_type": "boat", "current_balance": "1"}, "Unknown account type."),
+    ({"name": "X", "account_type": "checking", "currency": "JPY", "current_balance": "1"}, "Unsupported currency."),
+    ({"name": "X", "account_type": "loan", "current_balance": "-5"},
+     "Balance must be zero or positive. A liability's balance is what's owed, not a negative number."),
+    ({"name": "X", "account_type": "checking", "current_balance": "NaN"}, "Balance must be a valid number."),
+])
+def test_account_validation_errors_are_400s(client, user, payload, message):
+    token = _token(client, user)
+    resp = client.post("/api/v1/accounts", headers=_auth(token), json=payload)
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "invalid_account", "message": message}
+    assert Account.query.count() == 0
+
+
+def test_someone_elses_account_reads_as_missing_and_delete_works(client, user):
+    other = make_user(username="bob")
+    theirs = Account(user_id=other.id, name="Bob's", account_type="checking", currency="USD", current_balance=Decimal("9"))
+    db.session.add(theirs)
+    db.session.commit()
+    token = _token(client, user)
+
+    assert client.patch(f"/api/v1/accounts/{theirs.id}", headers=_auth(token), json={"name": "Mine"}).status_code == 404
+    assert client.delete(f"/api/v1/accounts/{theirs.id}", headers=_auth(token)).status_code == 404
+
+    mine = client.post("/api/v1/accounts", headers=_auth(token),
+                       json={"name": "Chase", "account_type": "checking", "current_balance": "10"}).get_json()["account"]
+    assert client.delete(f"/api/v1/accounts/{mine['id']}", headers=_auth(token)).status_code == 204
+    assert client.get("/api/v1/wealth", headers=_auth(token)).get_json()["accounts"] == []
