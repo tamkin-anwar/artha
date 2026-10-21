@@ -131,6 +131,18 @@ def create_app(config_name: str = "default") -> Flask:
         return response
 
     # ------------------------------------------------------------------
+    # Apple's associated-domains file, which links arthaapp.com to the
+    # native iPhone app (artha-apple): iOS then fills in passwords people
+    # saved for arthaapp.com when they sign in to the app, and suggests and
+    # saves a strong password when they sign up there. Must be served as
+    # JSON at exactly this path, with no redirect. Lists only
+    # webcredentials (passwords), nothing that would open links in the app.
+    # ------------------------------------------------------------------
+    @app.route("/.well-known/apple-app-site-association")
+    def apple_app_site_association():
+        return jsonify({"webcredentials": {"apps": ["7GGTC43CG8.studio.anwarcreative.artha"]}})
+
+    # ------------------------------------------------------------------
     # Context processors
     # ------------------------------------------------------------------
     @app.context_processor

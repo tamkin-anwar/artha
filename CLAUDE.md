@@ -144,10 +144,17 @@ and Artha shouldn't repeat that.
   (`/wealth`, `/accounts`) saves through `accounts.routes`' `save_account`
   / `delete_account_record` (shared with the web Accounts page; the app
   sends only changed fields, and only a sent balance moves
-  `balance_updated_at`). New endpoints should follow that rule: extract the web route's
+  `balance_updated_at`). Signing up (`POST /users`) and deleting an
+  account (`DELETE /me`) go through `auth.routes`' `register_user` /
+  `schedule_account_deletion`, shared with the web Register and Edit
+  Profile forms; the app needs both because App Store guideline 5.1.1(v)
+  requires in-app deletion for any app that can create an account.
+  `/.well-known/apple-app-site-association` (`create_app`) links
+  arthaapp.com's saved passwords to the app (`webcredentials` only).
+  New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
-  `templates/privacy.html` doesn't mention the app yet; update it in the
-  same change that ships the app to real users.
+  `templates/privacy.html` has a section on the iPhone app; keep it in
+  step with what the app does.
 - Models live in `artha/models/`, one file per model, exported through
   `__init__.py`.
 - Money is always `db.Numeric` / `Decimal`, never `float` — an earlier

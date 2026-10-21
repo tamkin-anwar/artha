@@ -46,7 +46,12 @@ from ..accounts.routes import (
     net_worth_summary,
     save_account,
 )
-from ..auth.routes import _verify_totp_or_recovery_code
+from ..auth.routes import (
+    AccountError,
+    _verify_totp_or_recovery_code,
+    register_user,
+    schedule_account_deletion,
+)
 from ..finance.routes import (
     TRANSACTION_CATEGORIES,
     ValidationError,
@@ -243,6 +248,57 @@ def create_session():
         "deletion_canceled": deletion_canceled,
         "user": _serialize_user(user),
     }), 201
+
+
+@api_bp.post("/users")
+@limiter.limit("5 per minute; 20 per hour")
+def sign_up():
+    """Create an account and sign this device in, in one step. Body:
+    {"email", "username", "password", "first_name"?, "currency"?,
+    "timezone"?, "device_name"?}. Same rules as the web Register form
+    (auth.routes.register_user); the app also sends the phone's currency
+    and timezone so the new account starts out right. Returns the same
+    shape as POST /sessions."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error(400, "invalid_request", "Send the sign-up as a JSON object.")
+    try:
+        user = register_user(data)
+    except AccountError as exc:
+        return api_error(400, "invalid_account", str(exc))
+    except Exception:
+        log.error("Error during sign-up via API", exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't create your account. Try again in a moment.")
+
+    user.last_login_at = datetime.now(timezone.utc)
+    device_name = data.get("device_name") if isinstance(data.get("device_name"), str) else None
+    _, raw = ApiToken.issue(user, device_name)
+    db.session.commit()
+    return jsonify({
+        "token": raw,
+        "token_type": "Bearer",
+        "deletion_canceled": False,
+        "user": _serialize_user(user),
+    }), 201
+
+
+@api_bp.delete("/me")
+@api_auth_required
+@limiter.limit("5 per minute")
+def delete_me():
+    """Ask for this account to be deleted. Body: {"password"}. Same as the
+    web: an ACCOUNT_DELETION_GRACE_DAYS window (signing back in cancels it),
+    then everything is purged. Every device is signed out, this one
+    included. Returns the purge date."""
+    data = _json_body() or {}
+    user = g.api_user
+    if not user.check_password(str(data.get("password") or "")):
+        return api_error(400, "invalid_password", "That password isn't right.")
+    try:
+        purge_date = schedule_account_deletion(user)
+    except AccountError as exc:
+        return api_error(409, "cannot_delete", str(exc))
+    return jsonify({"purge_date": purge_date}), 202
 
 
 @api_bp.delete("/sessions/current")

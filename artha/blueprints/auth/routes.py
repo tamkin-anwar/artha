@@ -131,57 +131,104 @@ def privacy():
     return render_template("privacy.html")
 
 
+class AccountError(Exception):
+    """A sign-up or deletion the person can fix; the message is written
+    for them and safe to show as-is."""
+
+
+def register_user(fields) -> User:
+    """Validates and creates an account. Shared by the web Register form
+    and the native app's sign-up (api/routes.py), so both enforce the same
+    rules. `fields` is anything with .get(). The app also sends the
+    device's currency and timezone, so a new account starts out showing
+    the right money and the right "today"; the web sets those later from
+    the browser. Raises AccountError; any other exception is a real
+    failure (already rolled back)."""
+    first_name = str(fields.get("first_name") or "").strip()
+    last_name = str(fields.get("last_name") or "").strip()
+    email = str(fields.get("email") or "").strip().lower()
+    username = str(fields.get("username") or "").strip()
+    password = str(fields.get("password") or "")
+
+    if not username or not password or not email:
+        raise AccountError("Email, username, and password are required.")
+
+    # Same minimal check as edit_profile() — not a full RFC 5322
+    # parser, just enough to catch "forgot the @"/"forgot the domain"
+    # typos before they land in the database.
+    local_part, _, domain_part = email.partition("@")
+    if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
+        raise AccountError("That doesn't look like a valid email address.")
+
+    if len(password) < 8:
+        raise AccountError("Password must be at least 8 characters.")
+
+    if User.query.filter_by(username=username).first():
+        raise AccountError("Username already exists.")
+
+    if User.query.filter_by(email=email).first():
+        raise AccountError("Email already exists.")
+
+    currency = str(fields.get("currency") or "").strip().upper()
+    tz_name = str(fields.get("timezone") or "").strip()
+
+    new_user = User(
+        username=username[:80],
+        email=email,
+        first_name=first_name[:80] or None,
+        last_name=last_name[:80] or None,
+    )
+    if currency in CURRENCY_CODES:
+        new_user.preferred_currency = currency
+    if tz_name in _VALID_TIMEZONES:
+        new_user.timezone = tz_name
+    new_user.set_password(password)
+
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return new_user
+
+
+def schedule_account_deletion(user: User) -> str:
+    """Starts the ACCOUNT_DELETION_GRACE_DAYS countdown for `user`, signs
+    every device out of the app, and emails the purge date, which it also
+    returns ("November 20, 2026"). Shared by the web Edit Profile form and
+    the app (Apple requires apps that create accounts to offer deletion
+    in the app too). Callers check the password first. Raises
+    AccountError for the last remaining admin."""
+    if user.is_admin and User.query.filter_by(is_admin=True).count() == 1:
+        raise AccountError("You're the only admin. This account can't be deleted while that's true.")
+
+    purge_date = datetime.now(timezone.utc) + timedelta(days=ACCOUNT_DELETION_GRACE_DAYS)
+    purge_date_str = purge_date.strftime("%B %d, %Y")
+
+    user.deleted_at = datetime.now(timezone.utc)
+    # Signed out of the app everywhere, matching logout_user() for the
+    # web. Signing back in (web or app) still cancels the deletion.
+    ApiToken.revoke_all_for(user.id)
+    db.session.commit()
+    send_account_deletion_email(user, purge_date_str)
+    return purge_date_str
+
+
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        first_name = request.form.get("first_name", "").strip()
-        last_name = request.form.get("last_name", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-
-        if not username or not password or not email:
-            flash("Email, username, and password are required.", "error")
-            return redirect(url_for("auth.register"))
-
-        # Same minimal check as edit_profile() — not a full RFC 5322
-        # parser, just enough to catch "forgot the @"/"forgot the domain"
-        # typos before they land in the database.
-        local_part, _, domain_part = email.partition("@")
-        if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
-            flash("That doesn't look like a valid email address.", "error")
-            return redirect(url_for("auth.register"))
-
-        if len(password) < 8:
-            flash("Password must be at least 8 characters.", "error")
-            return redirect(url_for("auth.register"))
-
-        if User.query.filter_by(username=username).first():
-            flash("Username already exists.", "error")
-            return redirect(url_for("auth.register"))
-
-        if User.query.filter_by(email=email).first():
-            flash("Email already exists.", "error")
-            return redirect(url_for("auth.register"))
-
-        new_user = User(
-            username=username,
-            email=email,
-            first_name=first_name or None,
-            last_name=last_name or None,
-        )
-        new_user.set_password(password)
-
         try:
-            db.session.add(new_user)
-            db.session.commit()
-            flash("Registration successful! You can now log in.", "success")
-            return redirect(url_for("auth.login"))
+            register_user(request.form)
+        except AccountError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("auth.register"))
         except Exception as e:
-            db.session.rollback()
             log.error("Error during registration: %s", e, exc_info=True)
             flash("Error during registration", "error")
             return redirect(url_for("auth.register"))
+        flash("Registration successful! You can now log in.", "success")
+        return redirect(url_for("auth.login"))
 
     return render_template("register.html")
 
@@ -507,19 +554,11 @@ def delete_account():
         flash("Type your username exactly to confirm.", "error")
         return redirect(url_for("auth.edit_profile"))
 
-    if current_user.is_admin and User.query.filter_by(is_admin=True).count() == 1:
-        flash("You're the only admin. This account can't be deleted while that's true.", "error")
+    try:
+        purge_date_str = schedule_account_deletion(current_user)
+    except AccountError as exc:
+        flash(str(exc), "error")
         return redirect(url_for("auth.edit_profile"))
-
-    purge_date = datetime.now(timezone.utc) + timedelta(days=ACCOUNT_DELETION_GRACE_DAYS)
-    purge_date_str = purge_date.strftime("%B %d, %Y")
-
-    current_user.deleted_at = datetime.now(timezone.utc)
-    # Signed out of the app everywhere, matching logout_user() below for
-    # the web. Signing back in (web or app) still cancels the deletion.
-    ApiToken.revoke_all_for(current_user.id)
-    db.session.commit()
-    send_account_deletion_email(current_user, purge_date_str)
 
     logout_user()
     flash(

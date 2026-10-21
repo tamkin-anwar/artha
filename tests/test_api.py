@@ -668,3 +668,96 @@ def test_an_unsupported_currency_is_refused_instead_of_relabeled(client, user):
     assert body["error"] == "unsupported_currency"
     assert "JPY" in body["message"]
     assert Transaction.query.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Signing up and deleting an account from the app
+# ---------------------------------------------------------------------------
+
+def _sign_up(client, **overrides):
+    body = {"email": "new@example.com", "username": "newperson", "password": "a-strong-pass",
+            "first_name": "Nia", "currency": "GBP", "timezone": "Europe/London", "device_name": "iPhone"}
+    body.update(overrides)
+    return client.post("/api/v1/users", json=body)
+
+
+def test_sign_up_creates_the_account_and_signs_this_device_in(client):
+    resp = _sign_up(client)
+    assert resp.status_code == 201, resp.get_json()
+    body = resp.get_json()
+    assert body["token_type"] == "Bearer"
+    assert body["user"]["username"] == "newperson"
+    assert body["user"]["currency"] == "GBP"
+    assert body["user"]["timezone"] == "Europe/London"
+
+    user = User.query.filter_by(username="newperson").one()
+    assert user.email == "new@example.com"
+    assert user.first_name == "Nia"
+    assert user.check_password("a-strong-pass")
+    assert client.get("/api/v1/me", headers=_auth(body["token"])).status_code == 200
+
+
+def test_sign_up_ignores_an_unknown_currency_or_timezone(client):
+    body = _sign_up(client, currency="JPY", timezone="Mars/Olympus").get_json()
+    assert body["user"]["currency"] == "USD"
+    assert body["user"]["timezone"] is None
+
+
+@pytest.mark.parametrize("overrides, message", [
+    ({"email": ""}, "Email, username, and password are required."),
+    ({"email": "nope"}, "That doesn't look like a valid email address."),
+    ({"password": "short"}, "Password must be at least 8 characters."),
+    ({"username": "alice"}, "Username already exists."),
+    ({"email": "ALICE@example.com"}, "Email already exists."),
+])
+def test_sign_up_follows_the_web_rules(client, user, overrides, message):
+    user.email = "alice@example.com"
+    db.session.commit()
+    resp = _sign_up(client, **overrides)
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "invalid_account", "message": message}
+
+
+def test_sign_up_is_rate_limited(rate_limited_client):
+    statuses = [_sign_up(rate_limited_client, username=f"p{i}", email=f"p{i}@example.com").status_code
+                for i in range(6)]
+    assert statuses[:5] == [201] * 5
+    assert statuses[5] == 429
+
+
+def test_deleting_from_the_app_needs_the_password_and_signs_every_device_out(client, user):
+    phone = _token(client, user)
+    tablet = _token(client, user)
+
+    wrong = client.delete("/api/v1/me", headers=_auth(phone), json={"password": "nope"})
+    assert wrong.status_code == 400
+    assert wrong.get_json()["error"] == "invalid_password"
+    assert db.session.get(User, user.id).deleted_at is None
+
+    with patch("artha.blueprints.auth.routes.send_account_deletion_email") as email:
+        resp = client.delete("/api/v1/me", headers=_auth(phone), json={"password": "password123"})
+    assert resp.status_code == 202
+    assert resp.get_json()["purge_date"]
+    email.assert_called_once()
+    assert db.session.get(User, user.id).deleted_at is not None
+    for token in (phone, tablet):
+        assert client.get("/api/v1/me", headers=_auth(token)).status_code == 401
+
+    # Signing back in during the grace window still cancels it.
+    assert _sign_in(client).get_json()["deletion_canceled"] is True
+
+
+def test_the_only_admin_cant_delete_from_the_app_either(client, user):
+    user.is_admin = True
+    db.session.commit()
+    token = _token(client, user)
+    resp = client.delete("/api/v1/me", headers=_auth(token), json={"password": "password123"})
+    assert resp.status_code == 409
+    assert db.session.get(User, user.id).deleted_at is None
+
+
+def test_apple_app_site_association_links_only_passwords_to_the_app(client):
+    resp = client.get("/.well-known/apple-app-site-association")
+    assert resp.status_code == 200
+    assert resp.mimetype == "application/json"
+    assert resp.get_json() == {"webcredentials": {"apps": ["7GGTC43CG8.studio.anwarcreative.artha"]}}
