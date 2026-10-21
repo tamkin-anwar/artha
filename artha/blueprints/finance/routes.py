@@ -20,6 +20,7 @@ from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
 from ...models.merchant_category_rule import MerchantCategoryRule
 from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
+from ...services.cash_flow import month_starts, monthly_totals
 from ...services.push_service import send_push
 from ...utils import (
     is_ajax_request,
@@ -1598,53 +1599,23 @@ def finance_breakdown():
             "items": items,
         })
 
-    start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
-    end_dt = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
-
-    txs = Transaction.query.filter(
-        Transaction.user_id == uid,
-        Transaction.timestamp >= start_dt,
-        Transaction.timestamp < end_dt,
-    ).all()
-
     if view == "cashflow":
-        month_keys = []
-        cursor_year, cursor_month = start.year, start.month
-        while _month_start(cursor_year, cursor_month) < end:
-            month_keys.append(_month_start(cursor_year, cursor_month))
-            cursor_month += 1
-            if cursor_month == 13:
-                cursor_month = 1
-                cursor_year += 1
-
-        bucket_totals = {d.strftime("%Y-%m"): {"income": Decimal("0"), "expense": Decimal("0")} for d in month_keys}
-        for t in txs:
-            if not t.timestamp:
-                continue
-            b = bucket_totals.get(t.timestamp.strftime("%Y-%m"))
-            if b is None:
-                continue
-            if t.type == "income":
-                b["income"] += t.value_in_usd
-            elif t.type == "expense":
-                b["expense"] += t.value_in_usd
-
-        for b in bucket_totals.values():
-            b["income"] = convert_usd_to(b["income"], display_currency, rates)
-            b["expense"] = convert_usd_to(b["expense"], display_currency, rates)
-
+        # Bucketed by services.cash_flow, the same code the native app's
+        # month-by-month view uses (GET /api/v1/history).
         buckets = []
         income_total = Decimal("0")
         expense_total = Decimal("0")
-        for d in month_keys:
-            b = bucket_totals[d.strftime("%Y-%m")]
-            income_total += b["income"]
-            expense_total += b["expense"]
+        month_count = len(month_starts(start, end))
+        for m in monthly_totals(uid, start, end):
+            income = convert_usd_to(m.income_usd, display_currency, rates)
+            expense = convert_usd_to(m.expense_usd, display_currency, rates)
+            income_total += income
+            expense_total += expense
             buckets.append({
-                "label": f"{calendar.month_abbr[d.month]} {d.year}" if len(month_keys) > 12 else calendar.month_abbr[d.month],
-                "income": float(b["income"]),
-                "expense": float(b["expense"]),
-                "net": float(b["income"] - b["expense"]),
+                "label": f"{calendar.month_abbr[m.start.month]} {m.start.year}" if month_count > 12 else calendar.month_abbr[m.start.month],
+                "income": float(income),
+                "expense": float(expense),
+                "net": float(income - expense),
             })
 
         return jsonify({
@@ -1656,6 +1627,15 @@ def finance_breakdown():
             "expense_total": float(expense_total),
             "net": float(income_total - expense_total),
         })
+
+    start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+    end_dt = datetime(end.year, end.month, end.day, tzinfo=timezone.utc)
+
+    txs = Transaction.query.filter(
+        Transaction.user_id == uid,
+        Transaction.timestamp >= start_dt,
+        Transaction.timestamp < end_dt,
+    ).all()
 
     # spending / income — same shape, just filtered to the opposite tx type.
     want_type = "expense" if view == "spending" else "income"

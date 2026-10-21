@@ -827,3 +827,69 @@ def test_changing_a_purchase_counts_as_reviewing_it(client, user):
     resp = client.patch(f"/api/v1/transactions/{tx.id}", headers=_auth(token), json={"category": "transport"})
     assert resp.status_code == 200
     assert resp.get_json()["transaction"]["needs_review"] is False
+
+
+# ---------------------------------------------------------------------------
+# Month by month, and whether Apple Pay logging is working
+# ---------------------------------------------------------------------------
+
+def test_history_buckets_months_and_skips_empty_ones_before_the_first(client, user):
+    today = user_today(user)
+    this_month = datetime(today.year, today.month, 1, 12, tzinfo=timezone.utc)
+    last_month = (this_month - timedelta(days=1)).replace(day=10)
+    # The 3rd, so this first month counts as a full one (see the partial test).
+    two_back = (last_month.replace(day=1) - timedelta(days=1)).replace(day=3)
+    _add(user, "Rent", "1000.00", category="housing", when=two_back)
+    _add(user, "Paycheck", "3000.00", t_type="income", when=two_back)
+    _add(user, "Groceries", "200.00", category="groceries", when=last_month)
+    _add(user, "Rent", "1000.00", category="housing", when=last_month)
+    _add(user, "Coffee", "5.00", category="dining", when=this_month)
+    token = _token(client, user)
+
+    body = client.get("/api/v1/history?months=6", headers=_auth(token)).get_json()
+    months = body["months"]
+    # Six months asked for, but the account only goes back three.
+    assert [m["month"] for m in months] == [
+        two_back.strftime("%Y-%m"), last_month.strftime("%Y-%m"), this_month.strftime("%Y-%m")]
+    assert months[0]["spent"] == "1000.00" and months[0]["income"] == "3000.00"
+    assert months[1]["spent"] == "1200.00"
+    assert [c["key"] for c in months[1]["categories"]] == ["housing", "groceries"]
+    assert months[-1]["is_current"] is True and months[0]["is_current"] is False
+    # This month is still going, so the average is the two finished ones.
+    assert body["average_spent"] == "1100.00"
+    assert client.get("/api/v1/history?months=lots", headers=_auth(token)).status_code == 400
+
+
+def test_history_leaves_a_partial_first_month_out_of_the_usual(client, user):
+    today = user_today(user)
+    this_month = datetime(today.year, today.month, 1, 12, tzinfo=timezone.utc)
+    last_month = (this_month - timedelta(days=1)).replace(day=3)
+    two_back = (last_month.replace(day=1) - timedelta(days=1)).replace(day=27)
+    _add(user, "Chipotle", "13.00", category="dining", when=two_back)
+    _add(user, "Rent", "2000.00", category="housing", when=last_month)
+    token = _token(client, user)
+
+    body = client.get("/api/v1/history", headers=_auth(token)).get_json()
+    first = body["months"][0]
+    assert first["started"] == two_back.date().isoformat()
+    assert body["months"][1]["started"] is None
+    # Only the full month counts toward "usual".
+    assert body["average_spent"] == "2000.00"
+
+
+def test_history_for_a_brand_new_account_is_just_this_month(client, user):
+    token = _token(client, user)
+    body = client.get("/api/v1/history", headers=_auth(token)).get_json()
+    assert len(body["months"]) == 1
+    assert body["months"][0]["spent"] == "0.00"
+    assert body["average_spent"] is None
+
+
+def test_today_says_when_apple_pay_last_logged_something(client, user):
+    token = _token(client, user)
+    assert client.get("/api/v1/today", headers=_auth(token)).get_json()["apple_pay"] is None
+    client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Shell", "amount": "41.10", "type": "expense", "source": "apple_pay"})
+    status = client.get("/api/v1/today", headers=_auth(token)).get_json()["apple_pay"]
+    assert status["description"] == "Shell"
+    assert status["count"] == 1

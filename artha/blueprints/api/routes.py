@@ -35,6 +35,7 @@ from ...extensions import db, limiter
 from ...models import ApiToken, Transaction, User
 from ...models.account import ACCOUNT_TYPES, Account, NetWorthSnapshot
 from ...models.category_budget import CategoryBudget
+from ...services.cash_flow import monthly_totals, months_back
 from ...services.exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from ...services.month_plan import bills_this_month, typical_spending
 from ...services.month_snapshot import build_month_snapshot
@@ -437,7 +438,27 @@ def today():
         # Purchases logged on their own and not looked at yet, from any
         # month (Transaction.needs_review).
         "to_review": Transaction.query.filter_by(user_id=user.id, needs_review=True).count(),
+        "apple_pay": _apple_pay_status(user),
     })
+
+
+def _apple_pay_status(user) -> dict | None:
+    """The newest purchase Apple Pay logged on its own, so the app can say
+    the automation is working ("Last logged Shell, Oct 21") instead of
+    leaving someone to wonder. None until the first one arrives."""
+    last = (
+        Transaction.query
+        .filter_by(user_id=user.id, import_source="apple_pay")
+        .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
+        .first()
+    )
+    if last is None:
+        return None
+    return {
+        "description": last.description,
+        "date": last.timestamp.date().isoformat() if last.timestamp else None,
+        "count": Transaction.query.filter_by(user_id=user.id, import_source="apple_pay").count(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +668,82 @@ def categories():
 # ---------------------------------------------------------------------------
 # Plan
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Month by month
+# ---------------------------------------------------------------------------
+
+HISTORY_MONTHS_DEFAULT = 6
+HISTORY_MONTHS_MAX = 12
+
+
+@api_bp.get("/history")
+@api_auth_required
+def history():
+    """The last ?months= (default 6, at most 12) calendar months, this one
+    included, oldest first: what came in, what went out, and spending by
+    category each month, biggest first. Months before the first one with any
+    transactions are left off, so a new account doesn't open on a row of
+    empty bars. `average_spent` covers only finished, full months that had
+    spending (not this one, which is still going, nor a first month that
+    began partway through, which carries `started`), or is null when there
+    are none.
+    Bucketed by services.cash_flow, the same code as the web Cash Flow
+    tab."""
+    user = g.api_user
+    try:
+        count = int(request.args.get("months", HISTORY_MONTHS_DEFAULT))
+    except ValueError:
+        return api_error(400, "invalid_request", "months must be a whole number.")
+    count = max(1, min(count, HISTORY_MONTHS_MAX))
+
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    today = user_today(user)
+    start, end = months_back(today, count)
+    months = monthly_totals(user.id, start, end)
+    while len(months) > 1 and months[0].transaction_count == 0:
+        months.pop(0)
+
+    current_key = today.strftime("%Y-%m")
+    # Someone who started partway through a month has a first month that
+    # only covers a few days; counting it would drag "usual" way down
+    # (a first week of $13 against $2,000 months). Past the 5th, that
+    # month is marked as starting on its first day and left out.
+    first_ever = (
+        db.session.query(db.func.min(Transaction.timestamp)).filter(Transaction.user_id == user.id).scalar()
+    )
+    partial_key = first_ever.strftime("%Y-%m") if first_ever is not None and first_ever.day > 5 else None
+    finished = [m for m in months if m.key not in (current_key, partial_key) and m.expense_usd > 0]
+    average_usd = (sum((m.expense_usd for m in finished), Decimal("0")) / len(finished)) if finished else None
+
+    def serialize(m):
+        # Every category, biggest first: the app shows the top few, and
+        # compares each against the month before, which needs that month's
+        # whole list (a category outside its top few still had spending).
+        top = sorted(m.expense_by_category_usd.items(), key=lambda kv: kv[1], reverse=True)
+        return {
+            "month": m.key,
+            "label": cal.month_abbr[m.start.month],
+            "name": cal.month_name[m.start.month],
+            "year": m.start.year,
+            "is_current": m.key == current_key,
+            # Set only on a first month that began partway through.
+            "started": first_ever.date().isoformat() if m.key == partial_key else None,
+            "spent": money(convert_usd_to(m.expense_usd, currency, rates)),
+            "income": money(convert_usd_to(m.income_usd, currency, rates)),
+            "categories": [
+                {"key": key, "label": _category_label(key), "amount": money(convert_usd_to(total, currency, rates))}
+                for key, total in top
+            ],
+        }
+
+    return jsonify({
+        "currency": currency,
+        "months": [serialize(m) for m in months],
+        "average_spent": money(convert_usd_to(average_usd, currency, rates)) if average_usd is not None else None,
+    })
+
 
 @api_bp.get("/plan")
 @api_auth_required
