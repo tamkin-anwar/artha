@@ -36,6 +36,15 @@ class Transaction(db.Model):
     # overlapping statement can be reasoned about.
     import_source = db.Column(db.String(10), nullable=True)
 
+    # True for a purchase nobody looked at as it was logged (today only an
+    # Apple Pay purchase the native app logged on its own), until the
+    # person confirms it or changes it. The app's Today shows these as "to
+    # review", the way Copilot, Monarch and YNAB do, so a wrong merchant
+    # or category gets caught; fixing a category there teaches it for that
+    # merchant like any other edit. A statement import doesn't set it:
+    # every row there is already reviewed before it's saved.
+    needs_review = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     # The period this generated row represents, set only on rows created
     # by generate_recurring() (NULL for everything else) — for a monthly
     # series (recurrence_interval is None, the default) that's the

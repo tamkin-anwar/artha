@@ -38,7 +38,7 @@ from ...models.category_budget import CategoryBudget
 from ...services.exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from ...services.month_plan import bills_this_month, typical_spending
 from ...services.month_snapshot import build_month_snapshot
-from ...utils import CURRENCY_CODES, next_due_date, user_today
+from ...utils import CURRENCY_CODES, current_month_bounds, next_due_date, user_today
 from ..accounts.routes import (
     ValidationError as AccountValidationError,
     _account_balances_usd,
@@ -199,6 +199,7 @@ def _serialize_transaction(tx: Transaction, display_currency: str, rates) -> dic
         "recurrence_interval": (tx.recurrence_interval or "monthly") if tx.is_recurring else None,
         # "manual", "csv" (statement import), "apple_pay", or null (older rows).
         "source": tx.import_source,
+        "needs_review": bool(tx.needs_review),
         "display_amount": None,
     }
     if tx.native_currency != display_currency:
@@ -433,6 +434,9 @@ def today():
         "coming_up": coming_up,
         "recent": [_serialize_transaction(tx, currency, rates) for tx in recent_rows],
         "net_worth": net_worth,
+        # Purchases logged on their own and not looked at yet, from any
+        # month (Transaction.needs_review).
+        "to_review": Transaction.query.filter_by(user_id=user.id, needs_review=True).count(),
     })
 
 
@@ -446,7 +450,12 @@ def list_transactions():
     """Newest first. ?limit= (default 50, at most 200) and ?offset= page
     through the rest; `next_offset` is null on the last page. ?q= keeps
     only descriptions containing that text (any case), and ?type=expense
-    or ?type=income keeps only that kind."""
+    or ?type=income keeps only that kind. ?month=YYYY-MM keeps only that
+    calendar month (the same bounds Today's totals use), and
+    ?category=dining,groceries keeps only those categories ("none" means
+    uncategorized), so Today's "Where October went" can open the
+    transactions behind each of its numbers. ?review=1 keeps only the
+    ones waiting to be reviewed (Transaction.needs_review)."""
     user = g.api_user
     try:
         limit = int(request.args.get("limit", TRANSACTIONS_PAGE_DEFAULT))
@@ -468,6 +477,22 @@ def list_transactions():
         if t_type not in ("expense", "income"):
             return api_error(400, "invalid_request", "type must be expense or income.")
         query = query.filter(Transaction.type == t_type)
+    month = request.args.get("month", "").strip()
+    if month:
+        try:
+            start, end = current_month_bounds(datetime.strptime(month, "%Y-%m").date())
+        except ValueError:
+            return api_error(400, "invalid_request", "month must look like 2026-10.")
+        query = query.filter(Transaction.timestamp >= start, Transaction.timestamp < end)
+    categories = [c.strip() for c in request.args.get("category", "").split(",") if c.strip()][:20]
+    if categories:
+        named = [c for c in categories if c != "none"]
+        conditions = [Transaction.category.in_(named)] if named else []
+        if "none" in categories:
+            conditions.append(Transaction.category.is_(None))
+        query = query.filter(db.or_(*conditions))
+    if request.args.get("review") == "1":
+        query = query.filter(Transaction.needs_review.is_(True))
 
     rows = (
         query
@@ -541,6 +566,27 @@ def _own_transaction(transaction_id: int) -> Transaction | None:
     if tx is None or tx.user_id != g.api_user.id:
         return None
     return tx
+
+
+@api_bp.post("/transactions/reviewed")
+@api_auth_required
+def mark_reviewed():
+    """Body: {"ids": [...]}: these transactions look right as they are.
+    Only clears the flag; changing something instead goes through PATCH,
+    which counts as a review too. Ids that aren't yours are ignored.
+    Returns how many are still waiting."""
+    data = _json_body() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        return api_error(400, "invalid_request", "Send the ids as a list of numbers.")
+    user = g.api_user
+    if ids:
+        Transaction.query.filter(
+            Transaction.user_id == user.id, Transaction.id.in_(ids[:500])
+        ).update({"needs_review": False}, synchronize_session=False)
+        db.session.commit()
+    remaining = Transaction.query.filter_by(user_id=user.id, needs_review=True).count()
+    return jsonify({"to_review": remaining})
 
 
 @api_bp.patch("/transactions/<int:transaction_id>")

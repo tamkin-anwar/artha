@@ -482,6 +482,9 @@ def create_transaction(user, fields) -> Transaction:
         recurring_end_date=recurring_end_date,
         category=category,
         import_source=import_source,
+        # Logged without anyone looking at it, so it waits to be reviewed
+        # (see Transaction.needs_review).
+        needs_review=import_source == "apple_pay",
         currency=currency,
         usd_value=usd_value,
         usd_rate_locked=usd_rate_locked,
@@ -599,6 +602,8 @@ def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
         if "recurring_end_date" in data:
             tx.recurring_end_date = end_date
     tx.usd_value, tx.usd_rate_locked = lock_usd_value(tx.amount, tx.native_currency)
+    # Someone just looked at it and saved it: that's a review.
+    tx.needs_review = False
 
     try:
         db.session.commit()

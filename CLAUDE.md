@@ -151,6 +151,10 @@ and Artha shouldn't repeat that.
   requires in-app deletion for any app that can create an account.
   `/.well-known/apple-app-site-association` (`create_app`) links
   arthaapp.com's saved passwords to the app (`webcredentials` only).
+  `Transaction.needs_review` marks an Apple Pay purchase the app logged on
+  its own until the person confirms it (`POST /transactions/reviewed`) or
+  edits it (`update_transaction_fields` clears it); statement imports
+  never set it, since every row there is reviewed before saving.
   New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
   `templates/privacy.html` has a section on the iPhone app; keep it in

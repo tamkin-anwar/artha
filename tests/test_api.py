@@ -297,6 +297,28 @@ def test_list_transactions_searches_descriptions_and_filters_by_type(client, use
     assert client.get("/api/v1/transactions?type=transfer", headers=_auth(token)).status_code == 400
 
 
+def test_list_transactions_filters_by_month_and_category(client, user):
+    this_month = current_period_timestamp()
+    last_month = this_month.replace(day=1) - timedelta(days=3)
+    _add(user, "Chipotle", "12.00", category="dining", when=this_month)
+    _add(user, "Whole Foods", "40.00", category="groceries", when=this_month)
+    _add(user, "Mystery", "5.00", category=None, when=this_month)
+    _add(user, "Old dinner", "30.00", category="dining", when=last_month)
+    token = _token(client, user)
+    month = this_month.strftime("%Y-%m")
+
+    def descriptions(query):
+        resp = client.get(f"/api/v1/transactions?{query}", headers=_auth(token))
+        assert resp.status_code == 200, resp.get_json()
+        return sorted(t["description"] for t in resp.get_json()["transactions"])
+
+    assert descriptions(f"month={month}") == ["Chipotle", "Mystery", "Whole Foods"]
+    assert descriptions("category=dining") == ["Chipotle", "Old dinner"]
+    assert descriptions(f"month={month}&category=dining") == ["Chipotle"]
+    assert descriptions(f"month={month}&category=groceries,none") == ["Mystery", "Whole Foods"]
+    assert client.get("/api/v1/transactions?month=October", headers=_auth(token)).status_code == 400
+
+
 def test_edit_transaction_runs_the_web_rules_and_remembers_the_category(client, user):
     tx = _add(user, "Blue Bottle Coffee", "6.75", category="other")
     token = _token(client, user)
@@ -761,3 +783,47 @@ def test_apple_app_site_association_links_only_passwords_to_the_app(client):
     assert resp.status_code == 200
     assert resp.mimetype == "application/json"
     assert resp.get_json() == {"webcredentials": {"apps": ["7GGTC43CG8.studio.anwarcreative.artha"]}}
+
+
+# ---------------------------------------------------------------------------
+# Reviewing purchases that logged themselves
+# ---------------------------------------------------------------------------
+
+def test_apple_pay_purchases_wait_for_review_and_typed_ones_dont(client, user):
+    token = _token(client, user)
+    tapped = client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Blue Bottle Coffee", "amount": "6.75", "type": "expense", "source": "apple_pay"})
+    typed = client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Farmers market", "amount": "20.00", "type": "expense"})
+    assert tapped.get_json()["transaction"]["needs_review"] is True
+    assert typed.get_json()["transaction"]["needs_review"] is False
+
+    assert client.get("/api/v1/today", headers=_auth(token)).get_json()["to_review"] == 1
+    listed = client.get("/api/v1/transactions?review=1", headers=_auth(token)).get_json()["transactions"]
+    assert [t["description"] for t in listed] == ["Blue Bottle Coffee"]
+
+
+def test_marking_reviewed_clears_only_your_own(client, user):
+    other = make_user(username="bob")
+    mine = _add(user, "Uber", "18.40", needs_review=True)
+    also_mine = _add(user, "Lyft", "14.75", needs_review=True)
+    theirs = _add(other, "Taxi", "9.00", needs_review=True)
+    token = _token(client, user)
+
+    resp = client.post("/api/v1/transactions/reviewed", headers=_auth(token), json={"ids": [mine.id, theirs.id]})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"to_review": 1}
+    assert db.session.get(Transaction, mine.id).needs_review is False
+    assert db.session.get(Transaction, also_mine.id).needs_review is True
+    assert db.session.get(Transaction, theirs.id).needs_review is True
+
+    bad = client.post("/api/v1/transactions/reviewed", headers=_auth(token), json={"ids": "all"})
+    assert bad.status_code == 400
+
+
+def test_changing_a_purchase_counts_as_reviewing_it(client, user):
+    tx = _add(user, "Shell", "48.90", category="shopping", needs_review=True)
+    token = _token(client, user)
+    resp = client.patch(f"/api/v1/transactions/{tx.id}", headers=_auth(token), json={"category": "transport"})
+    assert resp.status_code == 200
+    assert resp.get_json()["transaction"]["needs_review"] is False
