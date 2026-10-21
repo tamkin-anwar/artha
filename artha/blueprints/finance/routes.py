@@ -460,6 +460,10 @@ def create_transaction(user, fields) -> Transaction:
     is_recurring = _truthy(fields.get("is_recurring"))
     recurrence_interval, recurring_end_date = _parse_recurrence_fields(fields) if is_recurring else (None, None)
 
+    # Provenance only: an Apple Pay purchase the native app logged on its
+    # own, versus one someone typed in. Anything else reads as manual.
+    import_source = "apple_pay" if fields.get("source") == "apple_pay" else "manual"
+
     max_pos = (
         db.session.query(func.max(Transaction.position))
         .filter_by(user_id=user.id)
@@ -477,7 +481,7 @@ def create_transaction(user, fields) -> Transaction:
         recurrence_interval=recurrence_interval,
         recurring_end_date=recurring_end_date,
         category=category,
-        import_source="manual",
+        import_source=import_source,
         currency=currency,
         usd_value=usd_value,
         usd_rate_locked=usd_rate_locked,

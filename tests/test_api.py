@@ -634,3 +634,37 @@ def test_someone_elses_account_reads_as_missing_and_delete_works(client, user):
                        json={"name": "Chase", "account_type": "checking", "current_balance": "10"}).get_json()["account"]
     assert client.delete(f"/api/v1/accounts/{mine['id']}", headers=_auth(token)).status_code == 204
     assert client.get("/api/v1/wealth", headers=_auth(token)).get_json()["accounts"] == []
+
+
+# ---------------------------------------------------------------------------
+# Apple Pay logging
+# ---------------------------------------------------------------------------
+
+def test_apple_pay_purchase_is_marked_and_categorized_like_any_other(client, user):
+    token = _token(client, user)
+    resp = client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Blue Bottle Coffee", "amount": "6.75", "type": "expense",
+        "currency": "USD", "source": "apple_pay",
+    })
+    assert resp.status_code == 201
+    body = resp.get_json()["transaction"]
+    assert body["source"] == "apple_pay"
+    assert body["category"] == "dining"
+    assert Transaction.query.one().import_source == "apple_pay"
+
+    typed = client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Lunch", "amount": "12", "type": "expense", "source": "something_else",
+    }).get_json()["transaction"]
+    assert typed["source"] == "manual"
+
+
+def test_an_unsupported_currency_is_refused_instead_of_relabeled(client, user):
+    token = _token(client, user)
+    resp = client.post("/api/v1/transactions", headers=_auth(token), json={
+        "description": "Tokyo ramen", "amount": "1500", "type": "expense", "currency": "jpy", "source": "apple_pay",
+    })
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["error"] == "unsupported_currency"
+    assert "JPY" in body["message"]
+    assert Transaction.query.count() == 0

@@ -192,6 +192,8 @@ def _serialize_transaction(tx: Transaction, display_currency: str, rates) -> dic
         "date": tx.timestamp.date().isoformat() if tx.timestamp else None,
         "is_recurring": bool(tx.is_recurring),
         "recurrence_interval": (tx.recurrence_interval or "monthly") if tx.is_recurring else None,
+        # "manual", "csv" (statement import), "apple_pay", or null (older rows).
+        "source": tx.import_source,
         "display_amount": None,
     }
     if tx.native_currency != display_currency:
@@ -441,11 +443,26 @@ def add_transaction():
     """Body: {"description", "amount", "type": "expense"|"income",
     "category"?, "currency"?, "date"? (YYYY-MM-DD), "is_recurring"?,
     "recurrence_interval"? ("weekly"|"biweekly"; monthly when omitted),
-    "recurring_end_date"?}. Without a category, Artha picks one the same
-    way it does on the web (remembered merchant, then keywords, then AI)."""
+    "recurring_end_date"?, "source"? ("apple_pay" for a purchase the app
+    logged from a Wallet automation)}. Without a category, Artha picks one
+    the same way it does on the web (remembered merchant, then keywords,
+    then AI)."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return api_error(400, "invalid_request", "Send the transaction as a JSON object.")
+
+    # The web form falls back to the display currency for an unknown code,
+    # which is safe there because it only offers supported ones. The app
+    # can pass along whatever currency Apple Pay reported (a purchase
+    # abroad), and relabeling 1,500 yen as 1,500 dollars would be far worse
+    # than not logging it, so an explicit unsupported currency is refused.
+    currency = data.get("currency")
+    if currency is not None and str(currency).strip().upper() not in CURRENCY_CODES:
+        return api_error(
+            400, "unsupported_currency",
+            f"Artha doesn't support {str(currency).strip().upper() or 'that currency'} yet, so this wasn't logged. "
+            "Add it by hand in a supported currency.",
+        )
 
     user = g.api_user
     try:

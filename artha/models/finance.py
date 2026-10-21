@@ -25,7 +25,9 @@ class Transaction(db.Model):
     # existed before this column shipped stays valid without a backfill.
     category = db.Column(db.String(20), nullable=True)
 
-    # "manual" | "csv" | None (legacy rows predating this column). "csv"
+    # "manual" | "csv" | "apple_pay" | None (legacy rows predating this
+    # column). "apple_pay" is a purchase the native app logged on its own
+    # from a Wallet transaction automation (api/routes.py). "csv"
     # covers any uploaded-statement import regardless of the original file
     # type (CSV or PDF) — by the time a row reaches import_commit() it's
     # already normalized to the same shape, so the source document format
