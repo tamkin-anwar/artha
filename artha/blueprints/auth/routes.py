@@ -534,9 +534,11 @@ def delete_account():
 @login_required
 def set_currency():
     """Persists the account-wide currency preference (static/js/settings.js
-    calls this on every change, best-effort). A brand-new device with no
-    localStorage entry of its own yet reads this back to inherit the
-    account's choice instead of defaulting to USD."""
+    calls this on every change, then reloads). base.html renders the result
+    as <body data-display-currency>, which static/js/currency.js treats as
+    the only source of truth on a signed-in page, overriding anything this
+    browser has stored, since every aggregate is already converted into it
+    server-side."""
     data = request.get_json(silent=True) or {}
     code = (data.get("code") or "").strip().upper()
     if code not in CURRENCY_CODES:

@@ -24,18 +24,65 @@ function safeGetPreset(code) {
     return CURRENCY_PRESETS[code] || CURRENCY_PRESETS[FALLBACK.code];
 }
 
+// The signed-in account's effective display currency, rendered by
+// base.html onto <body data-display-currency> as
+// `preferred_currency or "USD"` -- the exact same fallback every route
+// uses when it converts aggregates server-side. This is the ONLY source
+// of truth for a signed-in page: Dashboard totals, Safe to Spend,
+// budgets and Scenario comparisons are already converted into this
+// currency before the HTML ever reaches the browser, so formatting them
+// under any other symbol is the relabeling bug multi-currency exists to
+// prevent. localStorage used to win whenever it had any value at all,
+// which showed a USD-computed Safe to Spend as "£2,969.26" for an
+// account with no saved currency on a browser that had GBP stored from
+// a different account / an older session (found 2026-10-20).
+//
+// An account with NO saved currency deliberately renders as USD rather
+// than adopting (and persisting) whatever this browser has stored:
+// persisting needs a network round trip plus a reload, so the page
+// would flash mismatched figures first and stay mismatched if the save
+// failed, and on a shared browser it would silently copy one person's
+// currency onto someone else's account. Rendering USD can never show a
+// mismatched symbol; the user just picks their currency once, which
+// then saves to the account properly.
+//
+// Absent on logged-out pages (no money on them), where localStorage is
+// still used as before.
+function accountCurrencyCode() {
+    const code = document.body?.dataset.displayCurrency;
+    return code ? safeGetPreset(code).code : null;
+}
+
+function readStoredCode() {
+    try {
+        return localStorage.getItem(STORAGE_KEY);
+    } catch {
+        return null;
+    }
+}
+
 export function getCurrencyCode() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const account = accountCurrencyCode();
+    if (account) return account;
+    const stored = readStoredCode();
     if (!stored) return FALLBACK.code;
     return safeGetPreset(stored).code;
 }
 
-// Whether *this* browser has ever explicitly saved a currency — settings.js
-// uses this to decide whether to seed a brand-new device from the account's
-// saved preference, versus leaving an already-configured device alone.
-export function hasStoredPreference() {
-    return localStorage.getItem(STORAGE_KEY) !== null;
-}
+// Keep this browser's stored value mirroring the account, so nothing that
+// still reads localStorage can disagree with it. Runs at module
+// evaluation, i.e. before any page module that imports this file formats
+// a single number (module dependencies always evaluate first).
+(function mirrorAccountCurrency() {
+    const account = accountCurrencyCode();
+    if (!account || readStoredCode() === account) return;
+    try {
+        localStorage.setItem(STORAGE_KEY, account);
+    } catch {
+        // Private mode / blocked storage: getCurrencyCode() reads the
+        // account value directly anyway.
+    }
+})();
 
 export function getCurrencyPreset() {
     return safeGetPreset(getCurrencyCode());
@@ -43,7 +90,11 @@ export function getCurrencyPreset() {
 
 export function setCurrencyCode(code) {
     const preset = safeGetPreset(code);
-    localStorage.setItem(STORAGE_KEY, preset.code);
+    try {
+        localStorage.setItem(STORAGE_KEY, preset.code);
+    } catch {
+        // See mirrorAccountCurrency above.
+    }
     document.dispatchEvent(new CustomEvent("currency-changed", { detail: { currency: preset.code } }));
     return preset.code;
 }
