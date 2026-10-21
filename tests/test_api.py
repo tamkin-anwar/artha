@@ -13,6 +13,7 @@ from artha.extensions import db
 from artha.models import ApiToken, ExchangeRate, Transaction, User
 from artha.models.budget import Budget
 from artha.services.month_snapshot import build_month_snapshot
+from artha.utils import user_today
 
 from .conftest import current_period_timestamp, make_user
 
@@ -264,6 +265,7 @@ def test_list_transactions_is_newest_first_paged_and_only_yours(client, user):
 
     first = client.get("/api/v1/transactions?limit=2", headers=_auth(token)).get_json()
     assert [t["description"] for t in first["transactions"]] == ["Item 0", "Item 1"]
+    assert first["today"] == user_today(user).isoformat()
     assert first["next_offset"] == 2
 
     second = client.get("/api/v1/transactions?limit=2&offset=2", headers=_auth(token)).get_json()
@@ -271,6 +273,102 @@ def test_list_transactions_is_newest_first_paged_and_only_yours(client, user):
     assert second["next_offset"] is None
 
     assert client.get("/api/v1/transactions?limit=abc", headers=_auth(token)).status_code == 400
+
+
+def test_list_transactions_searches_descriptions_and_filters_by_type(client, user):
+    _add(user, "Blue Bottle Coffee", "6.75")
+    _add(user, "BLUE apron", "60.00")
+    _add(user, "Salary", "3000.00", t_type="income")
+    _add(user, "Paid 50% upfront", "10.00")
+    _add(user, "Paid 500 upfront", "10.00")
+    token = _token(client, user)
+
+    def descriptions(query):
+        resp = client.get(f"/api/v1/transactions?{query}", headers=_auth(token))
+        assert resp.status_code == 200, resp.get_json()
+        return sorted(t["description"] for t in resp.get_json()["transactions"])
+
+    assert descriptions("q=blue") == ["BLUE apron", "Blue Bottle Coffee"]
+    assert descriptions("type=income") == ["Salary"]
+    assert descriptions("q=blue&type=income") == []
+    # % is literal text in a search, not a wildcard.
+    assert descriptions("q=50%25") == ["Paid 50% upfront"]
+    assert client.get("/api/v1/transactions?type=transfer", headers=_auth(token)).status_code == 400
+
+
+def test_edit_transaction_runs_the_web_rules_and_remembers_the_category(client, user):
+    tx = _add(user, "Blue Bottle Coffee", "6.75", category="other")
+    token = _token(client, user)
+
+    resp = client.patch(f"/api/v1/transactions/{tx.id}", headers=_auth(token),
+                        json={"amount": "7.25", "category": "dining", "date": "2026-10-03"})
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()["transaction"]
+    assert body["amount"] == "7.25"
+    assert body["category"] == "dining"
+    assert body["category_label"] == "Dining"
+    assert body["date"] == "2026-10-03"
+    assert body["description"] == "Blue Bottle Coffee"
+
+    db.session.refresh(tx)
+    assert tx.usd_value == Decimal("7.25")
+
+    # The correction is remembered: the next Blue Bottle add files itself.
+    added = client.post("/api/v1/transactions", headers=_auth(token),
+                        json={"description": "Blue Bottle Coffee", "amount": "5", "type": "expense"})
+    assert added.get_json()["transaction"]["category"] == "dining"
+
+
+@pytest.mark.parametrize("payload, message", [
+    ({"amount": "-1"}, "Amount must be non-negative."),
+    ({"amount": "abc"}, "Invalid amount format."),
+    ({"amount": "Infinity"}, "Invalid amount format."),
+    ({"type": "transfer"}, "Invalid transaction type."),
+])
+def test_edit_transaction_validation_errors_are_400s_and_change_nothing(client, user, payload, message):
+    tx = _add(user, "Lunch", "12.00")
+    token = _token(client, user)
+    resp = client.patch(f"/api/v1/transactions/{tx.id}", headers=_auth(token), json=payload)
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "invalid_transaction", "message": message}
+    db.session.expire_all()
+    assert db.session.get(Transaction, tx.id).amount == Decimal("12.00")
+
+
+def test_someone_elses_transaction_reads_as_missing(client, user):
+    other = make_user(username="bob")
+    theirs = _add(other, "Not yours", "1.00")
+    token = _token(client, user)
+
+    edit = client.patch(f"/api/v1/transactions/{theirs.id}", headers=_auth(token), json={"amount": "0"})
+    delete = client.delete(f"/api/v1/transactions/{theirs.id}", headers=_auth(token))
+    for resp in (edit, delete):
+        assert resp.status_code == 404
+        assert resp.get_json()["error"] == "not_found"
+    db.session.expire_all()
+    assert db.session.get(Transaction, theirs.id).amount == Decimal("1.00")
+
+
+def test_delete_transaction_stops_its_recurring_series(client, user):
+    base = current_period_timestamp()
+    older = _add(user, "Gym", "40.00", when=base - timedelta(days=31), is_recurring=True)
+    newer = _add(user, "Gym", "40.00", when=base, is_recurring=True)
+    token = _token(client, user)
+
+    resp = client.delete(f"/api/v1/transactions/{newer.id}", headers=_auth(token))
+    assert resp.status_code == 204
+    db.session.expire_all()
+    assert db.session.get(Transaction, newer.id) is None
+    assert db.session.get(Transaction, older.id).is_recurring is False
+
+
+def test_categories_lists_every_category_in_order(client, user):
+    token = _token(client, user)
+    body = client.get("/api/v1/categories", headers=_auth(token)).get_json()
+    keys = [c["key"] for c in body["categories"]]
+    assert keys[0] == "income"
+    assert "dining" in keys and "other" in keys
+    assert {"key": "debt", "label": "Debt & loans"} in body["categories"]
 
 
 # ---------------------------------------------------------------------------

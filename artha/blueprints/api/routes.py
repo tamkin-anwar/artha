@@ -10,9 +10,10 @@ make a browser attach a bearer token on its own.
 
 Every figure reuses the web app's own code rather than reimplementing it:
 Today comes from services/month_snapshot.py (the Dashboard's Safe to Spend
-logic), and adding a transaction goes through finance.routes'
-create_transaction (the same validation, currency locking, categorizing and
-budget alerts as the web form).
+logic), and adding, editing and deleting a transaction go through
+finance.routes' create_transaction, update_transaction_fields and
+delete_transaction_record (the same validation, currency locking,
+categorizing, remembered corrections and budget alerts as the web app).
 
 Money is always a string with two decimals ("1284.01"), never a float, so
 the app can parse it straight into a Decimal without floating-point drift.
@@ -34,10 +35,17 @@ from ...extensions import db, limiter
 from ...models import ApiToken, Transaction, User
 from ...services.exchange_rate_service import convert_usd_to, get_rates
 from ...services.month_snapshot import build_month_snapshot
-from ...utils import next_due_date
+from ...utils import next_due_date, user_today
 from ..accounts.routes import net_worth_summary
 from ..auth.routes import _verify_totp_or_recovery_code
-from ..finance.routes import TRANSACTION_CATEGORIES, ValidationError, create_transaction, generate_due_recurring
+from ..finance.routes import (
+    TRANSACTION_CATEGORIES,
+    ValidationError,
+    create_transaction,
+    delete_transaction_record,
+    generate_due_recurring,
+    update_transaction_fields,
+)
 from . import api_bp
 
 log = logging.getLogger(__name__)
@@ -359,7 +367,9 @@ def today():
 @api_auth_required
 def list_transactions():
     """Newest first. ?limit= (default 50, at most 200) and ?offset= page
-    through the rest; `next_offset` is null on the last page."""
+    through the rest; `next_offset` is null on the last page. ?q= keeps
+    only descriptions containing that text (any case), and ?type=expense
+    or ?type=income keeps only that kind."""
     user = g.api_user
     try:
         limit = int(request.args.get("limit", TRANSACTIONS_PAGE_DEFAULT))
@@ -369,8 +379,21 @@ def list_transactions():
     limit = max(1, min(limit, TRANSACTIONS_PAGE_MAX))
     offset = max(0, offset)
 
+    query = Transaction.query.filter_by(user_id=user.id)
+    search = request.args.get("q", "").strip()[:100]
+    if search:
+        # % and _ are wildcards to LIKE; escape them so a search for
+        # "50%" means the text "50%", not "50 followed by anything".
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(Transaction.description.ilike(f"%{escaped}%", escape="\\"))
+    t_type = request.args.get("type", "").strip()
+    if t_type:
+        if t_type not in ("expense", "income"):
+            return api_error(400, "invalid_request", "type must be expense or income.")
+        query = query.filter(Transaction.type == t_type)
+
     rows = (
-        Transaction.query.filter_by(user_id=user.id)
+        query
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
         .offset(offset)
         .limit(limit + 1)
@@ -384,6 +407,10 @@ def list_transactions():
 
     return jsonify({
         "currency": currency,
+        # The person's own date, so the app can tell bills posted ahead for
+        # later this month apart from ones already paid without trusting
+        # the phone's clock or timezone.
+        "today": user_today(user).isoformat(),
         "transactions": [_serialize_transaction(tx, currency, rates) for tx in rows],
         "next_offset": offset + limit if has_more else None,
     })
@@ -413,3 +440,67 @@ def add_transaction():
     currency = user.preferred_currency or "USD"
     rates = get_rates() if currency != "USD" else None
     return jsonify({"transaction": _serialize_transaction(tx, currency, rates)}), 201
+
+
+def _own_transaction(transaction_id: int) -> Transaction | None:
+    """The signed-in person's transaction, or None. Someone else's reads
+    as missing, not forbidden, so ids can't be probed for existence."""
+    tx = db.session.get(Transaction, transaction_id)
+    if tx is None or tx.user_id != g.api_user.id:
+        return None
+    return tx
+
+
+@api_bp.patch("/transactions/<int:transaction_id>")
+@api_auth_required
+def edit_transaction(transaction_id):
+    """Body: any of {"description", "amount", "type", "category", "date"
+    (YYYY-MM-DD), "recurrence_interval", "recurring_end_date"}; anything
+    left out stays as it is. Changing the category is remembered for that
+    merchant, the same as correcting it on the web."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return api_error(400, "invalid_request", "Send the changes as a JSON object.")
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+
+    user = g.api_user
+    try:
+        update_transaction_fields(user, tx, data)
+    except ValidationError as exc:
+        return api_error(400, "invalid_transaction", str(exc))
+    except Exception:
+        log.error("Error editing transaction %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save that change. Try again in a moment.")
+
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({"transaction": _serialize_transaction(tx, currency, rates)})
+
+
+@api_bp.delete("/transactions/<int:transaction_id>")
+@api_auth_required
+def remove_transaction(transaction_id):
+    """Deleting a recurring transaction also stops its series, the same as
+    on the web. The app offers undo by holding the delete back for a few
+    seconds before sending it, so there's no server-side undo here."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    try:
+        delete_transaction_record(tx)
+    except Exception:
+        log.error("Error deleting transaction %s via API for user %s", transaction_id, g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't delete that. Try again in a moment.")
+    return "", 204
+
+
+@api_bp.get("/categories")
+@api_auth_required
+def categories():
+    """The categories a transaction can be filed under, in the order the
+    web app lists them."""
+    return jsonify({
+        "categories": [{"key": key, "label": meta["label"]} for key, meta in TRANSACTION_CATEGORIES.items()],
+    })

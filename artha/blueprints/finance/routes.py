@@ -526,28 +526,20 @@ def add_transaction():
     return redirect(url_for("dashboard.index"))
 
 
-@finance_bp.route("/update_transaction/<int:transaction_id>", methods=["POST"])
-@login_required
-def update_transaction(transaction_id):
-    tx = db.session.get(Transaction, transaction_id)
-    if tx is None:
-        return jsonify({"message": "Not found"}), 404
-    if tx.user_id != current_user.id:
-        return jsonify({"message": "Unauthorized"}), 403
-
-    data = request.get_json(silent=True) or {}
-    desc = (data.get("description") or tx.description).strip()
+def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
+    """Applies an edit to one of `user`'s transactions and saves it, then
+    runs the budget-overage push check. `data` is the web row's autosave
+    payload (update_transaction below) or the native app's JSON body
+    (api/routes.py), so both follow the same rules. Raises ValidationError
+    with a message meant for the person; any other exception is a real
+    failure (already rolled back)."""
+    desc = str(data.get("description") or tx.description).strip()
     t_type = data.get("type") or tx.type
 
-    try:
-        amount = Decimal(str(data.get("amount", tx.amount)))
-        if amount < 0:
-            return jsonify({"message": "Amount must be non-negative."}), 400
-    except InvalidOperation:
-        return jsonify({"message": "Invalid amount format."}), 400
+    amount = _validate_amount(str(data.get("amount", tx.amount)))
 
     if t_type not in ("income", "expense"):
-        return jsonify({"message": "Invalid transaction type."}), 400
+        raise ValidationError("Invalid transaction type.")
 
     tx.description = desc
     tx.amount = amount
@@ -556,16 +548,16 @@ def update_transaction(transaction_id):
     # Only touch the date if one was actually sent — an edit to just the
     # description/amount/type shouldn't silently reset the transaction to
     # today.
-    date_str = (data.get("date") or "").strip()
+    date_str = str(data.get("date") or "").strip()
     if date_str:
-        tx.timestamp = _resolve_transaction_timestamp(date_str)
+        tx.timestamp = _resolve_transaction_timestamp(date_str, user)
 
     # Same "only touch what was sent" rule as date — "category" being
     # absent from the payload (every other caller of this endpoint today)
     # must never silently clear an existing category.
     if "category" in data:
         category = data.get("category") or None
-        new_category = category if category in TRANSACTION_CATEGORIES else None
+        new_category = category if isinstance(category, str) and category in TRANSACTION_CATEGORIES else None
         # transactions.js's saveTransaction() always includes the row's
         # current category in the payload on every autosave, not just
         # ones where the user actually touched the category select --
@@ -585,7 +577,7 @@ def update_transaction(transaction_id):
     # unchanged, so a stale usd_value left over from the pre-edit amount
     # would otherwise silently mismatch it.
     if "currency" in data:
-        new_currency = (data.get("currency") or "").strip().upper()
+        new_currency = str(data.get("currency") or "").strip().upper()
         if new_currency in CURRENCY_CODES:
             tx.currency = new_currency
 
@@ -606,22 +598,70 @@ def update_transaction(transaction_id):
 
     try:
         db.session.commit()
-        if tx.type == "expense":
-            _check_budget_overage_alerts(tx.user_id)
-        return jsonify({
-            "message": "Transaction updated successfully",
-            "date": tx.timestamp.strftime("%Y-%m-%d"),
-            "date_label": tx.timestamp.strftime("%b %d, %Y"),
-            "is_recurring": tx.is_recurring,
-            "recurrence_interval": tx.recurrence_interval or "monthly",
-            "recurring_end_date_label": (
-                "ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date else None
-            ),
-        })
-    except Exception as e:
+    except Exception:
         db.session.rollback()
+        raise
+    if tx.type == "expense":
+        _check_budget_overage_alerts(tx.user_id)
+    return tx
+
+
+def delete_transaction_record(tx: Transaction) -> None:
+    """Deletes one transaction, stopping its recurring series if it had
+    one. Shared by the web route below and the native app's API. Any
+    exception is a real failure (already rolled back)."""
+    try:
+        # Deleting a recurring transaction only removes this month's row —
+        # generate_recurring() picks its template from the most recent
+        # is_recurring=True row for this (description, type), so an older
+        # row still flagged recurring would silently regenerate this one
+        # right back on the next /finance load. Deleting is the only way
+        # this UI offers to cancel a recurring series (there's no separate
+        # "stop recurring" action), so it has to mean "stop recurring",
+        # not just "remove this one instance" — clear the flag on every
+        # other row sharing this key too.
+        if tx.is_recurring:
+            Transaction.query.filter(
+                Transaction.user_id == tx.user_id,
+                Transaction.description == tx.description,
+                Transaction.type == tx.type,
+                Transaction.id != tx.id,
+            ).update({"is_recurring": False})
+        db.session.delete(tx)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+@finance_bp.route("/update_transaction/<int:transaction_id>", methods=["POST"])
+@login_required
+def update_transaction(transaction_id):
+    tx = db.session.get(Transaction, transaction_id)
+    if tx is None:
+        return jsonify({"message": "Not found"}), 404
+    if tx.user_id != current_user.id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        update_transaction_fields(current_user, tx, data)
+    except ValidationError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
         log.error("Error updating transaction: %s", e, exc_info=True)
         return jsonify({"message": "Database error"}), 500
+
+    return jsonify({
+        "message": "Transaction updated successfully",
+        "date": tx.timestamp.strftime("%Y-%m-%d"),
+        "date_label": tx.timestamp.strftime("%b %d, %Y"),
+        "is_recurring": tx.is_recurring,
+        "recurrence_interval": tx.recurrence_interval or "monthly",
+        "recurring_end_date_label": (
+            "ends " + tx.recurring_end_date.strftime("%b %d, %Y") if tx.recurring_end_date else None
+        ),
+    })
 
 
 @finance_bp.route("/delete_transaction/<int:transaction_id>", methods=["POST"])
@@ -662,30 +702,12 @@ def delete_transaction(transaction_id):
     }
 
     try:
-        # Deleting a recurring transaction only removes this month's row —
-        # generate_recurring() picks its template from the most recent
-        # is_recurring=True row for this (description, type), so an older
-        # row still flagged recurring would silently regenerate this one
-        # right back on the next /finance load. Deleting is the only way
-        # this UI offers to cancel a recurring series (there's no separate
-        # "stop recurring" action), so it has to mean "stop recurring",
-        # not just "remove this one instance" — clear the flag on every
-        # other row sharing this key too.
-        if tx.is_recurring:
-            Transaction.query.filter(
-                Transaction.user_id == tx.user_id,
-                Transaction.description == tx.description,
-                Transaction.type == tx.type,
-                Transaction.id != tx.id,
-            ).update({"is_recurring": False})
-        db.session.delete(tx)
-        db.session.commit()
+        delete_transaction_record(tx)
         if is_ajax_request():
             return jsonify({"message": "Transaction deleted", "can_undo": True})
         flash("Transaction deleted!", "success")
         return redirect(url_for("dashboard.index"))
     except Exception as e:
-        db.session.rollback()
         log.error("Error deleting transaction: %s", e, exc_info=True)
         if is_ajax_request():
             return jsonify({"message": "Error deleting transaction"}), 500

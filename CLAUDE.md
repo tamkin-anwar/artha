@@ -132,10 +132,12 @@ and Artha shouldn't repeat that.
   revokes every token (`ApiToken.revoke_all_for`). **The API reuses the
   web app's logic instead of reimplementing it**: Today comes from
   `services/month_snapshot.py`'s `build_month_snapshot` (the Dashboard's
-  Safe to Spend math, extracted so both use one copy), and adding a
-  transaction goes through `finance.routes.create_transaction` (the same
-  validation, currency lock, categorizing and budget alerts as the web
-  form). New endpoints should follow that rule: extract the web route's
+  Safe to Spend math, extracted so both use one copy), and adding,
+  editing and deleting a transaction go through `finance.routes`'
+  `create_transaction`, `update_transaction_fields` and
+  `delete_transaction_record` (the same validation, currency lock,
+  categorizing, remembered corrections and budget alerts as the web
+  app). New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
   `templates/privacy.html` doesn't mention the app yet; update it in the
   same change that ships the app to real users.
