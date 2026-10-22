@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v32";
+const CACHE_NAME = "artha-cache-v33";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
     "/static/manifest.json",
 
     // Icons (match your manifest)
+    "/static/icons/favicon.svg",
     "/static/icons/favicon.ico",
     "/static/icons/favicon-16.png",
     "/static/icons/favicon-32.png",

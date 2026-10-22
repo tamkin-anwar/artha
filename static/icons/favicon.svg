@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The Artha orb with no background, for browser tabs: the same
+       gradients as the app's OrbMark (Palette.swift's orb and sun
+       colors) and the web sidebar's logo. -->
+  <defs>
+    <radialGradient id="planet" cx="0.64" cy="0.7" r="0.78">
+      <stop offset="0" stop-color="#5C90DE"/>
+      <stop offset="0.5" stop-color="#3466C0"/>
+      <stop offset="0.82" stop-color="#1D3B8C"/>
+      <stop offset="1" stop-color="#142B68"/>
+    </radialGradient>
+    <radialGradient id="sun" cx="0.34" cy="0.31" r="0.52">
+      <stop offset="0" stop-color="#FFF4D8"/>
+      <stop offset="0.22" stop-color="#FFD27A"/>
+      <stop offset="0.5" stop-color="#F5A524" stop-opacity="0.75"/>
+      <stop offset="0.78" stop-color="#F5A524" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#F5A524" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#planet)"/>
+  <circle cx="32" cy="32" r="31" fill="url(#sun)"/>
+</svg>

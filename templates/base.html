@@ -35,8 +35,12 @@
          for the status bar itself via safe-area-inset-top below. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- Favicon -->
-    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+    <!-- Favicon: the orb alone, no background, the way most apps' tab
+         icons are just their mark. The SVG is sharp at any size; the PNGs
+         and ICO are the same drawing for browsers without SVG icons. The
+         Home Screen and install icons stay the full app tile. -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" sizes="48x48">
     <link rel="icon" type="image/png" sizes="48x48" href="{{ url_for('static', filename='icons/favicon-48.png') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16.png') }}">
