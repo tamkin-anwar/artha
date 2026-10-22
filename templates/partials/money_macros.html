@@ -28,7 +28,7 @@
    or over budget. #}
 {% macro pace_pill(status) -%}
     {%- if status == 'over' -%}
-        <span class="pill pill-bad">{{ alert_icon() }}Over budget</span>
+        <span class="pill pill-caution">{{ alert_icon() }}Over budget</span>
     {%- elif status == 'ahead' -%}
         <span class="pill pill-caution">{{ alert_icon() }}Ahead of pace</span>
     {%- elif status == 'on_pace' -%}

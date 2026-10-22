@@ -100,6 +100,12 @@
   --good-soft:    rgba(22,128,75,0.12);
   --caution:      var(--amber);
   --caution-soft: rgba(154,91,0,0.12);
+  --caution-line: #d98a0b;
+  /* The apps' three corner radii (Palette.swift's Radius): cards, the
+     controls inside them, and small tiles. */
+  --radius-card:  22px;
+  --radius-inner: 14px;
+  --radius-small: 10px;
   --bad:          var(--red);
   --bad-soft:     rgba(201,58,58,0.11);
   --bills-bar:    #3b4253;
@@ -152,6 +158,7 @@
   --tabbar-bg:    rgba(26,34,51,0.86);
   --good-soft:    rgba(61,214,140,0.14);
   --caution-soft: rgba(245,181,68,0.14);
+  --caution-line: #f5b544;
   --bad-soft:     rgba(240,106,106,0.14);
   --bills-bar:    #a3abbd;
 }
@@ -187,7 +194,7 @@ h1, h2, h3, .stat-number {
 .glass-card {
   background: var(--bg-surface);
   border: 1px solid var(--hairline);
-  border-radius: 20px;
+  border-radius: var(--radius-card);
 }
 .dark .glass-card { border-color: transparent; }
 
@@ -1767,9 +1774,9 @@ body.mobile-menu-open {
 .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 0 4px; }
 .section { display: flex; flex-direction: column; gap: 10px; }
 
-.card { background: var(--bg-surface); border-radius: 20px; padding: 18px; border: 1px solid var(--hairline); }
+.card { background: var(--bg-surface); border-radius: var(--radius-card); padding: 18px; border: 1px solid var(--hairline); }
 .dark .card { border-color: transparent; }
-.card-list { background: var(--bg-surface); border-radius: 20px; padding: 0 18px; border: 1px solid var(--hairline); }
+.card-list { background: var(--bg-surface); border-radius: var(--radius-card); padding: 0 18px; border: 1px solid var(--hairline); }
 .dark .card-list { border-color: transparent; }
 
 .link-accent { color: var(--accent); font-weight: 600; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; }
@@ -1815,7 +1822,7 @@ body.mobile-menu-open {
 }
 .tx-row:last-child { border-bottom: 0; }
 .tx-mark {
-    flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--raised);
+    flex: none; width: 40px; height: 40px; border-radius: var(--radius-small); background: var(--raised);
     display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--text-secondary);
 }
 .tx-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -1858,7 +1865,7 @@ body.mobile-menu-open {
 .pace-labels [data-pace-readout] { color: var(--text-primary); font-weight: 600; text-align: center; }
 
 .notice { display: flex; gap: 14px; align-items: flex-start; }
-.notice-icon { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--raised); display: grid; place-items: center; color: var(--accent); }
+.notice-icon { flex: none; width: 38px; height: 38px; border-radius: var(--radius-small); background: var(--raised); display: grid; place-items: center; color: var(--accent); }
 .notice-icon svg, .notice-icon i { width: 18px; height: 18px; }
 .notice-text { display: flex; flex-direction: column; gap: 3px; font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
 .notice-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
@@ -1872,7 +1879,7 @@ body.mobile-menu-open {
 .date-card-name { margin-top: 6px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .date-card-amount { font-size: 14px; color: var(--text-secondary); }
 
-.band { padding: 22px 20px; border-radius: 24px; background: var(--band); color: #ffffff; display: flex; flex-direction: column; gap: 16px; }
+.band { padding: 22px 20px; border-radius: var(--radius-card); background: var(--band); color: #ffffff; display: flex; flex-direction: column; gap: 16px; }
 .band .section-label { color: rgba(255,255,255,0.86); }
 .band-total { font-family: var(--font-figure); font-size: 24px; font-weight: 800; }
 .band-bar { display: flex; gap: 3px; height: 18px; }
@@ -1952,7 +1959,7 @@ body.sheet-open { overflow: hidden; }
     .sheet-backdrop:not([hidden]), .sheet { animation: none; }
 }
 
-.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--raised); }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: var(--radius-inner); background: var(--raised); }
 .segmented label { position: relative; }
 .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .segmented span { display: block; text-align: center; padding: 8px 0; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
@@ -1970,7 +1977,7 @@ body.sheet-open { overflow: hidden; }
     color: var(--text-secondary); font: 600 13px var(--font-body); padding: 6px 10px; cursor: pointer;
 }
 
-.field-group { background: var(--bg-surface); border-radius: 18px; padding: 0 16px; border: 1px solid var(--hairline); }
+.field-group { background: var(--bg-surface); border-radius: var(--radius-card); padding: 0 16px; border: 1px solid var(--hairline); }
 .dark .field-group { border-color: transparent; }
 .field-row {
     display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -1998,7 +2005,7 @@ body.sheet-open { overflow: hidden; }
 .activity-head { align-items: center; }
 .search-field {
     display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 14px;
-    border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--hairline); color: var(--text-secondary);
+    border-radius: var(--radius-inner); background: var(--bg-surface); border: 1px solid var(--hairline); color: var(--text-secondary);
 }
 .search-field:focus-within { border-color: var(--accent); }
 .search-field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text-primary); font: 15px var(--font-body); outline: none; }
@@ -2013,11 +2020,11 @@ span.review-dot[aria-hidden="true"] { width: 7px; height: 7px; border-radius: 50
     padding: 18px 4px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.9px;
     text-transform: uppercase; color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
-.activity-row { padding: 10px 10px; margin: 0 -6px; border-radius: 12px; border-bottom: 0; }
+.activity-row { padding: 10px 10px; margin: 0 -6px; border-radius: var(--radius-inner); border-bottom: 0; }
 .activity-row:hover { background: var(--bg-hover); }
 .activity-row.is-selected { background: color-mix(in srgb, var(--accent) 13%, transparent); }
 .activity-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.activity-row .tx-mark { width: 36px; height: 36px; border-radius: 11px; font-size: 12px; }
+.activity-row .tx-mark { width: 36px; height: 36px; border-radius: var(--radius-small); font-size: 12px; }
 .activity-row.is-upcoming .tx-name, .activity-row.is-upcoming .tx-figure { color: var(--text-secondary); }
 .show-more { display: flex; justify-content: center; padding: 18px 0 4px; }
 
@@ -2032,7 +2039,7 @@ span.review-dot[aria-hidden="true"] { width: 7px; height: 7px; border-radius: 50
 .detail[hidden] { display: none; }
 .detail-top { display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; padding-top: 4px; }
 .detail-close { position: absolute; top: 0; right: 0; }
-.detail-mark { width: 56px; height: 56px; border-radius: 17px; font-size: 18px; color: var(--text-primary); }
+.detail-mark { width: 56px; height: 56px; border-radius: var(--radius-inner); font-size: 18px; color: var(--text-primary); }
 .detail-amount { display: flex; align-items: baseline; justify-content: center; gap: 2px; max-width: 100%; }
 .detail-symbol { font-family: var(--font-figure); font-weight: 800; font-size: 40px; color: var(--text-secondary); }
 .detail-amount input {
@@ -2091,7 +2098,7 @@ span.review-dot[aria-hidden="true"] { width: 7px; height: 7px; border-radius: 50
 .limit-hint:empty { display: none; }
 .money-field, .select-field {
     display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
-    border-radius: 12px; background: var(--bg-page); border: 1px solid var(--hairline);
+    border-radius: var(--radius-inner); background: var(--bg-page); border: 1px solid var(--hairline);
 }
 .money-field { flex: 1 1 140px; }
 .money-field:focus-within, .select-field:focus-within { border-color: var(--accent); }

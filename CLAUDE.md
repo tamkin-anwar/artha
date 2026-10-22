@@ -162,6 +162,13 @@ and Artha shouldn't repeat that.
   never set it, since every row there is reviewed before saving.
   New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
+- **One design language across web and apps: Daybreak** (written down
+  2026-10-22 in the artha-apple repo's `Docs/Design.md`). The web's
+  tokens in `static/css/style.css` mirror `Palette.swift` value for value
+  (including the three radii, `--radius-card/inner/small`), and the same
+  color rules hold: blue is tappable, green is on pace, amber is "look
+  here" (over budget, ahead of pace, net worth down, a stale balance),
+  and red is only ever a destructive action, never a money status.
 - **The website's money pages render the app's own screens** (the
   2026-10 web redesign). `services/screens.py` builds the dicts behind
   Today, Activity (`transactions_screen`), Plan, Month by month and

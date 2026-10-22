@@ -52,7 +52,7 @@
                                 <b>{{ 'Over by' if bd.status == 'over' else 'Left to spend' }}</b>
                                 <small>{% if bd.status == 'over' %}counting bills still due{% else %}{{ per_day_line(bd.per_day, month.days_left, cur) }}{% endif %}</small>
                             </span>
-                            <b class="figure{{ ' is-bad' if bd.status == 'over' }}">{{ (bd.over_by if bd.status == 'over' else bd.left)|money(cur, true) }}</b>
+                            <b class="figure{{ ' is-caution' if bd.status == 'over' }}">{{ (bd.over_by if bd.status == 'over' else bd.left)|money(cur, true) }}</b>
                         </div>
                     </div>
                     <div>{{ pace_pill(bd.status) }}</div>
@@ -164,13 +164,13 @@
                                 <span class="tx-name">{{ c.label }}</span>
                                 <span class="tx-detail">{{ c.spent|money(cur, true) }} of {{ c.cap|money(cur, true) }}{% if c.carried and c.carried|float != 0 %}, {{ ('with ' ~ (c.carried|money(cur, true)) ~ ' carried over') if c.carried|float > 0 else ((-(c.carried|float))|money(cur, true) ~ ' less after last month') }}{% endif %}</span>
                             </a>
-                            <b class="limit-left{{ ' is-bad' if over }}">{{ (c.over_by|money(cur, true) ~ ' over') if over else (c.left|money(cur, true) ~ ' left') }}</b>
+                            <b class="limit-left{{ ' is-caution' if over }}">{{ (c.over_by|money(cur, true) ~ ' over') if over else (c.left|money(cur, true) ~ ' left') }}</b>
                             <button type="button" class="icon-plain" data-edit-limit="{{ c.key }}" data-cap="{{ c.cap }}" aria-label="Change the {{ c.label }} limit">
                                 <i data-lucide="pencil" aria-hidden="true"></i>
                             </button>
                         </div>
                         <div class="meter" role="meter" aria-label="{{ c.label }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ [c.percent_used, 100]|min|round|int }}">
-                            <span style="width:{{ [c.percent_used, 100]|min }}%; background:{{ 'var(--bad)' if over else ('var(--caution)' if c.percent_used >= 85 else 'var(--accent)') }};"></span>
+                            <span style="width:{{ [c.percent_used, 100]|min }}%; background:{{ 'var(--caution)' if over else ('var(--caution-line)' if c.percent_used >= 85 else 'var(--accent)') }};"></span>
                         </div>
                         <form class="inline-form limit-edit" hidden novalidate>
                             <label class="money-field">

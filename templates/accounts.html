@@ -50,7 +50,7 @@
                         {% if change.amount > 0 %}
                             <span class="pill pill-good">Up {{ change.amount|money(cur, true) }}</span>
                         {% elif change.amount < 0 %}
-                            <span class="pill pill-bad">Down {{ (-change.amount)|money(cur, true) }}</span>
+                            <span class="pill pill-caution">Down {{ (-change.amount)|money(cur, true) }}</span>
                         {% else %}
                             <span class="pill pill-good">No change</span>
                         {% endif %}
@@ -96,7 +96,7 @@
                                 <span class="tx-name">{{ a.name }}</span>
                                 <span class="tx-detail">
                                     {{ a.type_label }} &middot;
-                                    {% if a.staleness == 'stale' %}<span class="is-bad">Updated {{ a.days_since_update }} days ago</span>
+                                    {% if a.staleness == 'stale' %}<span class="is-caution">Updated {{ a.days_since_update }} days ago</span>
                                     {% elif a.staleness == 'aging' %}<span class="is-caution">Updated {{ a.days_since_update }} days ago</span>
                                     {% elif a.days_since_update == 0 %}Updated today
                                     {% elif a.days_since_update == 1 %}Updated yesterday
