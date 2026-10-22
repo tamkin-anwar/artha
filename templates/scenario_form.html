@@ -45,7 +45,7 @@
 
     <a
         href="{{ url_for('scenarios.detail', scenario_id=scenario.id) if mode == 'edit' else url_for('scenarios.index') }}"
-        style="display:inline-block; font-size:12px; color:var(--text-secondary); text-decoration:none; margin-bottom:16px;"
+        style="display:inline-block; font-size:0.75rem; color:var(--text-secondary); text-decoration:none; margin-bottom:16px;"
     >
         &larr; Scenarios
     </a>
@@ -77,7 +77,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div>
-                <label for="title" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Title</label>
+                <label for="title" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Title</label>
                 <input
                     id="title" name="title" type="text" required autofocus maxlength="150"
                     value="{{ scenario.title if scenario else (preset.title if preset else '') }}"
@@ -88,7 +88,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label for="category" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Category</label>
+                    <label for="category" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Category</label>
                     <select
                         id="category" name="category"
                         class="field-input w-full"
@@ -103,7 +103,7 @@
                 </div>
 
                 <div>
-                    <label for="status" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Status</label>
+                    <label for="status" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Status</label>
                     <select
                         id="status" name="status"
                         class="field-input w-full"
@@ -118,7 +118,7 @@
             </div>
 
             <div>
-                <label for="description" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Description</label>
+                <label for="description" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Description</label>
                 <textarea
                     id="description" name="description" rows="2"
                     placeholder="What is this scenario about?"
@@ -127,7 +127,7 @@
             </div>
 
             <div>
-                <label style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:6px;">Cost &amp; Impact</label>
+                <label style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:6px;">Cost &amp; Impact</label>
 
                 <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
                     <button type="button" class="cost-tab-btn {{ 'cost-tab-active' if initial_cost_tab == 'one_time_cost' }}" data-tab="one_time_cost">
@@ -142,7 +142,7 @@
                 </div>
 
                 <div class="cost-tab-panel" data-panel="one_time_cost" style="{{ '' if initial_cost_tab == 'one_time_cost' else 'display:none;' }}">
-                    <label for="cost_input_one_time_cost" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Total cost</label>
+                    <label for="cost_input_one_time_cost" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Total cost</label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-4 flex items-center h-11 text-sm" style="color:var(--text-muted);" data-currency-symbol>$</span>
                         <input
@@ -152,11 +152,11 @@
                             style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">A single payment: flights, purchases, deposits</p>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">A single payment: flights, purchases, deposits</p>
                 </div>
 
                 <div class="cost-tab-panel" data-panel="monthly_cost" style="{{ '' if initial_cost_tab == 'monthly_cost' else 'display:none;' }}">
-                    <label for="cost_input_monthly_cost" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Monthly amount</label>
+                    <label for="cost_input_monthly_cost" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Monthly amount</label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-4 flex items-center h-11 text-sm" style="color:var(--text-muted);" data-currency-symbol>$</span>
                         <input
@@ -166,11 +166,11 @@
                             style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recurring cost each month: rent, subscriptions, loan payments</p>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">Recurring cost each month: rent, subscriptions, loan payments</p>
                 </div>
 
                 <div class="cost-tab-panel" data-panel="monthly_savings" style="{{ '' if initial_cost_tab == 'monthly_savings' else 'display:none;' }}">
-                    <label for="cost_input_monthly_savings" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Monthly amount</label>
+                    <label for="cost_input_monthly_savings" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Monthly amount</label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-4 flex items-center h-11 text-sm" style="color:var(--text-muted);" data-currency-symbol>$</span>
                         <input
@@ -180,7 +180,7 @@
                             style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Money set aside each month toward a goal</p>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">Money set aside each month toward a goal</p>
                 </div>
 
                 <input type="hidden" name="one_time_cost" id="hidden_one_time_cost" value="{{ '%.2f'|format(init_one_time|float) }}">
@@ -190,7 +190,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label for="start_date" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Start date</label>
+                    <label for="start_date" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Start date</label>
                     <input
                         id="start_date" name="start_date" type="date"
                         value="{{ scenario.start_date.isoformat() if scenario and scenario.start_date else '' }}"
@@ -198,7 +198,7 @@
                     >
                 </div>
                 <div>
-                    <label for="end_date" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">End date</label>
+                    <label for="end_date" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">End date</label>
                     <input
                         id="end_date" name="end_date" type="date"
                         value="{{ scenario.end_date.isoformat() if scenario and scenario.end_date else '' }}"
@@ -208,7 +208,7 @@
             </div>
 
             <div>
-                <label for="priority" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Priority</label>
+                <label for="priority" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Priority</label>
                 <select
                     id="priority" name="priority"
                     class="field-input w-full"
@@ -223,7 +223,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label for="emotional_value" class="flex justify-between" style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">
+                    <label for="emotional_value" class="flex justify-between" style="font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">
                         <span>Emotional value</span>
                         <span style="color:var(--text-primary); font-weight:600;"><span class="scenario-scale-value" data-for="emotional_value">{{ scenario.emotional_value if scenario else (preset.emotional_value if preset else 5) }}</span>/10</span>
                     </label>
@@ -235,7 +235,7 @@
                     >
                 </div>
                 <div>
-                    <label for="financial_risk" class="flex justify-between" style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">
+                    <label for="financial_risk" class="flex justify-between" style="font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">
                         <span>Financial risk</span>
                         <span style="color:var(--text-primary); font-weight:600;"><span class="scenario-scale-value" data-for="financial_risk">{{ scenario.financial_risk if scenario else (preset.financial_risk if preset else 5) }}</span>/10</span>
                     </label>
@@ -249,7 +249,7 @@
             </div>
 
             <div>
-                <label for="notes" style="display:block; font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Notes</label>
+                <label for="notes" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Notes</label>
                 <textarea
                     id="notes" name="notes" rows="3"
                     placeholder="Anything else worth remembering about this decision..."

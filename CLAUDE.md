@@ -182,9 +182,14 @@ and Artha shouldn't repeat that.
   reloads (`shell.js`'s `toastAfterReload`) rather than patching numbers
   client-side, per the currency trap below. Navigation matches the apps:
   Today, Activity, Plan, Wealth, then More (AI Assistant, Scenarios,
-  Reports, which is the older `/finance` page with its charts and
-  statement import, Notes, Calendar, Calculator). The Add sheet
-  (`partials/add_sheet.html`, N on the keyboard) is on every page.
+  Reports, which keeps the older `/finance` page's Spending, Income,
+  Cash Flow and Recurring charts, Notes, Calendar, Calculator, What's
+  new). The Add sheet (`partials/add_sheet.html`, N on the keyboard) is
+  on every page. Since 2026-10-22 the desktop has no top bar: search is
+  in the sidebar (any `[data-search-open]` element opens it), feedback is
+  in the sidebar footer (`[data-feedback-open]` forwards to the hidden
+  `#feedback-fab`), and the top bar only renders below `md`. Font sizes
+  are rem, never px, so text follows the browser's font-size setting.
   `templates/privacy.html` has a section on the iPhone app; keep it in
   step with what the app does.
 - Models live in `artha/models/`, one file per model, exported through

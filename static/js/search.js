@@ -41,11 +41,11 @@ const BASE_PAGES = [
 
 function initGlobalSearch() {
     const trigger = document.getElementById("global-search-trigger");
-    // The desktop trigger sits inline in the top bar's centered search box,
-    // which is hidden below the sm: breakpoint to make room there — so
-    // mobile gets its own icon-only trigger next to the hamburger instead
-    // of losing search entirely below 640px.
+    // Search opens from the sidebar on desktop, the search box in the
+    // small-tablet top bar, and the icon-only button on a phone; every
+    // one carries data-search-open (the phone's also has its own id).
     const mobileTrigger = document.getElementById("global-search-trigger-mobile");
+    const triggers = [...document.querySelectorAll("[data-search-open]"), mobileTrigger].filter(Boolean);
     const backdrop = document.getElementById("global-search-backdrop");
     const input = document.getElementById("global-search-input");
     const resultsEl = document.getElementById("global-search-results");
@@ -201,7 +201,7 @@ function initGlobalSearch() {
         // Focus moves immediately (not gated on the close animation) so
         // keyboard users aren't left waiting on a 150ms fade before they
         // can tab onward.
-        (mobileTrigger && mobileTrigger.offsetParent ? mobileTrigger : trigger).focus();
+        (triggers.find((t) => t.offsetParent) || trigger).focus();
         // Animates shut instead of a bare hidden=true snap -- matches the
         // fade+pop it already opens with (see .modal-closing in style.css).
         backdrop.classList.add("modal-closing");
@@ -213,8 +213,7 @@ function initGlobalSearch() {
         });
     }
 
-    trigger.addEventListener("click", openSearch);
-    if (mobileTrigger) mobileTrigger.addEventListener("click", openSearch);
+    triggers.forEach((t) => t.addEventListener("click", openSearch));
 
     backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) closeSearch();

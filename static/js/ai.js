@@ -16,7 +16,7 @@ function initAI() {
     const EMPTY_STATE_HTML = `
         <div id="ai-empty-state" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; text-align:center;">
             <div class="ai-orb" id="ai-orb"></div>
-            <div style="font-family:var(--font-display); font-size:24px; color:var(--text-primary);">Artha AI</div>
+            <div style="font-family:var(--font-display); font-size:1.5rem; color:var(--text-primary);">Artha AI</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:480px;">
                 <button type="button" class="ai-chip" data-chip="insights">Get financial insights</button>
                 <button type="button" class="ai-chip" data-chip="spend">How much did I spend this month?</button>
@@ -385,7 +385,7 @@ function initAI() {
         }
 
         const meta = document.createElement("div");
-        meta.style.cssText = "color:var(--text-secondary); font-size:13px;";
+        meta.style.cssText = "color:var(--text-secondary); font-size:0.8125rem;";
         meta.textContent = describe.meta;
 
         const buttons = document.createElement("div");
@@ -424,17 +424,17 @@ function initAI() {
 
                 const feedback = document.createElement("div");
                 if (result === true) {
-                    feedback.style.cssText = "color:var(--emerald); font-size:13px; font-weight:600;";
+                    feedback.style.cssText = "color:var(--emerald); font-size:0.8125rem; font-weight:600;";
                     feedback.textContent = describe.successText;
                 } else {
-                    feedback.style.cssText = "color:var(--red); font-size:13px;";
+                    feedback.style.cssText = "color:var(--red); font-size:0.8125rem;";
                     feedback.textContent = (typeof result === "string" && result) || "Could not complete this action.";
                 }
                 card.appendChild(feedback);
             } catch {
                 buttons.remove();
                 const errEl = document.createElement("div");
-                errEl.style.cssText = "color:var(--red); font-size:13px;";
+                errEl.style.cssText = "color:var(--red); font-size:0.8125rem;";
                 errEl.textContent = "Network error. Please try again.";
                 card.appendChild(errEl);
             }

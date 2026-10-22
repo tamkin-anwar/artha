@@ -231,5 +231,12 @@ function setupInstallCard() {
     });
 }
 
+// "Send feedback" lives in the sidebar footer, the phone's More drawer and
+// Settings; each forwards to the one feedback dialog (base.html), whose
+// floating button no longer shows.
+document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-feedback-open]")) document.getElementById("feedback-fab")?.click();
+});
+
 setupAddSheet();
 setupInstallCard();

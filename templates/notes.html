@@ -85,12 +85,12 @@
     .notes-header-row { margin-bottom: 20px; }
     .notes-heading {
         font-family:var(--font-display);
-        font-size: 28px;
+        font-size: 1.75rem;
         font-weight: 500;
         color: var(--text-primary);
         margin-top: 4px;
     }
-    .notes-heading-sub { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+    .notes-heading-sub { font-size: 0.8125rem; color: var(--text-muted); margin-top: 6px; }
 
     .notes-toolbar-row {
         display: flex;
@@ -110,7 +110,7 @@
         border: 1px solid var(--border-subtle);
         border-radius: 8px;
         padding: 8px 12px 8px 32px;
-        font-size: 13px;
+        font-size: 0.8125rem;
         color: var(--text-primary);
         outline: none;
     }
@@ -118,7 +118,7 @@
 
     .notes-filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
     .notes-chip {
-        font-size: 12.5px;
+        font-size: 0.7812rem;
         font-weight: 500;
         padding: 7px 13px;
         border-radius: 999px;
@@ -143,7 +143,7 @@
     .notes-archive-link {
         box-sizing: border-box;
         display: inline-flex; align-items: center; gap: 6px;
-        font-size: 13px; font-weight: 600; line-height: 1;
+        font-size: 0.8125rem; font-weight: 600; line-height: 1;
         color: var(--text-secondary);
         background: var(--bg-card);
         border: 1px solid var(--border-subtle);
@@ -168,7 +168,7 @@
         background: var(--gold);
         color: var(--on-accent);
         font-weight: 600;
-        font-size: 13px;
+        font-size: 0.8125rem;
         line-height: 1;
         border: 1px solid var(--gold);
         border-radius: 8px;
@@ -183,7 +183,7 @@
     .notes-section { margin-bottom: 26px; }
     .notes-section-label {
         display: flex; align-items: center; gap: 6px;
-        font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+        font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
         color: var(--text-muted);
         margin-bottom: 10px;
     }
@@ -259,7 +259,7 @@
     .note-card-top-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .note-card-top-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .note-tag-chip {
-        font-size: 10.5px; font-weight: 500; letter-spacing: 0.03em;
+        font-size: 0.6562rem; font-weight: 500; letter-spacing: 0.03em;
         padding: 3px 9px; border-radius: 999px;
         background: rgba(0, 0, 0, 0.06);
         color: var(--text-secondary);
@@ -312,7 +312,7 @@
 
     .note-card-title {
         font-family:var(--font-display);
-        font-size: 15.5px; font-weight: 500; line-height: 1.3;
+        font-size: 0.9688rem; font-weight: 500; line-height: 1.3;
         color: var(--text-primary);
         overflow-wrap: break-word;
     }
@@ -320,7 +320,7 @@
 
     .note-card-body { flex: 1; min-width: 0; overflow: hidden; }
     .note-card-preview {
-        font-size: 12.5px; color: var(--text-secondary); line-height: 1.55;
+        font-size: 0.7812rem; color: var(--text-secondary); line-height: 1.55;
         display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
         margin: 0;
         overflow-wrap: break-word;
@@ -329,14 +329,14 @@
     .note-card-checklist { display: flex; flex-direction: column; gap: 5px; }
     .note-card-checklist .note-checklist-row {
         display: flex; align-items: center; gap: 7px;
-        font-size: 12.5px; color: var(--text-secondary);
+        font-size: 0.7812rem; color: var(--text-secondary);
     }
     .note-card-checklist .note-checklist-row.checked { color: var(--text-muted); }
-    .note-card-checklist-more { font-size: 11px; color: var(--text-muted); padding-left: 23px; }
+    .note-card-checklist-more { font-size: 0.6875rem; color: var(--text-muted); padding-left: 23px; }
 
     .note-due-pill {
         display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
-        font-family:var(--font-figure); font-size: 10.5px;
+        font-family:var(--font-figure); font-size: 0.6562rem;
         color: var(--text-secondary);
         background: rgba(0, 0, 0, 0.05);
         padding: 3px 8px; border-radius: 999px;
@@ -348,7 +348,7 @@
 
     .note-purge-pill {
         display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
-        font-family:var(--font-figure); font-size: 10.5px;
+        font-family:var(--font-figure); font-size: 0.6562rem;
         color: var(--text-secondary);
         background: rgba(0, 0, 0, 0.05);
         padding: 3px 8px; border-radius: 999px;
@@ -365,7 +365,7 @@
         border: 1.5px dashed var(--border-subtle);
         background: transparent;
         color: var(--text-muted);
-        font-size: 13px; font-weight: 500;
+        font-size: 0.8125rem; font-weight: 500;
         gap: 6px;
     }
     .note-card-add:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); transform: translateY(-3px); }
@@ -390,12 +390,12 @@
         color: var(--gold); margin-bottom: 6px;
     }
     .notes-empty-icon svg, .notes-empty-icon i { width: 22px; height: 22px; }
-    .notes-empty-title { font-family:var(--font-display); font-size: 18px; color: var(--text-primary); }
-    .notes-empty-sub { font-size: 13px; max-width: 320px; }
+    .notes-empty-title { font-family:var(--font-display); font-size: 1.125rem; color: var(--text-primary); }
+    .notes-empty-sub { font-size: 0.8125rem; max-width: 320px; }
     .notes-empty-cta, .notes-clear-filters-btn {
         margin-top: 6px;
         display: inline-block;
-        background: var(--gold); color: var(--on-accent); font-weight: 600; font-size: 13px;
+        background: var(--gold); color: var(--on-accent); font-weight: 600; font-size: 0.8125rem;
         border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer;
         text-decoration: none;
     }
@@ -443,14 +443,14 @@
     }
     .confirm-modal-icon svg, .confirm-modal-icon i { width: 20px; height: 20px; }
     .confirm-modal-title {
-        font-family:var(--font-display); font-size: 19px; font-weight: 500;
+        font-family:var(--font-display); font-size: 1.1875rem; font-weight: 500;
         color: var(--text-primary); margin-bottom: 6px;
     }
-    .confirm-modal-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 22px; }
+    .confirm-modal-sub { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 22px; }
     .confirm-modal-actions { display: flex; gap: 10px; }
     .confirm-modal-cancel, .confirm-modal-confirm {
         flex: 1;
-        font-size: 13.5px; font-weight: 600;
+        font-size: 0.8438rem; font-weight: 600;
         border-radius: 10px; padding: 10px 16px;
         cursor: pointer;
         transition: filter 0.12s ease, transform 0.12s ease, background 0.15s ease;
@@ -477,7 +477,7 @@
         display: block; flex: 1;
         border: none; outline: none; background: transparent;
         color: var(--text-primary);
-        font-family:var(--font-display); font-size: 26px; font-weight: 500;
+        font-family:var(--font-display); font-size: 1.625rem; font-weight: 500;
         caret-color: var(--gold);
     }
     #note-title-input::placeholder { color: var(--text-muted); }
@@ -498,7 +498,7 @@
     .note-modal-pin-btn.active { color: var(--gold); }
     .note-modal-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
-    #note-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+    #note-meta { font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px; }
 
     .notes-divider { height: 1px; background: var(--gold); opacity: 0.3; margin: 14px 0 18px; }
 
@@ -507,7 +507,7 @@
         margin-bottom: 14px;
     }
     .note-control-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 8px; }
-    .note-control-label { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; margin-right: 2px; }
+    .note-control-label { font-size: 0.6562rem; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; margin-right: 2px; }
 
     .note-color-swatch {
         width: 24px; height: 24px; border-radius: 50%;
@@ -527,7 +527,7 @@
     .note-color-swatch[data-color="amber"] { background: var(--note-amber-text); }
 
     .note-tag-opt {
-        font-size: 11.5px; font-weight: 500; padding: 5px 10px; border-radius: 999px;
+        font-size: 0.7188rem; font-weight: 500; padding: 5px 10px; border-radius: 999px;
         border: 1px solid var(--border-subtle); background: var(--bg-card);
         color: var(--text-secondary); cursor: pointer;
         transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
@@ -538,7 +538,7 @@
     .note-tag-opt-new { border-style: dashed; color: var(--text-muted); }
     .note-tag-opt-new:hover { color: var(--gold); border-color: var(--gold); }
     .note-tag-new-input {
-        font-size: 11.5px; font-weight: 500; padding: 5px 10px; border-radius: 999px;
+        font-size: 0.7188rem; font-weight: 500; padding: 5px 10px; border-radius: 999px;
         border: 1px solid var(--gold); background: var(--bg-card); color: var(--text-primary);
         width: 110px; font-family: inherit;
     }
@@ -547,7 +547,7 @@
     .note-due-control { display: flex; align-items: center; gap: 4px; }
     .note-due-control input[type="date"] {
         background: var(--bg-card); border: 1px solid var(--border-subtle);
-        border-radius: 8px; padding: 5px 8px; font-size: 12px; color: var(--text-primary);
+        border-radius: 8px; padding: 5px 8px; font-size: 0.75rem; color: var(--text-primary);
     }
     .note-due-clear-btn {
         background: none; border: none; color: var(--text-muted); cursor: pointer;
@@ -570,7 +570,7 @@
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
     .notes-tb-btn svg, .notes-tb-btn i { width: 14px; height: 14px; }
-    .notes-tb-btn-text { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+    .notes-tb-btn-text { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; }
     .notes-tb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
     .notes-tb-btn:active { transform: scale(0.88); }
     .notes-tb-btn.active { background: var(--gold-dim); color: var(--gold); }
@@ -578,14 +578,14 @@
     [data-tooltip]:hover::after {
         content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%;
         transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--border-subtle);
-        color: var(--text-primary); font-size: 11px; padding: 4px 8px; border-radius: 6px;
+        color: var(--text-primary); font-size: 0.6875rem; padding: 4px 8px; border-radius: 6px;
         white-space: nowrap; pointer-events: none; z-index: 100;
     }
 
     #note-content-editable {
         display: block; width: 100%; min-height: 260px; outline: none;
         background: transparent; color: var(--text-primary);
-        font-family:var(--font-body); font-size: 15px; line-height: 1.8;
+        font-family:var(--font-body); font-size: 0.9375rem; line-height: 1.8;
         overflow-wrap: break-word;
         /* Explicit, high-contrast caret — the default (currentColor) can
            be hard to spot on a fresh empty line right after Enter, before
@@ -593,16 +593,16 @@
         caret-color: var(--gold);
     }
     #note-content-editable:empty::before { content: "Start writing..."; color: var(--text-muted); pointer-events: none; }
-    #note-content-editable h1 { font-family:var(--font-display); font-size: 24px; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; }
-    #note-content-editable h2 { font-family:var(--font-display); font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; }
-    #note-content-editable h3 { font-family:var(--font-display); font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 8px 0 4px; }
+    #note-content-editable h1 { font-family:var(--font-display); font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; }
+    #note-content-editable h2 { font-family:var(--font-display); font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; }
+    #note-content-editable h3 { font-family:var(--font-display); font-size: 1.0625rem; font-weight: 600; color: var(--text-primary); margin: 8px 0 4px; }
     #note-content-editable blockquote { border-left: 3px solid var(--gold); padding-left: 16px; color: var(--text-secondary); font-style: italic; margin: 8px 0; }
     #note-content-editable li { margin: 4px 0; padding-left: 4px; }
     #note-content-editable ol { padding-left: 24px; margin: 8px 0; list-style: decimal; }
     #note-content-editable ol li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
     #note-content-editable ul { padding-left: 24px; margin: 8px 0; list-style: disc; }
     #note-content-editable ul li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
-    #note-content-editable code { font-family:var(--font-figure); font-size: 13px; background: var(--bg-card); color: var(--gold); padding: 2px 6px; border-radius: 4px; }
+    #note-content-editable code { font-family:var(--font-figure); font-size: 0.8125rem; background: var(--bg-card); color: var(--gold); padding: 2px 6px; border-radius: 4px; }
     #note-content-editable a { color: var(--gold); text-decoration: underline; }
 
     /* Checklists — both inside the editor and on the card face */
@@ -644,12 +644,12 @@
         display: flex; align-items: center; justify-content: space-between;
         margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle);
     }
-    .notes-word-count { font-size: 12px; color: var(--text-muted); }
+    .notes-word-count { font-size: 0.75rem; color: var(--text-muted); }
     .notes-autosave-indicator {
-        font-size: 11px; color: var(--gold); opacity: 0; transition: opacity 0.3s ease; margin-right: 4px;
+        font-size: 0.6875rem; color: var(--gold); opacity: 0; transition: opacity 0.3s ease; margin-right: 4px;
     }
     .notes-autosave-indicator.visible { opacity: 1; }
-    .notes-action-btn-delete { background: none; border: none; color: var(--red); font-size: 13px; cursor: pointer; padding: 7px 10px; }
+    .notes-action-btn-delete { background: none; border: none; color: var(--red); font-size: 0.8125rem; cursor: pointer; padding: 7px 10px; }
     /* Archiving isn't destructive — red would misleadingly signal it is. */
     .notes-action-btn-delete.notes-action-btn-soft { color: var(--gold); }
 

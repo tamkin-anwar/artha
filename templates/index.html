@@ -134,7 +134,7 @@
             <div class="section">
                 <div class="section-head">
                     <h2 class="section-label">Coming up</h2>
-                    <a class="link-accent" href="{{ url_for('finance.plan_page') }}#bills" style="font-size:14px;">All bills</a>
+                    <a class="link-accent" href="{{ url_for('finance.plan_page') }}#bills" style="font-size:0.875rem;">All bills</a>
                 </div>
                 <div class="date-cards">
                     {% for bill in screen.coming_up[:3] %}
@@ -221,7 +221,7 @@
             <div class="section">
                 <div class="section-head">
                     <h2 class="section-label">Recent</h2>
-                    {% if screen.recent %}<a class="link-accent" href="{{ url_for('finance.activity_page') }}" style="font-size:14px;">See all</a>{% endif %}
+                    {% if screen.recent %}<a class="link-accent" href="{{ url_for('finance.activity_page') }}" style="font-size:0.875rem;">See all</a>{% endif %}
                 </div>
                 {% if screen.recent %}
                 <div class="card-list">

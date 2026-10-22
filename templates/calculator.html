@@ -80,7 +80,7 @@
         overflow: hidden;
         color: var(--text-primary);
         font-family:var(--font-body);
-        font-size: 14px;
+        font-size: 0.875rem;
         line-height: 36px;
         padding: 0 16px;
         white-space: pre;
@@ -98,7 +98,7 @@
         padding: 0 14px;
         text-align: right;
         font-family:var(--font-figure);
-        font-size: 14px;
+        font-size: 0.875rem;
         color: var(--gold);
         white-space: nowrap;
         overflow: hidden;
@@ -106,7 +106,7 @@
     }
     @media (max-width: 480px) {
         #expr-results { width: 100px; }
-        .expr-result-line { padding: 0 8px; font-size: 12.5px; }
+        .expr-result-line { padding: 0 8px; font-size: 0.7812rem; }
     }
 
     /* AI-fallback results (see hasUnreliableImplicitMultiply and the AI
@@ -120,7 +120,7 @@
     }
     .expr-result-ai::after {
         content: "AI";
-        font-size: 9px;
+        font-size: 0.5625rem;
         font-weight: 600;
         letter-spacing: 0.03em;
         color: var(--gold);
@@ -142,7 +142,7 @@
        ordinary prose as broken. */
     .expr-result-unsure {
         color: var(--text-muted);
-        font-size: 12px;
+        font-size: 0.75rem;
         letter-spacing: 0.02em;
         cursor: help;
     }
@@ -161,14 +161,14 @@
     }
     .expr-total-label {
         font-family:var(--font-body);
-        font-size: 12px;
+        font-size: 0.75rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--text-secondary);
     }
     .expr-total-value {
         font-family:var(--font-figure);
-        font-size: 18px;
+        font-size: 1.125rem;
         font-weight: 600;
         color: var(--gold);
     }
@@ -179,7 +179,7 @@
         border: none;
         border-radius: 16px;
         font-family:var(--font-figure);
-        font-size: 20px;
+        font-size: 1.25rem;
         cursor: pointer;
         transition: transform 0.08s ease;
     }
@@ -187,7 +187,7 @@
     .calc-btn:active { transform: scale(0.93); }
     .calc-btn-number { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-subtle); }
     .calc-btn-operator { background: color-mix(in srgb, var(--gold) 15%, transparent); color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); }
-    .calc-btn-equals { background: var(--gold); color: var(--on-accent); font-weight: 700; font-size: 24px; }
+    .calc-btn-equals { background: var(--gold); color: var(--on-accent); font-weight: 700; font-size: 1.5rem; }
     .calc-btn-clear { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
     .calc-btn-func { background: var(--bg-hover); color: var(--text-secondary); }
 
@@ -210,9 +210,9 @@
         <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px;">
             <div>
                 <span class="eyebrow" style="display:block; margin-bottom:4px;">Smart Calculator</span>
-                <p style="font-size:12px; color:var(--text-secondary); margin:0;">Type naturally. Convert units and currency. Assign variables. Real word problems get solved too, marked <span style="color:var(--gold); font-weight:600;">AI</span> when they are.</p>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0;">Type naturally. Convert units and currency. Assign variables. Real word problems get solved too, marked <span style="color:var(--gold); font-weight:600;">AI</span> when they are.</p>
             </div>
-            <button type="button" id="expr-clear-btn" class="btn-secondary" style="padding:7px 14px; font-size:12px; flex-shrink:0;">Clear all</button>
+            <button type="button" id="expr-clear-btn" class="btn-secondary" style="padding:7px 14px; font-size:0.75rem; flex-shrink:0;">Clear all</button>
         </div>
 
         <div class="expr-wrap">
@@ -239,8 +239,8 @@
         <input type="text" id="calc-keyboard-input" aria-hidden="true" tabindex="-1">
 
         <div style="text-align:right; margin-bottom:16px; padding:0 4px;">
-            <div id="calc-expr-line" style="font-family:var(--font-figure); font-size:14px; color:var(--text-secondary); min-height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">&nbsp;</div>
-            <div id="calc-result-display" style="font-family:var(--font-display); font-size:42px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">0</div>
+            <div id="calc-expr-line" style="font-family:var(--font-figure); font-size:0.875rem; color:var(--text-secondary); min-height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">&nbsp;</div>
+            <div id="calc-result-display" style="font-family:var(--font-display); font-size:2.625rem; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">0</div>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; border-radius:16px; overflow:hidden;">

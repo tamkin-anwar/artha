@@ -76,18 +76,18 @@ function initCompareModal() {
                 <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border-subtle); border-radius:10px; cursor:pointer; margin-bottom:8px;">
                     <input type="checkbox" class="compare-pick field-checkbox" value="${s.id}">
                     <span style="flex:1; min-width:0;">
-                        <span style="display:block; font-size:14px; font-weight:600; color:var(--text-primary);">${escapeHtml(s.title)}</span>
-                        <span class="eyebrow" style="font-size:10px;">${escapeHtml(s.category)}</span>
+                        <span style="display:block; font-size:0.875rem; font-weight:600; color:var(--text-primary);">${escapeHtml(s.title)}</span>
+                        <span class="eyebrow" style="font-size:0.625rem;">${escapeHtml(s.category)}</span>
                     </span>
-                    <span class="${VERDICT_CLASS[s.verdict_label] || "badge-wait"}" style="font-size:11px; padding:2px 10px; flex-shrink:0;">${VERDICT_LABEL[s.verdict_label] || "Wait"}</span>
+                    <span class="${VERDICT_CLASS[s.verdict_label] || "badge-wait"}" style="font-size:0.6875rem; padding:2px 10px; flex-shrink:0;">${VERDICT_LABEL[s.verdict_label] || "Wait"}</span>
                 </label>`
             )
             .join("");
 
         body.innerHTML = `
-            <p style="font-size:13px; color:var(--text-secondary); margin:0 0 12px;">Pick 2-${MAX_COMPARE} scenarios to see their verdicts side by side.</p>
+            <p style="font-size:0.8125rem; color:var(--text-secondary); margin:0 0 12px;">Pick 2-${MAX_COMPARE} scenarios to see their verdicts side by side.</p>
             <div>${rows}</div>
-            <button type="button" id="compare-run-btn" class="btn-primary" disabled style="margin-top:4px; width:100%; padding:10px; font-size:14px; opacity:0.5; cursor:default;">Compare</button>
+            <button type="button" id="compare-run-btn" class="btn-primary" disabled style="margin-top:4px; width:100%; padding:10px; font-size:0.875rem; opacity:0.5; cursor:default;">Compare</button>
         `;
 
         const checks = [...body.querySelectorAll(".compare-pick")];
@@ -119,23 +119,23 @@ function initCompareModal() {
                 (s) => `
                 <div style="min-width:200px; flex:1; border:1px solid var(--border-subtle); border-radius:12px; padding:16px; background:var(--bg-card);">
                     <p class="eyebrow" style="margin-bottom:4px;">${escapeHtml(s.category)}</p>
-                    <h3 style="font-family:var(--font-display); font-size:17px; font-weight:600; color:var(--text-primary); margin:0 0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.title)}</h3>
+                    <h3 style="font-family:var(--font-display); font-size:1.0625rem; font-weight:600; color:var(--text-primary); margin:0 0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.title)}</h3>
                     <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
-                        <span class="${VERDICT_CLASS[s.verdict_label] || "badge-wait"}" style="font-size:11px; padding:3px 10px;">${VERDICT_LABEL[s.verdict_label] || "Wait"}</span>
-                        <span class="${RISK_CLASS[s.risk_level] || "badge-wait"} capitalize" style="font-size:11px; padding:3px 10px;">${escapeHtml(s.risk_level)} risk</span>
+                        <span class="${VERDICT_CLASS[s.verdict_label] || "badge-wait"}" style="font-size:0.6875rem; padding:3px 10px;">${VERDICT_LABEL[s.verdict_label] || "Wait"}</span>
+                        <span class="${RISK_CLASS[s.risk_level] || "badge-wait"} capitalize" style="font-size:0.6875rem; padding:3px 10px;">${escapeHtml(s.risk_level)} risk</span>
                     </div>
-                    <p style="font-size:11px; color:var(--text-muted); margin:0 0 8px;">${escapeHtml(s.month_label)}${s.projected ? " (projected)" : ""}</p>
-                    <p style="font-size:11px; color:var(--text-muted); margin:0 0 2px;">Net, without this</p>
-                    <p class="scenario-money" style="font-size:16px; font-weight:600; color:${s.net_before >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 8px;">${signedMoney(s.net_before)}</p>
-                    <p style="font-size:11px; color:var(--text-muted); margin:0 0 2px;">Net, with this scenario</p>
-                    <p class="scenario-money" style="font-size:16px; font-weight:700; color:${s.net_after >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 10px;">${signedMoney(s.net_after)}</p>
-                    <p style="font-size:12px; color:var(--text-secondary); line-height:1.5;">${escapeHtml(s.insight)}</p>
+                    <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 8px;">${escapeHtml(s.month_label)}${s.projected ? " (projected)" : ""}</p>
+                    <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 2px;">Net, without this</p>
+                    <p class="scenario-money" style="font-size:1rem; font-weight:600; color:${s.net_before >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 8px;">${signedMoney(s.net_before)}</p>
+                    <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 2px;">Net, with this scenario</p>
+                    <p class="scenario-money" style="font-size:1rem; font-weight:700; color:${s.net_after >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 10px;">${signedMoney(s.net_after)}</p>
+                    <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.5;">${escapeHtml(s.insight)}</p>
                 </div>`
             )
             .join("");
 
         body.innerHTML = `
-            <button type="button" id="compare-back-btn" style="background:none; border:none; color:var(--gold); font-size:13px; cursor:pointer; padding:0; margin-bottom:14px;">&larr; Change selection</button>
+            <button type="button" id="compare-back-btn" style="background:none; border:none; color:var(--gold); font-size:0.8125rem; cursor:pointer; padding:0; margin-bottom:14px;">&larr; Change selection</button>
             <div class="scrollbar-hidden" style="display:flex; gap:12px; overflow-x:auto; padding-bottom:4px;">${cols}</div>
         `;
         document.getElementById("compare-back-btn").addEventListener("click", renderPicker);

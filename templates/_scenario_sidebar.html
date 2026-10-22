@@ -19,13 +19,13 @@
                         aria-label="View {{ s.title }}"
                     ></a>
 
-                    <p style="font-size:14px; font-weight:600; color:var(--text-primary); margin:0 24px 6px 0;" class="truncate">{{ s.title }}</p>
+                    <p style="font-size:0.875rem; font-weight:600; color:var(--text-primary); margin:0 24px 6px 0;" class="truncate">{{ s.title }}</p>
 
                     <div class="flex items-center justify-between gap-2">
-                        <span class="eyebrow" style="font-size:10px;">{{ s.category }}</span>
+                        <span class="eyebrow" style="font-size:0.625rem;">{{ s.category }}</span>
                         <span
                             class="scenario-money"
-                            style="font-size:12px; font-weight:600; color:{% if s.net_monthly_impact > 0 %}var(--emerald){% elif s.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                            style="font-size:0.75rem; font-weight:600; color:{% if s.net_monthly_impact > 0 %}var(--emerald){% elif s.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
                             data-money-value="{{ s.net_monthly_impact }}" data-money-currency="{{ s.currency or 'USD' }}"
                             data-money-signed="true"
                             data-money-suffix="/mo"
@@ -55,7 +55,7 @@
     {% else %}
         <div style="display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:32px 12px; color:var(--text-muted);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:26px; height:26px; color:var(--gold);"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            <p style="font-size:13px; margin:0;">No scenarios yet.</p>
+            <p style="font-size:0.8125rem; margin:0;">No scenarios yet.</p>
         </div>
     {% endif %}
 </aside>

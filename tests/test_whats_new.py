@@ -44,7 +44,8 @@ def test_visiting_whats_new_marks_it_seen(auth_client, user):
 def test_badge_shows_for_a_user_who_has_never_seen_it(auth_client):
     resp = auth_client.get("/")
     assert resp.status_code == 200
-    assert b'title="What\'s new"' in resp.data
+    assert b"What's new" in resp.data
+    assert b'class="side-dot"' in resp.data
 
 
 def test_badge_clears_once_the_latest_entry_has_been_seen(auth_client, user):
@@ -54,7 +55,7 @@ def test_badge_clears_once_the_latest_entry_has_been_seen(auth_client, user):
     resp = auth_client.get("/")
 
     assert resp.status_code == 200
-    assert b"background:var(--gold); box-shadow" not in resp.data
+    assert b'class="side-dot"' not in resp.data
 
 
 def test_badge_reappears_for_a_stale_seen_timestamp(auth_client, user):
@@ -66,4 +67,4 @@ def test_badge_reappears_for_a_stale_seen_timestamp(auth_client, user):
     resp = auth_client.get("/")
 
     assert resp.status_code == 200
-    assert b"background:var(--gold); box-shadow" in resp.data
+    assert b'class="side-dot"' in resp.data

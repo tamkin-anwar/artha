@@ -153,6 +153,16 @@
                     </a>
                 </div>
 
+                <!-- Search lives in the sidebar on desktop (there's no top
+                     bar there since the 2026-10 redesign); the phone keeps
+                     its search button in its own top bar. -->
+                <div style="padding:0 16px 6px;">
+                    <button type="button" id="global-search-trigger" class="side-search" data-search-open aria-keyshortcuts="Control+K Meta+K">
+                        <i data-lucide="search" aria-hidden="true"></i><span>Search</span>
+                        <kbd class="keycap" data-mod-key>Ctrl K</kbd>
+                    </button>
+                </div>
+
                 <!-- Nav -->
                 <nav class="side-nav" aria-label="Main navigation">
                     {{ primary_link(url_for('dashboard.index'), 'gauge', 'Today', is_dashboard_active) }}
@@ -172,6 +182,11 @@
                         {{ more_link(url_for('notes.notes_page'), 'file-text', 'Notes', is_notes_active) }}
                         {{ more_link(url_for('dashboard.calendar_page'), 'calendar', 'Calendar', is_calendar_active) }}
                         {{ more_link(url_for('dashboard.calculator_page'), 'calculator', 'Calculator', is_calculator_active) }}
+                        {% if current_user.is_authenticated %}
+                            {% call more_link(url_for('dashboard.whats_new'), 'megaphone', "What's new", request.endpoint == 'dashboard.whats_new') %}
+                                {% if has_new_changelog %}<span class="side-dot" aria-label="New"></span>{% endif %}
+                            {% endcall %}
+                        {% endif %}
                         {% if current_user.is_authenticated and current_user.is_admin %}
                             {% call more_link(url_for('admin.overview'), 'shield', 'Admin', is_admin_active) %}
                                 <!-- Always rendered (not conditionally omitted) so
@@ -180,7 +195,7 @@
                                      display value beats a [hidden] attribute's, so
                                      toggling visibility has to happen in the style
                                      itself, both here and from JS. -->
-                                <span id="admin-badge-desktop" style="margin-left:auto; background:var(--gold); color:var(--on-inverse); font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; align-items:center; justify-content:center; padding:0 4px; display:{{ 'inline-flex' if admin_open_feedback_count else 'none' }};">{{ admin_open_feedback_count or '' }}</span>
+                                <span id="admin-badge-desktop" style="margin-left:auto; background:var(--gold); color:var(--on-inverse); font-size:0.625rem; font-weight:600; min-width:17px; height:17px; border-radius:999px; align-items:center; justify-content:center; padding:0 4px; display:{{ 'inline-flex' if admin_open_feedback_count else 'none' }};">{{ admin_open_feedback_count or '' }}</span>
                             {% endcall %}
                         {% endif %}
                     </div>
@@ -206,14 +221,17 @@
                      app — it used to be a static, unclickable label with
                      those two actions buried in the unrelated top-right
                      "Preferences" gear instead. -->
-                <div style="padding:8px 8px 16px; position:relative;">
+                <div style="padding:8px 8px 16px; position:relative; display:flex; flex-direction:column; gap:2px;">
+                    <button type="button" class="side-more side-feedback" data-feedback-open>
+                        <i data-lucide="message-circle" aria-hidden="true"></i><span>Send feedback</span>
+                    </button>
                     <a href="{{ url_for('auth.settings_page') }}" id="account-btn" class="side-account{{ ' is-active' if request.endpoint == 'auth.settings_page' }}"{% if request.endpoint == 'auth.settings_page' %} aria-current="page"{% endif %}>
-                        <div style="width:32px; height:32px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--text-primary); flex-shrink:0;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:0.8125rem; font-weight:700; color:var(--text-primary); flex-shrink:0;">
                             {{ current_user.first_name[0] if current_user.is_authenticated and current_user.first_name else '?' }}
                         </div>
                         <div style="min-width:0; overflow:hidden; flex:1;">
-                            <div style="font-size:13.5px; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
-                            <div style="font-size:12px; color:var(--text-secondary);">Settings</div>
+                            <div style="font-size:0.8438rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
+                            <div style="font-size:0.75rem; color:var(--text-secondary);">Settings</div>
                         </div>
                     </a>
                 </div>
@@ -233,7 +251,13 @@
                      button (right) are very different widths, so the
                      search box always sat off-center, closer to whichever
                      side had the narrower neighbor. -->
-                <div style="padding:16px 32px; padding-top:calc(16px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); position:sticky; top:0; z-index:40; gap:16px;">
+                <!-- Phone and small-tablet top bar only (md:hidden on a
+                     wrapper, never on the inline-styled bar itself; see
+                     CLAUDE.md's hidden-vs-display trap). The wrapper is
+                     what sticks, since a sticky child can't outlive its
+                     own parent's height. -->
+                <div class="md:hidden" style="position:sticky; top:0; z-index:40;">
+                <div style="padding:14px 16px; padding-top:calc(14px + env(safe-area-inset-top, 0px)); border-bottom:1px solid var(--border-subtle); display:grid; grid-template-columns:1fr auto 1fr; align-items:center; background:var(--bg-page); gap:16px;">
                     <div style="display:flex; align-items:center; gap:14px; min-width:0;">
                         <!-- Mobile-only brand mark, icon + wordmark
                              (same .sidebar-brand treatment as the
@@ -277,7 +301,7 @@
                              below) rather than the brand mark. -->
                         <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand" aria-label="Artha home" style="flex-shrink:0; gap:8px;">
                             <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" loading="eager" style="width:25px; height:25px;" />
-                            <span style="font-size:19px;">Artha</span>
+                            <span style="font-size:1.1875rem;">Artha</span>
                         </a>
                         </div>
 
@@ -299,8 +323,8 @@
                     <div style="width:360px; max-width:100%;" class="hidden sm:block">
                         <button
                             type="button"
-                            id="global-search-trigger"
-                            style="width:100%; min-height:38px; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:12px; padding:0 12px 0 14px; display:flex; align-items:center; gap:10px; color:var(--text-secondary); font-size:14px; cursor:pointer; text-align:left; font-family:inherit;"
+                            data-search-open
+                            style="width:100%; min-height:38px; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:12px; padding:0 12px 0 14px; display:flex; align-items:center; gap:10px; color:var(--text-secondary); font-size:0.875rem; cursor:pointer; text-align:left; font-family:inherit;"
                         >
                             <i data-lucide="search" aria-hidden="true" style="width:15px; height:15px; stroke-width:2; color:inherit; flex-shrink:0;"></i> Search or ask Artha
                             <kbd class="keycap" style="margin-left:auto;" data-mod-key>Ctrl K</kbd>
@@ -327,32 +351,8 @@
                             </button>
                         </div>
 
-                        {% block topbar_action %}{% endblock %}
-
-                        {% if current_user.is_authenticated %}
-                            <div class="hidden md:block">
-                                <a
-                                    href="{{ url_for('dashboard.whats_new') }}"
-                                    class="icon-btn"
-                                    style="position:relative; background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; text-decoration:none; flex-shrink:0;"
-                                    title="What's new"
-                                >
-                                    <i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
-                                    {% if has_new_changelog %}
-                                        <span aria-hidden="true" style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 2px var(--bg-page);"></span>
-                                    {% endif %}
-                                </a>
-                            </div>
-                        {% endif %}
-
-                        {% if current_user.is_authenticated %}
-                            <div class="hidden md:block">
-                                <a href="{{ url_for('auth.settings_page') }}" class="icon-btn" title="Settings" aria-label="Settings" style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; text-decoration:none;">
-                                    <i data-lucide="settings" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
-                                </a>
-                            </div>
-                        {% endif %}
                     </div>
+                </div>
                 </div>
 
                 <!-- MOBILE MENU -->
@@ -413,10 +413,10 @@
                     {{ more_link(url_for('dashboard.calendar_page'), 'calendar', 'Calendar', is_calendar_active) }}
                     {{ more_link(url_for('dashboard.calculator_page'), 'calculator', 'Calculator', is_calculator_active) }}
                     {% if current_user.is_authenticated %}
-                        <a href="{{ url_for('dashboard.whats_new') }}" class="nav-link" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> What's new{% if has_new_changelog %}<span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:var(--gold); flex-shrink:0;"></span>{% endif %}</a>
+                        <a href="{{ url_for('dashboard.whats_new') }}" class="nav-link" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:0.875rem;"><i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> What's new{% if has_new_changelog %}<span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:var(--gold); flex-shrink:0;"></span>{% endif %}</a>
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.is_admin %}
-                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin<span id="admin-badge-mobile">{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</span></a>
+                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:0.875rem;"><i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin<span id="admin-badge-mobile">{% if admin_open_feedback_count %} ({{ admin_open_feedback_count }}){% endif %}</span></a>
                     {% endif %}
                     <!-- The feedback FAB is hidden on mobile now that the
                          bottom tab bar occupies that same corner of the
@@ -424,7 +424,7 @@
                          style.css) — this is the mobile replacement,
                          forwarding to the exact same modal via a click on
                          the real button rather than duplicating its logic. -->
-                    <button type="button" id="mobile-feedback-btn" class="nav-link" style="width:100%; display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:14px; background:none; border:none; text-align:left; font-family:inherit;"><i data-lucide="message-circle" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Send feedback</button>
+                    <button type="button" id="mobile-feedback-btn" class="nav-link" style="width:100%; display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:0.875rem; background:none; border:none; text-align:left; font-family:inherit;"><i data-lucide="message-circle" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Send feedback</button>
 
                     {{ more_link(url_for('auth.settings_page'), 'settings', 'Settings', request.endpoint == 'auth.settings_page') }}
                 </div>

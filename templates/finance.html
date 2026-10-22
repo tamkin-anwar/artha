@@ -53,7 +53,7 @@
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("spending") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
-        <div class="fp-money" style="font-family:var(--font-figure); font-size:26px; color:var(--red);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-money" style="font-family:var(--font-figure); font-size:1.625rem; color:var(--red);" data-fp-total data-money-value="0">$0.00</div>
         <div class="fp-donut-row">
             <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
             <ul class="fp-category-list" data-fp-category-list></ul>
@@ -66,7 +66,7 @@
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("income") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
-        <div class="fp-money" style="font-family:var(--font-figure); font-size:26px; color:var(--emerald);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-money" style="font-family:var(--font-figure); font-size:1.625rem; color:var(--emerald);" data-fp-total data-money-value="0">$0.00</div>
         <div class="fp-donut-row">
             <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
             <ul class="fp-category-list" data-fp-category-list></ul>
@@ -83,15 +83,15 @@
         <div class="fp-cashflow-summary">
             <div>
                 <div class="eyebrow">Income</div>
-                <div class="fp-money" data-fp-cf-income data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--emerald);">$0.00</div>
+                <div class="fp-money" data-fp-cf-income data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem; color:var(--emerald);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow">Spending</div>
-                <div class="fp-money" data-fp-cf-expense data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--red);">$0.00</div>
+                <div class="fp-money" data-fp-cf-expense data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem; color:var(--red);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow" data-fp-cf-net-label>Net</div>
-                <div class="fp-money" data-fp-cf-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:19px;">+$0.00</div>
+                <div class="fp-money" data-fp-cf-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem;">+$0.00</div>
             </div>
         </div>
 
@@ -111,15 +111,15 @@
         <div class="fp-cashflow-summary">
             <div>
                 <div class="eyebrow">Income</div>
-                <div class="fp-money" data-fp-rec-income data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--emerald);">$0.00</div>
+                <div class="fp-money" data-fp-rec-income data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem; color:var(--emerald);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow">Spending</div>
-                <div class="fp-money" data-fp-rec-expense data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--red);">$0.00</div>
+                <div class="fp-money" data-fp-rec-expense data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem; color:var(--red);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow" data-fp-rec-net-label>Net</div>
-                <div class="fp-money" data-fp-rec-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:19px;">+$0.00</div>
+                <div class="fp-money" data-fp-rec-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:1.1875rem;">+$0.00</div>
             </div>
         </div>
 
@@ -150,14 +150,14 @@
     }
     .recurring-row {
         display:flex; align-items:center; gap:10px; padding:9px 12px;
-        border-bottom:1px solid var(--border-subtle); font-size:13px;
+        border-bottom:1px solid var(--border-subtle); font-size:0.8125rem;
     }
     .recurring-row:last-child { border-bottom:none; }
     .recurring-row-desc { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .recurring-row-category { font-size:11px; color:var(--text-muted); flex-shrink:0; }
+    .recurring-row-category { font-size:0.6875rem; color:var(--text-muted); flex-shrink:0; }
     .recurring-row-amount { font-family:var(--font-figure); flex-shrink:0; white-space:nowrap; }
     .recurring-due-badge {
-        font-family:var(--font-figure); font-size:10.5px;
+        font-family:var(--font-figure); font-size:0.6562rem;
         padding:2px 8px; border-radius:999px; flex-shrink:0;
         background:var(--bg-page); color:var(--text-secondary);
     }
@@ -192,7 +192,7 @@
     .fp-toptabs { display:flex; gap:6px; margin-bottom:20px; overflow-x:auto; }
     .fp-toptab {
         padding:8px 16px; border:1px solid transparent; border-radius:9px;
-        font-size:13.5px; font-weight:500; color:var(--text-secondary);
+        font-size:0.8438rem; font-weight:500; color:var(--text-secondary);
         background:none; cursor:pointer; font-family:inherit; white-space:nowrap;
         transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
@@ -203,14 +203,14 @@
     .fp-period-chips { display:flex; gap:6px; flex-wrap:wrap; }
     .fp-period-chip {
         padding:5px 12px; border:1px solid var(--border-subtle); border-radius:999px;
-        font-size:12px; font-weight:500; color:var(--text-secondary);
+        font-size:0.75rem; font-weight:500; color:var(--text-secondary);
         background:none; cursor:pointer; font-family:inherit; white-space:nowrap;
         transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
     .fp-period-chip:hover { background:var(--bg-hover); }
     .fp-period-chip.fp-period-chip-active { background:var(--gold-dim); color:var(--gold); border-color:var(--gold); }
     .fp-month-select, .fp-year-select {
-        font-size:12px; background:var(--bg-page); border:1px solid var(--border-subtle);
+        font-size:0.75rem; background:var(--bg-page); border:1px solid var(--border-subtle);
         border-radius:8px; padding:5px 10px; color:var(--text-primary); font-family:inherit;
     }
 
@@ -220,7 +220,7 @@
     .fp-category-row {
         display:flex; align-items:center; gap:10px; padding:8px 6px;
         margin:0 -6px; border-radius:7px; border-bottom:1px solid var(--border-subtle);
-        font-size:13px; cursor:pointer; transition:background-color .12s ease;
+        font-size:0.8125rem; cursor:pointer; transition:background-color .12s ease;
     }
     .fp-category-row:last-child { border-bottom:none; }
     /* Mirrors the donut's own hover state (segment offset + tooltip) so
@@ -231,7 +231,7 @@
     .fp-category-row.is-hovered { background:var(--bg-hover); }
     .fp-category-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
     .fp-category-label { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .fp-category-pct { color:var(--text-muted); font-size:11.5px; flex-shrink:0; }
+    .fp-category-pct { color:var(--text-muted); font-size:0.7188rem; flex-shrink:0; }
     .fp-category-amount { font-family:var(--font-figure); flex-shrink:0; color:var(--text-primary); }
 
     .fp-cashflow-summary {
@@ -239,7 +239,7 @@
         gap:14px; margin-top:18px;
     }
     .fp-cashflow-summary > div { min-width: 0; }
-    .fp-empty-msg { text-align:center; padding:24px 0; font-size:14px; color:var(--text-secondary); }
+    .fp-empty-msg { text-align:center; padding:24px 0; font-size:0.875rem; color:var(--text-secondary); }
 </style>
 
 <script type="module">

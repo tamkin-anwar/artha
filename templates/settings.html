@@ -142,8 +142,5 @@
         input.checked = input.value === current;
         input.addEventListener("change", () => setThemeChoice(input.value));
     });
-    document.querySelector("[data-feedback-open]")?.addEventListener("click", () => {
-        document.getElementById("feedback-fab")?.click();
-    });
 </script>
 {% endblock %}
