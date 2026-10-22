@@ -893,3 +893,83 @@ def test_today_says_when_apple_pay_last_logged_something(client, user):
     status = client.get("/api/v1/today", headers=_auth(token)).get_json()["apple_pay"]
     assert status["description"] == "Shell"
     assert status["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+def test_updating_the_profile_changes_only_what_was_sent(client, user):
+    user.first_name = "Alice"
+    user.preferred_currency = "USD"
+    db.session.commit()
+    token = _token(client, user)
+
+    resp = client.patch("/api/v1/me", headers=_auth(token), json={"currency": "GBP", "timezone": "Europe/London"})
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()["user"]
+    assert body["currency"] == "GBP" and body["timezone"] == "Europe/London"
+    assert body["first_name"] == "Alice"
+
+    resp = client.patch("/api/v1/me", headers=_auth(token), json={"first_name": " Al ", "email": "AL@example.com"})
+    assert resp.get_json()["user"]["first_name"] == "Al"
+    assert resp.get_json()["user"]["email"] == "al@example.com"
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"email": ""}, "Email is required."),
+    ({"email": "nope"}, "That doesn't look like a valid email address."),
+    ({"email": "bob@example.com"}, "That email is already in use by another account."),
+    ({"currency": "JPY"}, "Artha doesn't support that currency yet."),
+    ({"timezone": "Mars/Olympus"}, "That isn't a time zone Artha knows."),
+])
+def test_profile_changes_follow_the_web_rules(client, user, change, message):
+    make_user(username="bob", email="bob@example.com")
+    token = _token(client, user)
+    resp = client.patch("/api/v1/me", headers=_auth(token), json=change)
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "invalid_profile", "message": message}
+
+
+def test_changing_the_password_signs_other_devices_out_but_keeps_this_one(client, user):
+    phone = _token(client, user)
+    tablet = _token(client, user)
+
+    wrong = client.post("/api/v1/me/password", headers=_auth(phone),
+                        json={"current_password": "nope", "new_password": "a-new-password"})
+    assert wrong.status_code == 400
+    assert wrong.get_json()["message"] == "Current password is incorrect."
+
+    resp = client.post("/api/v1/me/password", headers=_auth(phone),
+                       json={"current_password": "password123", "new_password": "a-new-password"})
+    assert resp.status_code == 200
+    fresh = resp.get_json()["token"]
+    assert client.get("/api/v1/me", headers=_auth(fresh)).status_code == 200
+    for old in (phone, tablet):
+        assert client.get("/api/v1/me", headers=_auth(old)).status_code == 401
+    assert db.session.get(User, user.id).check_password("a-new-password")
+
+
+def test_two_factor_can_be_turned_on_and_off_from_the_app(client, user):
+    token = _token(client, user)
+    setup = client.post("/api/v1/me/two-factor/setup", headers=_auth(token)).get_json()
+    assert setup["uri"].startswith("otpauth://totp/")
+    assert "issuer=Artha" in setup["uri"]
+
+    bad = client.post("/api/v1/me/two-factor", headers=_auth(token), json={"secret": setup["secret"], "code": "000000"})
+    assert bad.status_code == 400
+    assert db.session.get(User, user.id).otp_enabled is False
+
+    code = pyotp.TOTP(setup["secret"]).now()
+    on = client.post("/api/v1/me/two-factor", headers=_auth(token), json={"secret": setup["secret"], "code": code})
+    assert on.status_code == 200
+    assert len(on.get_json()["recovery_codes"]) == 10
+    assert on.get_json()["user"]["two_factor_enabled"] is True
+    assert client.post("/api/v1/me/two-factor/setup", headers=_auth(token)).status_code == 409
+
+    # A recovery code works to turn it off, alongside the password.
+    off = client.delete("/api/v1/me/two-factor", headers=_auth(token),
+                        json={"password": "password123", "code": on.get_json()["recovery_codes"][0]})
+    assert off.status_code == 200
+    assert off.get_json()["user"]["two_factor_enabled"] is False
+    assert db.session.get(User, user.id).otp_secret is None

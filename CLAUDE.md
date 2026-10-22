@@ -151,6 +151,11 @@ and Artha shouldn't repeat that.
   requires in-app deletion for any app that can create an account.
   `/.well-known/apple-app-site-association` (`create_app`) links
   arthaapp.com's saved passwords to the app (`webcredentials` only).
+  Settings (`PATCH /me`, `POST /me/password`, `/me/two-factor`) go
+  through `auth.routes`' `update_profile`, `change_user_password` and the
+  two-factor functions, shared with the web Edit Profile, Change Password,
+  2FA and currency forms; a password change revokes every token, so the
+  API hands the calling device a fresh one.
   `Transaction.needs_review` marks an Apple Pay purchase the app logged on
   its own until the person confirms it (`POST /transactions/reviewed`) or
   edits it (`update_transaction_fields` clears it); statement imports

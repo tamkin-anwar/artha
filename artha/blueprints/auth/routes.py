@@ -153,12 +153,7 @@ def register_user(fields) -> User:
     if not username or not password or not email:
         raise AccountError("Email, username, and password are required.")
 
-    # Same minimal check as edit_profile() — not a full RFC 5322
-    # parser, just enough to catch "forgot the @"/"forgot the domain"
-    # typos before they land in the database.
-    local_part, _, domain_part = email.partition("@")
-    if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
-        raise AccountError("That doesn't look like a valid email address.")
+    _check_email(email)
 
     if len(password) < 8:
         raise AccountError("Password must be at least 8 characters.")
@@ -213,6 +208,127 @@ def schedule_account_deletion(user: User) -> str:
     db.session.commit()
     send_account_deletion_email(user, purge_date_str)
     return purge_date_str
+
+
+def _check_email(email: str) -> None:
+    # Deliberately minimal, not a full RFC 5322 parser: just enough to catch
+    # "forgot the @" / "forgot the domain" typos before they land in the
+    # database, same spirit as the password-length check.
+    local_part, _, domain_part = email.partition("@")
+    if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
+        raise AccountError("That doesn't look like a valid email address.")
+
+
+def update_profile(user: User, fields) -> User:
+    """Changes whichever of first_name, last_name, email, currency and
+    timezone are present in `fields` (anything with .get() and `in`), and
+    leaves the rest alone. Shared by the web Edit Profile form (which sends
+    the name and email together) and the native app's PATCH /api/v1/me.
+    Raises AccountError with a message for the person."""
+    if "email" in fields:
+        email = str(fields.get("email") or "").strip().lower()
+        if not email:
+            raise AccountError("Email is required.")
+        _check_email(email)
+        existing = User.query.filter_by(email=email).first()
+        if existing and existing.id != user.id:
+            raise AccountError("That email is already in use by another account.")
+        user.email = email
+    if "first_name" in fields:
+        user.first_name = str(fields.get("first_name") or "").strip()[:80] or None
+    if "last_name" in fields:
+        user.last_name = str(fields.get("last_name") or "").strip()[:80] or None
+    if "currency" in fields:
+        code = str(fields.get("currency") or "").strip().upper()
+        if code not in CURRENCY_CODES:
+            raise AccountError("Artha doesn't support that currency yet.")
+        user.preferred_currency = code
+    if "timezone" in fields:
+        tz_name = str(fields.get("timezone") or "").strip()
+        if tz_name not in _VALID_TIMEZONES:
+            raise AccountError("That isn't a time zone Artha knows.")
+        user.timezone = tz_name
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return user
+
+
+def change_user_password(user: User, current_password: str, new_password: str,
+                         confirm_password: str | None = None) -> None:
+    """Checks and saves a new password, then signs the app out on every
+    device (a phone someone else has can't stay in). Shared by the web
+    Change Password form (which also sends a confirmation) and the native
+    app, which issues the device it's on a fresh sign-in right after.
+    Raises AccountError."""
+    if not current_password or not new_password or (confirm_password is not None and not confirm_password):
+        raise AccountError("All password fields are required.")
+    if not user.check_password(current_password):
+        raise AccountError("Current password is incorrect.")
+    if len(new_password) < 8:
+        raise AccountError("New password must be at least 8 characters.")
+    if confirm_password is not None and new_password != confirm_password:
+        raise AccountError("New passwords do not match.")
+    if user.check_password(new_password):
+        raise AccountError("New password must be different from the current password.")
+    try:
+        user.set_password(new_password)
+        ApiToken.revoke_all_for(user.id)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def two_factor_setup(user: User, secret: str | None = None) -> tuple[str, str]:
+    """(secret, otpauth URI) for turning two-factor sign-in on. Nothing is
+    saved until enable_two_factor() confirms a code made from it. Raises
+    AccountError if it's already on."""
+    if user.otp_enabled:
+        raise AccountError("Two-factor authentication is already enabled.")
+    secret = secret or pyotp.random_base32()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user.email or user.username, issuer_name="Artha")
+    return secret, uri
+
+
+def enable_two_factor(user: User, secret: str, code: str) -> list[str]:
+    """Turns two-factor sign-in on once `code` proves the authenticator
+    holds `secret`, and returns ten one-time recovery codes. They're shown
+    once and only their hashes are kept: losing the phone is exactly what
+    they're for. Raises AccountError."""
+    if user.otp_enabled:
+        raise AccountError("Two-factor authentication is already enabled.")
+    secret = str(secret or "").strip().upper()
+    if not (16 <= len(secret) <= 32) or any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" for ch in secret):
+        raise AccountError("That setup expired. Start again.")
+    if not pyotp.TOTP(secret).verify(str(code or "").strip(), valid_window=1):
+        raise AccountError("That code didn't match. Check the time on your phone and try again.")
+    user.otp_secret = secret
+    user.otp_enabled = True
+    raw_codes = [secrets.token_hex(4) for _ in range(10)]
+    for raw in raw_codes:
+        db.session.add(RecoveryCode(user_id=user.id, code_hash=generate_password_hash(raw)))
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return raw_codes
+
+
+def disable_two_factor(user: User, password: str, code: str) -> None:
+    """Turns two-factor sign-in off after the password and a current code
+    (or a recovery code). Raises AccountError."""
+    if not user.check_password(password or ""):
+        raise AccountError("Current password is incorrect.")
+    if not _verify_totp_or_recovery_code(user, code):
+        raise AccountError("Invalid code.")
+    user.otp_enabled = False
+    user.otp_secret = None
+    RecoveryCode.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
@@ -388,39 +504,21 @@ def edit_profile():
     one afterward.
     """
     if request.method == "POST":
-        first_name = request.form.get("first_name", "").strip()
-        last_name = request.form.get("last_name", "").strip()
-        email = request.form.get("email", "").strip().lower()
-
-        if not email:
-            flash("Email is required.", "error")
-            return redirect(url_for("auth.edit_profile"))
-
-        # Deliberately minimal — not a full RFC 5322 parser, just enough to
-        # catch "forgot the @" / "forgot the domain" typos before they land
-        # in the database, same spirit as the password-length check below.
-        local_part, _, domain_part = email.partition("@")
-        if not local_part or "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
-            flash("That doesn't look like a valid email address.", "error")
-            return redirect(url_for("auth.edit_profile"))
-
-        existing = User.query.filter_by(email=email).first()
-        if existing and existing.id != current_user.id:
-            flash("That email is already in use by another account.", "error")
-            return redirect(url_for("auth.edit_profile"))
-
         try:
-            current_user.first_name = first_name or None
-            current_user.last_name = last_name or None
-            current_user.email = email
-            db.session.commit()
-            flash("Profile updated.", "success")
-            return redirect(url_for("dashboard.index"))
+            update_profile(current_user, {
+                "first_name": request.form.get("first_name", ""),
+                "last_name": request.form.get("last_name", ""),
+                "email": request.form.get("email", ""),
+            })
+        except AccountError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("auth.edit_profile"))
         except Exception as e:
-            db.session.rollback()
             log.error("Error updating profile: %s", e, exc_info=True)
             flash("Error updating profile.", "error")
             return redirect(url_for("auth.edit_profile"))
+        flash("Profile updated.", "success")
+        return redirect(url_for("dashboard.index"))
 
     return render_template("edit_profile.html", account_deletion_grace_days=ACCOUNT_DELETION_GRACE_DAYS)
 
@@ -433,39 +531,17 @@ def change_password():
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if not current_password or not new_password or not confirm_password:
-            flash("All password fields are required.", "error")
-            return redirect(url_for("auth.change_password"))
-
-        if not current_user.check_password(current_password):
-            flash("Current password is incorrect.", "error")
-            return redirect(url_for("auth.change_password"))
-
-        if len(new_password) < 8:
-            flash("New password must be at least 8 characters.", "error")
-            return redirect(url_for("auth.change_password"))
-
-        if new_password != confirm_password:
-            flash("New passwords do not match.", "error")
-            return redirect(url_for("auth.change_password"))
-
-        if current_user.check_password(new_password):
-            flash("New password must be different from the current password.", "error")
-            return redirect(url_for("auth.change_password"))
-
         try:
-            current_user.set_password(new_password)
-            # Same as a reset: changing the password signs the app out on
-            # every device, so a phone someone else has can't stay in.
-            ApiToken.revoke_all_for(current_user.id)
-            db.session.commit()
-            flash("Password changed successfully.", "success")
-            return redirect(url_for("dashboard.index"))
+            change_user_password(current_user, current_password, new_password, confirm_password)
+        except AccountError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("auth.change_password"))
         except Exception as e:
-            db.session.rollback()
             log.error("Error changing password: %s", e, exc_info=True)
             flash("Error changing password.", "error")
             return redirect(url_for("auth.change_password"))
+        flash("Password changed successfully.", "success")
+        return redirect(url_for("dashboard.index"))
 
     return render_template("change_password.html")
 
@@ -485,22 +561,12 @@ def enable_2fa():
             flash("That setup session expired. Start again.", "error")
             return redirect(url_for("auth.enable_2fa"))
 
-        if not pyotp.TOTP(secret).verify(code, valid_window=1):
-            flash("That code didn't match. Check the time on your phone and try again.", "error")
+        try:
+            raw_codes = enable_two_factor(current_user, secret, code)
+        except AccountError as exc:
+            flash(str(exc), "error")
             return redirect(url_for("auth.enable_2fa"))
-
-        current_user.otp_secret = secret
-        current_user.otp_enabled = True
         session.pop("pending_otp_secret", None)
-
-        # Generated once, here, and never again — losing the phone this
-        # was scanned with is exactly what these are for. Shown once on
-        # the confirmation page below; only the hash is ever persisted.
-        raw_codes = [secrets.token_hex(4) for _ in range(10)]
-        for raw in raw_codes:
-            db.session.add(RecoveryCode(user_id=current_user.id, code_hash=generate_password_hash(raw)))
-        db.session.commit()
-
         return render_template("recovery_codes.html", codes=raw_codes)
 
     # A fresh secret per GET only if one isn't already pending — reloading
@@ -511,9 +577,7 @@ def enable_2fa():
         secret = pyotp.random_base32()
         session["pending_otp_secret"] = secret
 
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(
-        name=current_user.email or current_user.username, issuer_name="Artha"
-    )
+    _, uri = two_factor_setup(current_user, secret)
     return render_template("enable_2fa.html", secret=secret, qr_svg=_totp_qr_svg(uri))
 
 
@@ -523,18 +587,11 @@ def disable_2fa():
     password = request.form.get("password", "")
     code = request.form.get("code", "")
 
-    if not current_user.check_password(password):
-        flash("Current password is incorrect.", "error")
+    try:
+        disable_two_factor(current_user, password, code)
+    except AccountError as exc:
+        flash(str(exc), "error")
         return redirect(url_for("auth.edit_profile"))
-
-    if not _verify_totp_or_recovery_code(current_user, code):
-        flash("Invalid code.", "error")
-        return redirect(url_for("auth.edit_profile"))
-
-    current_user.otp_enabled = False
-    current_user.otp_secret = None
-    RecoveryCode.query.filter_by(user_id=current_user.id).delete()
-    db.session.commit()
     flash("Two-factor authentication disabled.", "success")
     return redirect(url_for("auth.edit_profile"))
 
@@ -579,12 +636,10 @@ def set_currency():
     browser has stored, since every aggregate is already converted into it
     server-side."""
     data = request.get_json(silent=True) or {}
-    code = (data.get("code") or "").strip().upper()
-    if code not in CURRENCY_CODES:
+    try:
+        update_profile(current_user, {"currency": data.get("code")})
+    except AccountError:
         return jsonify({"message": "Invalid currency"}), 400
-
-    current_user.preferred_currency = code
-    db.session.commit()
     return jsonify({"message": "Currency updated"}), 200
 
 

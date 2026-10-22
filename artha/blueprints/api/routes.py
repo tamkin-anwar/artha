@@ -50,8 +50,13 @@ from ..accounts.routes import (
 from ..auth.routes import (
     AccountError,
     _verify_totp_or_recovery_code,
+    change_user_password,
+    disable_two_factor,
+    enable_two_factor,
     register_user,
     schedule_account_deletion,
+    two_factor_setup,
+    update_profile,
 )
 from ..finance.routes import (
     TRANSACTION_CATEGORIES,
@@ -315,6 +320,91 @@ def delete_session():
 @api_bp.get("/me")
 @api_auth_required
 def me():
+    return jsonify({"user": _serialize_user(g.api_user)})
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+_PROFILE_FIELDS = ("first_name", "last_name", "email", "currency", "timezone")
+
+
+@api_bp.patch("/me")
+@api_auth_required
+def update_me():
+    """Body: any of {"first_name", "last_name", "email", "currency",
+    "timezone"}; only what's sent changes. Same rules as the web Edit
+    Profile form and currency picker (auth.routes.update_profile). The app
+    sends the phone's timezone on its own whenever it differs, the way the
+    website follows the browser's."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the changes as a JSON object.")
+    fields = {key: data[key] for key in _PROFILE_FIELDS if key in data}
+    try:
+        update_profile(g.api_user, fields)
+    except AccountError as exc:
+        return api_error(400, "invalid_profile", str(exc))
+    return jsonify({"user": _serialize_user(g.api_user)})
+
+
+@api_bp.post("/me/password")
+@api_auth_required
+@limiter.limit("5 per minute")
+def change_my_password():
+    """Body: {"current_password", "new_password"}. Changing the password
+    signs out every device (auth.routes.change_user_password), so this one
+    gets a fresh token back and stays signed in."""
+    data = _json_body() or {}
+    user = g.api_user
+    device_name = g.api_token.device_name
+    try:
+        change_user_password(user, str(data.get("current_password") or ""), str(data.get("new_password") or ""))
+    except AccountError as exc:
+        return api_error(400, "invalid_password", str(exc))
+    _, raw = ApiToken.issue(user, device_name)
+    db.session.commit()
+    return jsonify({"token": raw, "token_type": "Bearer", "user": _serialize_user(user)})
+
+
+@api_bp.post("/me/two-factor/setup")
+@api_auth_required
+def start_two_factor():
+    """A new secret and its otpauth:// link, for adding Artha to an
+    authenticator (the iPhone's Passwords app can take the link directly).
+    Nothing is saved until POST /me/two-factor confirms a code from it."""
+    try:
+        secret, uri = two_factor_setup(g.api_user)
+    except AccountError as exc:
+        return api_error(409, "already_enabled", str(exc))
+    return jsonify({"secret": secret, "uri": uri})
+
+
+@api_bp.post("/me/two-factor")
+@api_auth_required
+@limiter.limit("5 per minute")
+def turn_on_two_factor():
+    """Body: {"secret", "code"}. Turns two-factor sign-in on and returns
+    ten recovery codes, shown this once."""
+    data = _json_body() or {}
+    try:
+        codes = enable_two_factor(g.api_user, str(data.get("secret") or ""), str(data.get("code") or ""))
+    except AccountError as exc:
+        return api_error(400, "invalid_code", str(exc))
+    return jsonify({"recovery_codes": codes, "user": _serialize_user(g.api_user)})
+
+
+@api_bp.delete("/me/two-factor")
+@api_auth_required
+@limiter.limit("5 per minute")
+def turn_off_two_factor():
+    """Body: {"password", "code"} (a current code or a recovery code)."""
+    data = _json_body() or {}
+    try:
+        disable_two_factor(g.api_user, str(data.get("password") or ""), str(data.get("code") or ""))
+    except AccountError as exc:
+        return api_error(400, "invalid_code", str(exc))
     return jsonify({"user": _serialize_user(g.api_user)})
 
 
