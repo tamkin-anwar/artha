@@ -35,6 +35,7 @@ from ...extensions import db, limiter
 from ...models import ApiToken, Transaction, User
 from ...models.account import ACCOUNT_TYPES, Account, NetWorthSnapshot
 from ...models.category_budget import CategoryBudget
+from ...cli import DEFAULT_REMINDER_HOUR
 from ...services.cash_flow import monthly_totals, months_back
 from ...services.exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from ...services.month_plan import bills_this_month, typical_spending
@@ -70,6 +71,7 @@ from ..finance.routes import (
     save_category_budget,
     update_transaction_fields,
 )
+from ..push.routes import update_notification_preferences
 from . import api_bp
 
 log = logging.getLogger(__name__)
@@ -78,9 +80,12 @@ log = logging.getLogger(__name__)
 # so reading data doesn't cost a database write on every call.
 LAST_USED_REFRESH = timedelta(minutes=5)
 
-# How far ahead "Coming up" looks for recurring bills, and how many it shows.
+# How far ahead "Coming up" looks for recurring bills, and how many it
+# returns. The app's Today card and widgets show only the first three; the
+# rest are there so the app can schedule a reminder the day before each
+# bill (a reminder for a bill it never heard about can't be set).
 COMING_UP_WINDOW_DAYS = 31
-COMING_UP_LIMIT = 5
+COMING_UP_LIMIT = 30
 
 RECENT_LIMIT = 5
 TRANSACTIONS_PAGE_DEFAULT = 50
@@ -156,6 +161,11 @@ def _serialize_user(user: User) -> dict:
         "currency": user.preferred_currency or "USD",
         "timezone": user.timezone,
         "two_factor_enabled": bool(user.otp_enabled),
+        # Shared with the website's notification settings (one preference
+        # per person, not per device).
+        "notify_bills_due": bool(user.notify_bills_due),
+        "notify_budget_alerts": bool(user.notify_budget_alerts),
+        "reminder_hour": user.reminder_hour if user.reminder_hour is not None else DEFAULT_REMINDER_HOUR,
     }
 
 
@@ -328,13 +338,15 @@ def me():
 # ---------------------------------------------------------------------------
 
 _PROFILE_FIELDS = ("first_name", "last_name", "email", "currency", "timezone")
+_NOTIFICATION_FIELDS = ("notify_bills_due", "notify_budget_alerts", "reminder_hour")
 
 
 @api_bp.patch("/me")
 @api_auth_required
 def update_me():
     """Body: any of {"first_name", "last_name", "email", "currency",
-    "timezone"}; only what's sent changes. Same rules as the web Edit
+    "timezone", "notify_bills_due", "notify_budget_alerts",
+    "reminder_hour"}; only what's sent changes. Same rules as the web Edit
     Profile form and currency picker (auth.routes.update_profile). The app
     sends the phone's timezone on its own whenever it differs, the way the
     website follows the browser's."""
@@ -342,9 +354,12 @@ def update_me():
     if data is None:
         return api_error(400, "invalid_request", "Send the changes as a JSON object.")
     fields = {key: data[key] for key in _PROFILE_FIELDS if key in data}
+    preferences = {key: data[key] for key in _NOTIFICATION_FIELDS if key in data}
     try:
+        if preferences:
+            update_notification_preferences(g.api_user, preferences)
         update_profile(g.api_user, fields)
-    except AccountError as exc:
+    except (AccountError, ValueError) as exc:
         return api_error(400, "invalid_profile", str(exc))
     return jsonify({"user": _serialize_user(g.api_user)})
 

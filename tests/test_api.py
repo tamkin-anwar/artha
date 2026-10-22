@@ -973,3 +973,31 @@ def test_two_factor_can_be_turned_on_and_off_from_the_app(client, user):
     assert off.status_code == 200
     assert off.get_json()["user"]["two_factor_enabled"] is False
     assert db.session.get(User, user.id).otp_secret is None
+
+
+def test_notification_preferences_are_shared_with_the_website(client, user):
+    token = _token(client, user)
+    me = client.get("/api/v1/me", headers=_auth(token)).get_json()["user"]
+    assert me["notify_bills_due"] is True and me["notify_budget_alerts"] is True
+    assert me["reminder_hour"] == 8  # the same default the reminder job uses
+
+    resp = client.patch("/api/v1/me", headers=_auth(token),
+                        json={"notify_bills_due": False, "reminder_hour": 19})
+    assert resp.status_code == 200
+    fresh = db.session.get(User, user.id)
+    assert fresh.notify_bills_due is False and fresh.reminder_hour == 19
+    assert fresh.notify_budget_alerts is True
+
+    bad = client.patch("/api/v1/me", headers=_auth(token), json={"reminder_hour": 25, "notify_budget_alerts": False})
+    assert bad.status_code == 400
+    # Nothing in a rejected change is saved.
+    assert db.session.get(User, user.id).notify_budget_alerts is True
+
+
+def test_coming_up_lists_enough_bills_to_remind_about(client, user):
+    for i in range(8):
+        _add(user, f"Subscription {i}", "5.00", category="subscriptions", is_recurring=True,
+             when=current_period_timestamp() - timedelta(days=20))
+    token = _token(client, user)
+    coming = client.get("/api/v1/today", headers=_auth(token)).get_json()["coming_up"]
+    assert len(coming) == 8

@@ -80,18 +80,25 @@ def set_preferences():
     per device. A key not sent leaves that flag untouched, so each
     checkbox can POST independently without clobbering the others."""
     data = request.get_json(silent=True) or {}
-    if "notify_bills_due" in data:
-        current_user.notify_bills_due = bool(data.get("notify_bills_due"))
-    if "notify_notes_due" in data:
-        current_user.notify_notes_due = bool(data.get("notify_notes_due"))
-    if "notify_events_due" in data:
-        current_user.notify_events_due = bool(data.get("notify_events_due"))
-    if "notify_budget_alerts" in data:
-        current_user.notify_budget_alerts = bool(data.get("notify_budget_alerts"))
+    try:
+        update_notification_preferences(current_user, data)
+    except ValueError:
+        return jsonify({"message": "Invalid reminder hour"}), 400
+    return jsonify({"message": "Preferences updated"})
+
+
+def update_notification_preferences(user, data) -> None:
+    """Sets whichever reminder flags and reminder_hour are present in
+    `data`. Shared by the web settings checkboxes above and the native
+    app's PATCH /api/v1/me, so a choice made on either applies to both.
+    Raises ValueError for an hour outside 0-23 (nothing is saved)."""
     if "reminder_hour" in data:
         hour = data.get("reminder_hour")
         if isinstance(hour, bool) or not isinstance(hour, int) or not (0 <= hour <= 23):
-            return jsonify({"message": "Invalid reminder hour"}), 400
-        current_user.reminder_hour = hour
+            raise ValueError("Pick an hour between 0 and 23.")
+    for flag in ("notify_bills_due", "notify_notes_due", "notify_events_due", "notify_budget_alerts"):
+        if flag in data:
+            setattr(user, flag, bool(data.get(flag)))
+    if "reminder_hour" in data:
+        user.reminder_hour = data.get("reminder_hour")
     db.session.commit()
-    return jsonify({"message": "Preferences updated"})
