@@ -2877,10 +2877,178 @@ def set_category_budget():
 @login_required
 def delete_category_budget(category):
     try:
-        if remove_category_budget(current_user, category):
-            flash("Category budget removed.", "success")
+        removed = remove_category_budget(current_user, category)
     except Exception as e:
         log.error("Error deleting category budget: %s", e, exc_info=True)
+        if is_ajax_request():
+            return jsonify({"message": "Error removing budget."}), 500
         flash("Error removing budget.", "error")
+        return redirect(url_for("finance.finance_page"))
 
+    if is_ajax_request():
+        if not removed:
+            return jsonify({"message": "There's no limit on that category."}), 404
+        return jsonify({"message": "Category budget removed."}), 200
+    if removed:
+        flash("Category budget removed.", "success")
     return redirect(url_for("finance.finance_page"))
+
+
+@finance_bp.app_context_processor
+def inject_transaction_categories():
+    """For the Add sheet every page carries (partials/add_sheet.html)."""
+    return {"transaction_categories": TRANSACTION_CATEGORIES}
+
+
+def mark_transactions_reviewed(user, ids) -> int:
+    """Clears needs_review on these of `user`'s transactions (they look
+    right as they are; editing one counts as a review on its own, see
+    update_transaction_fields). Ids that aren't theirs are ignored, at
+    most 500 at a time. Returns how many are still waiting. Shared by the
+    web Activity page and the native app's API."""
+    if ids:
+        Transaction.query.filter(
+            Transaction.user_id == user.id, Transaction.id.in_(list(ids)[:500])
+        ).update({"needs_review": False}, synchronize_session=False)
+        db.session.commit()
+    return Transaction.query.filter_by(user_id=user.id, needs_review=True).count()
+
+
+# ---------------------------------------------------------------------------
+# Activity and Plan: the redesigned web pages (2026-10). Both render the
+# same dicts the native app's API returns (services/screens.py), so the
+# website and the app always agree.
+# ---------------------------------------------------------------------------
+
+ACTIVITY_PAGE_SIZE = 60
+
+
+def _day_label(day: date, today: date) -> str:
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    if day > today:
+        return day.strftime("%A, %b %-d") if day.year == today.year else day.strftime("%a, %b %-d, %Y")
+    if (today - day).days < 7:
+        return day.strftime("%A")
+    if day.year == today.year:
+        return day.strftime("%A, %b %-d")
+    return day.strftime("%a, %b %-d, %Y")
+
+
+def group_transactions_by_day(transactions: list[dict], today: date) -> list[dict]:
+    """The flat, newest-first list from screens.transactions_screen,
+    grouped under one header per day, each with that day's spending in the
+    display currency (a foreign purchase counts at its converted
+    display_amount, never its foreign number)."""
+    groups: list[dict] = []
+    for tx in transactions:
+        day = date.fromisoformat(tx["date"]) if tx.get("date") else today
+        if not groups or groups[-1]["date"] != day:
+            groups.append({"date": day, "iso": day.isoformat(), "label": _day_label(day, today),
+                           "spent": Decimal("0"), "items": []})
+        group = groups[-1]
+        group["items"].append(tx)
+        if tx["type"] == "expense":
+            group["spent"] += Decimal(tx["display_amount"] or tx["amount"])
+        tx["upcoming"] = day > today
+    return groups
+
+
+def _activity_filters(args) -> dict:
+    """The filters Activity understands, cleaned, for both the query and
+    the page's own controls."""
+    month = (args.get("month") or "").strip()
+    t_type = (args.get("type") or "").strip()
+    return {
+        "q": (args.get("q") or "").strip()[:100],
+        "type": t_type if t_type in ("expense", "income") else "",
+        "month": month if re.fullmatch(r"\d{4}-\d{2}", month) else "",
+        "category": (args.get("category") or "").strip(),
+        "review": "1" if args.get("review") == "1" else "",
+    }
+
+
+@finance_bp.route("/activity")
+@login_required
+def activity_page():
+    from ...services.screens import ScreenError, transactions_screen
+
+    try:
+        generate_due_recurring(current_user)
+    except Exception:
+        db.session.rollback()
+
+    filters = _activity_filters(request.args)
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    try:
+        screen = transactions_screen(current_user, {**filters, "limit": ACTIVITY_PAGE_SIZE, "offset": offset})
+    except ScreenError:
+        filters = {key: "" for key in filters}
+        screen = transactions_screen(current_user, {"limit": ACTIVITY_PAGE_SIZE})
+    today = date.fromisoformat(screen["today"])
+    groups = group_transactions_by_day(screen["transactions"], today)
+
+    # Only the rows, for "Show more" (static/js/activity.js appends them).
+    if request.args.get("partial") == "1":
+        return render_template("partials/activity_rows.html", groups=groups, screen=screen,
+                               categories=TRANSACTION_CATEGORIES)
+
+    month_label = None
+    if filters["month"]:
+        month_label = datetime.strptime(filters["month"], "%Y-%m").strftime("%B %Y")
+    category_labels = [
+        TRANSACTION_CATEGORIES.get(key, {}).get("label", "Uncategorized" if key == "none" else key)
+        for key in filters["category"].split(",") if key
+    ]
+    return render_template(
+        "activity.html",
+        screen=screen,
+        groups=groups,
+        filters=filters,
+        month_label=month_label,
+        category_labels=category_labels,
+        to_review=Transaction.query.filter_by(user_id=current_user.id, needs_review=True).count(),
+        categories=TRANSACTION_CATEGORIES,
+        selected=request.args.get("selected", type=int),
+    )
+
+
+@finance_bp.route("/activity/reviewed", methods=["POST"])
+@login_required
+def activity_reviewed():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        return jsonify({"message": "Send the ids as a list of numbers."}), 400
+    return jsonify({"to_review": mark_transactions_reviewed(current_user, ids)})
+
+
+@finance_bp.route("/plan")
+@login_required
+def plan_page():
+    from ...services.screens import history_screen, plan_screen
+
+    try:
+        generate_due_recurring(current_user)
+    except Exception:
+        db.session.rollback()
+
+    plan = plan_screen(current_user)
+    history = history_screen(current_user, 6)
+    today = date.fromisoformat(plan["date"])
+    for bill in plan["bills"]:
+        due = date.fromisoformat(bill["date"])
+        bill["weekday"] = due.strftime("%a").upper()
+        bill["day"] = due.day
+        bill["days_away"] = (due - today).days
+    return render_template(
+        "plan.html",
+        plan=plan,
+        history=history,
+        categories=TRANSACTION_CATEGORIES,
+    )

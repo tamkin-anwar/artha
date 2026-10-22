@@ -5,7 +5,7 @@
 <div class="space-y-6">
     <div>
         <p class="eyebrow" style="margin-bottom:6px;">{{ scenario.category }}</p>
-        <h2 style="font-family:'Fraunces',serif; font-weight:600; font-size:28px; color:var(--text-primary); margin:0;" class="scenario-detail-title truncate">{{ scenario.title }}</h2>
+        <h2 style="font-family:var(--font-display); font-weight:600; font-size:28px; color:var(--text-primary); margin:0;" class="scenario-detail-title truncate">{{ scenario.title }}</h2>
         <p style="color:var(--text-secondary); font-size:14px; margin-top:6px;">
             {# Each scenario's costs are stored in the currency it was saved
                in (Scenario.currency) -- formatted in that currency, not
@@ -108,7 +108,7 @@
             <div class="min-w-0" style="flex:1;">
                 <p class="eyebrow" style="margin-bottom:4px;">AI Verdict</p>
                 <div class="flex flex-wrap items-center gap-2">
-                    <h3 style="font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin:0; color:{{ verdict_color }};">
+                    <h3 style="font-family:var(--font-display); font-weight:600; font-size:19px; margin:0; color:{{ verdict_color }};">
                         {% if verdict.label == 'do_it' %}Do it{% elif verdict.label == 'bad_idea' %}Bad idea{% else %}Wait{% endif %}
                     </h3>
                     <span class="{% if verdict.risk_level == 'low' %}badge-do-it{% elif verdict.risk_level == 'high' %}badge-bad{% else %}badge-wait{% endif %} capitalize" style="font-size:12px; font-weight:600; padding:3px 12px;">
@@ -124,7 +124,7 @@
         <div class="glass-card scenario-card-3" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
-                style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if immediate_cash_impact > 0 %}var(--emerald){% elif immediate_cash_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                style="font-family:var(--font-display); font-weight:600; font-size:24px; color:{% if immediate_cash_impact > 0 %}var(--emerald){% elif immediate_cash_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
                 data-money-value="{{ immediate_cash_impact }}" data-money-currency="{{ scenario.currency or 'USD' }}"
                 data-money-signed="true"
             >{{ "%+.2f"|format(immediate_cash_impact) }}</p>
@@ -133,7 +133,7 @@
         <div class="glass-card scenario-card-4" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
-                style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if monthly_cash_flow > 0 %}var(--emerald){% elif monthly_cash_flow < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                style="font-family:var(--font-display); font-weight:600; font-size:24px; color:{% if monthly_cash_flow > 0 %}var(--emerald){% elif monthly_cash_flow < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
                 data-money-value="{{ monthly_cash_flow }}" data-money-currency="{{ scenario.currency or 'USD' }}"
                 data-money-signed="true"
             >{{ "%+.2f"|format(monthly_cash_flow) }}</p>
@@ -142,7 +142,7 @@
         <div class="glass-card scenario-card-5" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
-                style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if scenario.net_monthly_impact > 0 %}var(--emerald){% elif scenario.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                style="font-family:var(--font-display); font-weight:600; font-size:24px; color:{% if scenario.net_monthly_impact > 0 %}var(--emerald){% elif scenario.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
                 data-money-value="{{ scenario.net_monthly_impact }}" data-money-currency="{{ scenario.currency or 'USD' }}"
                 data-money-signed="true"
             >{{ "%+.2f"|format(scenario.net_monthly_impact) }}</p>
@@ -151,7 +151,7 @@
         <div class="glass-card scenario-card-6" style="padding:16px;">
             <p
                 class="scenario-money stat-number"
-                style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; color:{% if scenario.net_yearly_impact > 0 %}var(--emerald){% elif scenario.net_yearly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                style="font-family:var(--font-display); font-weight:600; font-size:24px; color:{% if scenario.net_yearly_impact > 0 %}var(--emerald){% elif scenario.net_yearly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
                 data-money-value="{{ scenario.net_yearly_impact }}" data-money-currency="{{ scenario.currency or 'USD' }}"
                 data-money-signed="true"
             >{{ "%+.2f"|format(scenario.net_yearly_impact) }}</p>

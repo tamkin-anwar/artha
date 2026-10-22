@@ -1,57 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Accounts{% endblock %}
+{% from "partials/money_macros.html" import tx_mark %}
+{% block title %}Wealth{% endblock %}
 {% block content %}
-
-<style>
-    /* Same icon-circle + Fraunces title + sub-copy empty state shape as
-       Scenarios' own .scenario-empty-* (see scenarios.html) -- kept as
-       this page's own classes rather than shared, matching the existing
-       "each page's CSS stays self-contained" convention. */
-    .accounts-empty-state {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        text-align: center; gap: 10px;
-        padding: 56px 20px;
-        color: var(--text-muted);
-    }
-    .accounts-empty-icon {
-        width: 52px; height: 52px; border-radius: 50%;
-        background: var(--bg-card); border: 1px solid var(--border-subtle);
-        display: flex; align-items: center; justify-content: center;
-        color: var(--violet); margin-bottom: 6px;
-    }
-    .accounts-empty-icon svg { width: 22px; height: 22px; }
-    .accounts-empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-primary); margin: 0; }
-    .accounts-empty-sub { font-size: 13px; max-width: 340px; margin: 0; }
-
-    .account-row {
-        display: flex; align-items: center; gap: 12px;
-        padding: 14px 16px;
-        border-radius: 10px;
-        transition: background 0.12s ease;
-    }
-    .account-row:hover { background: var(--bg-hover); }
-    .account-row + .account-row { border-top: 1px solid var(--border-subtle); }
-
-    .account-stale-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
-    .account-stale-fresh { color: var(--text-muted); }
-    .account-stale-aging { color: var(--amber); background: var(--amber-dim); }
-    .account-stale-stale { color: var(--red); background: var(--red-dim); }
-
-    .account-icon-btn {
-        width: 30px; height: 30px; border-radius: 8px;
-        display: flex; align-items: center; justify-content: center;
-        color: var(--text-muted); text-decoration: none;
-        transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
-        background: none; border: none; cursor: pointer;
-    }
-    .account-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .account-icon-btn:active { transform: scale(0.9); }
-    .account-icon-btn svg { width: 15px; height: 15px; }
-
-    @media (prefers-reduced-motion: reduce) {
-        .account-row, .account-icon-btn { transition: none !important; }
-    }
-</style>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -66,191 +16,104 @@
     {% endif %}
 {% endwith %}
 
-<div class="flex flex-wrap items-start justify-between gap-4 mb-8">
-    <div>
-        <div class="eyebrow" style="margin-bottom:6px;">ACCOUNTS</div>
-        <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0;">Net Worth</h1>
-        <p style="color:var(--text-secondary); font-size:14px; margin-top:4px;">Everything you own, minus everything you owe</p>
+{% set cur = wealth.currency %}
+<div class="page wealth">
+    <header class="page-head">
+        <div class="page-head-text">
+            <span class="page-eyebrow">Everything you own, minus what you owe</span>
+            <h1 class="page-title">Wealth</h1>
+        </div>
+        {% if wealth.accounts %}
+        <div class="page-actions">
+            <a class="btn-inverse btn-small" href="{{ url_for('accounts.add') }}"><i data-lucide="plus" aria-hidden="true" style="width:15px; height:15px;"></i>Add account</a>
+        </div>
+        {% endif %}
+    </header>
+
+    {% if not wealth.accounts %}
+        <div class="card notice" style="max-width:560px;">
+            <div class="notice-icon" aria-hidden="true"><i data-lucide="landmark"></i></div>
+            <div class="notice-text">
+                <span class="notice-title">Add your first account</span>
+                <span>Checking, savings, a credit card, a loan, or what a house or car is worth. Artha adds them up into your net worth and tracks it over time.</span>
+                <a class="link-accent" href="{{ url_for('accounts.add') }}">Add an account</a>
+            </div>
+        </div>
+    {% else %}
+    <div class="cols">
+        <section class="col" aria-label="Net worth">
+            <div class="hero">
+                <span class="hero-switch" style="cursor:default;">Net worth</span>
+                <div class="figure hero-figure">{{ wealth.net_worth|money(cur, true) }}</div>
+                <div class="hero-meta">
+                    {% if change %}
+                        {% if change.amount > 0 %}
+                            <span class="pill pill-good">Up {{ change.amount|money(cur, true) }}</span>
+                        {% elif change.amount < 0 %}
+                            <span class="pill pill-bad">Down {{ (-change.amount)|money(cur, true) }}</span>
+                        {% else %}
+                            <span class="pill pill-good">No change</span>
+                        {% endif %}
+                        <span>since {{ change.since }}</span>
+                    {% else %}
+                        <span>{{ wealth.assets|money(cur, true) }} in assets, {{ wealth.liabilities|money(cur, true) }} owed</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if wealth.history|length >= 2 %}
+            <figure class="pace worth-chart" id="worth-chart" data-currency="{{ cur }}" data-series='{{ wealth.history|tojson }}'>
+                <svg viewBox="0 0 640 230" role="img" aria-label="Net worth over time, from {{ wealth.history[0].net_worth|money(cur, true) }} to {{ wealth.net_worth|money(cur, true) }}"></svg>
+                <figcaption class="pace-labels">
+                    <span>{{ change.since }}</span>
+                    <span data-pace-readout>Today: {{ wealth.net_worth|money(cur, true) }}</span>
+                    <span>Today</span>
+                </figcaption>
+            </figure>
+            {% else %}
+            <p class="empty-note">Update a balance now and then, and the line of your net worth over time starts here.</p>
+            {% endif %}
+
+            <div class="worth-totals">
+                <div class="card"><span class="section-label">Assets</span><b class="figure">{{ wealth.assets|money(cur, true) }}</b></div>
+                <div class="card"><span class="section-label">Owed</span><b class="figure">{{ wealth.liabilities|money(cur, true) }}</b></div>
+            </div>
+        </section>
+
+        <section class="col" aria-label="Accounts">
+            {% for group in groups %}
+            <div class="section">
+                <div class="section-head">
+                    <h2 class="section-label">{{ group.label }}</h2>
+                    <b class="figure">{{ group.total|money(cur, true) }}</b>
+                </div>
+                <div class="card-list">
+                    {% for a in group.accounts %}
+                    <div class="account-line">
+                        <a class="tx-row" href="{{ url_for('accounts.edit', account_id=a.id) }}" aria-label="{{ a.name }}, change balance or details">
+                            <span class="tx-mark" aria-hidden="true">{{ tx_mark(a.name) }}</span>
+                            <span class="tx-text">
+                                <span class="tx-name">{{ a.name }}</span>
+                                <span class="tx-detail">
+                                    {{ a.type_label }} &middot;
+                                    {% if a.staleness == 'stale' %}<span class="is-bad">Updated {{ a.days_since_update }} days ago</span>
+                                    {% elif a.staleness == 'aging' %}<span class="is-caution">Updated {{ a.days_since_update }} days ago</span>
+                                    {% elif a.days_since_update == 0 %}Updated today
+                                    {% elif a.days_since_update == 1 %}Updated yesterday
+                                    {% else %}Updated {{ a.days_since_update }} days ago{% endif %}
+                                </span>
+                            </span>
+                            <span class="tx-figure">{{ '-' if a.is_liability and a.balance|float > 0 }}{{ a.balance|money(a.currency) }}{% if a.display_balance %}<small>&asymp; {{ a.display_balance|money(cur) }}</small>{% endif %}</span>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
     </div>
-    <a href="{{ url_for('accounts.add') }}" class="btn-primary" style="padding:10px 16px; font-size:14px; text-decoration:none;">
-        + Add Account
-    </a>
+    {% endif %}
 </div>
 
-{% if not asset_rows and not liability_rows %}
-    <div class="glass-card accounts-empty-state">
-        <div class="accounts-empty-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M14 9h1"/><path d="M14 13h1"/><path d="M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4"/></svg>
-        </div>
-        <p class="accounts-empty-title">Add your first account</p>
-        <p class="accounts-empty-sub">Checking, savings, a credit card, a loan, an estimated value for a house or car. See your real net worth, not just this month's spending.</p>
-        <a href="{{ url_for('accounts.add') }}" class="btn-primary" style="display:inline-block; margin-top:8px; padding:10px 16px; font-size:14px; text-decoration:none;">
-            Add your first account
-        </a>
-    </div>
-{% else %}
-    {% macro account_rows(rows, empty_text) %}
-        {% if not rows %}
-            <p style="font-size:13px; color:var(--text-muted); padding:8px 0 16px;">{{ empty_text }}</p>
-        {% endif %}
-        {% for row in rows %}
-            {% set a = row.account %}
-            <div class="account-row">
-                <div style="flex:1; min-width:0;">
-                    <div style="font-size:14px; color:var(--text-primary); font-weight:500;">{{ a.name }}</div>
-                    <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">{{ a.type_label }}</div>
-                </div>
-                <div style="text-align:right;">
-                    {# The balance in its own currency, exactly as the account holds it. #}
-                    <div class="accounts-money" data-money-value="{{ a.current_balance }}" data-money-currency="{{ a.currency }}" style="font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary); white-space:nowrap;">{{ a.currency }} {{ '%.2f'|format(a.current_balance) }}</div>
-                    {% if row.is_foreign %}
-                        <div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">&asymp; <span class="accounts-money" data-money-value="{{ row.display_balance }}">{{ '%.2f'|format(row.display_balance) }}</span></div>
-                    {% endif %}
-                    {% if row.staleness == 'fresh' %}
-                        <div class="account-stale-badge account-stale-fresh">Updated recently</div>
-                    {% elif row.staleness == 'aging' %}
-                        <div class="account-stale-badge account-stale-aging">Update this balance</div>
-                    {% else %}
-                        <div class="account-stale-badge account-stale-stale">Balance is stale</div>
-                    {% endif %}
-                </div>
-                <div style="display:flex; gap:4px; flex-shrink:0;">
-                    <a href="{{ url_for('accounts.edit', account_id=a.id) }}" class="account-icon-btn" aria-label="Edit {{ a.name }}" title="Edit">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                    </a>
-                    <form method="POST" action="{{ url_for('accounts.delete', account_id=a.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="account-icon-btn" aria-label="Delete {{ a.name }}" title="Delete">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        {% endfor %}
-    {% endmacro %}
-
-    {# Totals are already converted to the user's display currency server-
-       side; the script below formats them with that currency's own symbol
-       and grouping. They used to be a hardcoded "$" next to the converted
-       number, which read wrong for anyone not displaying USD. #}
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--emerald); display:inline-block;"></span>
-                <span class="eyebrow">Total Assets</span>
-            </div>
-            <div class="stat-number money-positive accounts-money" data-money-value="{{ total_assets }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ '%.2f'|format(total_assets) }}</div>
-        </div>
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block;"></span>
-                <span class="eyebrow">Total Liabilities</span>
-            </div>
-            <div class="stat-number money-negative accounts-money" data-money-value="{{ total_liabilities }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ '%.2f'|format(total_liabilities) }}</div>
-        </div>
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:var(--violet); display:inline-block;"></span>
-                <span class="eyebrow">Net Worth</span>
-            </div>
-            <div class="stat-number {{ 'money-negative' if net_worth < 0 else 'money-positive' }} accounts-money" data-money-value="{{ net_worth }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ '%.2f'|format(net_worth) }}</div>
-        </div>
-    </div>
-
-    {% if chart_points|length >= 2 %}
-        <div class="glass-card dashboard-card-in" style="padding:20px; margin-bottom:24px;">
-            <div class="eyebrow" style="margin-bottom:12px;">Trend</div>
-            <div style="height:200px; position:relative;">
-                <canvas id="net-worth-trend-chart" aria-label="Net worth over time" role="img"></canvas>
-            </div>
-        </div>
-        <script type="application/json" id="net-worth-chart-data">{{ chart_points|tojson }}</script>
-    {% else %}
-        <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:24px; font-size:13px; color:var(--text-secondary);">
-            Come back after a few balance updates to see your net worth trend over time.
-        </div>
-    {% endif %}
-
-    <div class="flex flex-col lg:flex-row gap-6">
-        <div class="glass-card dashboard-card-in flex-1 min-w-0" style="padding:8px 16px;">
-            <div class="eyebrow" style="padding:12px 0 4px;">Assets</div>
-            {{ account_rows(asset_rows, "No asset accounts yet.") }}
-        </div>
-
-        <div class="glass-card dashboard-card-in flex-1 min-w-0" style="padding:8px 16px;">
-            <div class="eyebrow" style="padding:12px 0 4px;">Liabilities</div>
-            {{ account_rows(liability_rows, "No liability accounts yet.") }}
-        </div>
-    </div>
-
-    <script type="module">
-        import { onThemeChange } from "{{ url_for('static', filename='js/theme.js') }}";
-        import { formatMoney, formatMoneyFromElement } from "{{ url_for('static', filename='js/currency.js') }}";
-
-        // Same per-page pass Dashboard (.dashboard-money) and Finance
-        // (.fp-money) run: an element with data-money-currency formats in
-        // that currency (an account's own balance); one without formats in
-        // the user's display currency (every converted total).
-        function formatAccountsMoney() {
-            document.querySelectorAll(".accounts-money[data-money-value]").forEach((el) => {
-                if (!Number.isFinite(parseFloat(el.getAttribute("data-money-value")))) return;
-                el.textContent = formatMoneyFromElement(el);
-            });
-        }
-
-        function getCSSVariable(name) {
-            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-        }
-
-        function renderNetWorthChart() {
-            const canvas = document.getElementById("net-worth-trend-chart");
-            const dataEl = document.getElementById("net-worth-chart-data");
-            if (!canvas || !dataEl || typeof Chart === "undefined") return;
-
-            const points = JSON.parse(dataEl.textContent);
-            const violet = getCSSVariable("--violet") || "#7c3aed";
-            const legendColor = getCSSVariable("--text-secondary") || "#5b6478";
-            const gridColor = getCSSVariable("--border-subtle") || "rgba(0,0,0,0.08)";
-
-            if (canvas._chart) canvas._chart.destroy();
-
-            canvas._chart = new Chart(canvas, {
-                type: "line",
-                data: {
-                    labels: points.map((p) => p.date),
-                    datasets: [{
-                        data: points.map((p) => p.net_worth),
-                        borderColor: violet,
-                        backgroundColor: violet + "22",
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 0,
-                        pointHoverRadius: 4,
-                        borderWidth: 2,
-                    }],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    interaction: { mode: "index", intersect: false },
-                    plugins: {
-                        legend: { display: false },
-                        datalabels: { display: false },
-                        tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.parsed.y) } },
-                    },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: legendColor, maxTicksLimit: 6 } },
-                        y: { grid: { color: gridColor }, ticks: { color: legendColor, maxTicksLimit: 5, callback: (v) => formatMoney(v, { wholeUnits: true }) } },
-                    },
-                },
-            });
-        }
-
-        formatAccountsMoney();
-        renderNetWorthChart();
-        document.addEventListener("currency-refresh-ui", () => { formatAccountsMoney(); renderNetWorthChart(); });
-        onThemeChange(() => setTimeout(renderNetWorthChart, 50));
-    </script>
-{% endif %}
+<script type="module" src="{{ url_for('static', filename='js/wealth.js') }}"></script>
 {% endblock %}

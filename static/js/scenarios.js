@@ -119,7 +119,7 @@ function initCompareModal() {
                 (s) => `
                 <div style="min-width:200px; flex:1; border:1px solid var(--border-subtle); border-radius:12px; padding:16px; background:var(--bg-card);">
                     <p class="eyebrow" style="margin-bottom:4px;">${escapeHtml(s.category)}</p>
-                    <h3 style="font-family:'Fraunces',serif; font-size:17px; font-weight:600; color:var(--text-primary); margin:0 0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.title)}</h3>
+                    <h3 style="font-family:var(--font-display); font-size:17px; font-weight:600; color:var(--text-primary); margin:0 0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.title)}</h3>
                     <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
                         <span class="${VERDICT_CLASS[s.verdict_label] || "badge-wait"}" style="font-size:11px; padding:3px 10px;">${VERDICT_LABEL[s.verdict_label] || "Wait"}</span>
                         <span class="${RISK_CLASS[s.risk_level] || "badge-wait"} capitalize" style="font-size:11px; padding:3px 10px;">${escapeHtml(s.risk_level)} risk</span>

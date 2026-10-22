@@ -79,6 +79,11 @@ function initCsvImport() {
     }
 
     openBtn.addEventListener("click", openModal);
+    // Activity's and Today's "Import" links land here as /finance#import.
+    if (window.location.hash === "#import") {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        openModal();
+    }
     closeBtn.addEventListener("click", closeModal);
     backdrop.addEventListener("mousedown", (e) => {
         if (e.target === backdrop) closeModal();
@@ -101,7 +106,7 @@ function initCsvImport() {
                     <td><input type="checkbox" class="csv-import-row-check" ${dupe ? "" : "checked"}></td>
                     <td>${escapeHtml(row.date)}</td>
                     <td class="csv-import-desc">${escapeHtml(row.description)}${dupe ? ' <span class="csv-import-badge">already imported</span>' : ""}</td>
-                    <td style="text-align:right; font-family:'JetBrains Mono',monospace;">${Number(row.amount).toFixed(2)}</td>
+                    <td style="text-align:right; font-family:var(--font-figure);">${Number(row.amount).toFixed(2)}</td>
                     <td>
                         <select class="csv-import-row-type">
                             <option value="expense" ${row.type === "expense" ? "selected" : ""}>Expense</option>

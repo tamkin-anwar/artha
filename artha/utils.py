@@ -1,7 +1,7 @@
 import calendar
 import re
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
@@ -22,6 +22,46 @@ CURRENCY_CODES = {"USD", "GBP", "EUR", "BDT", "CAD", "AUD"}
 # — also matches currency.js's CURRENCY_PRESETS.
 CURRENCY_SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€", "BDT": "৳", "CAD": "$", "AUD": "$"}
 
+
+
+def _group_digits(whole: str, currency: str) -> str:
+    """Thousands separators the way the person's currency writes them:
+    BDT uses lakh/crore grouping (12,34,567), matching currency.js's en-IN
+    locale for it; everything else groups by three."""
+    if currency != "BDT" or len(whole) <= 3:
+        return f"{int(whole):,}"
+    head, tail = whole[:-3], whole[-3:]
+    pairs = []
+    while len(head) > 2:
+        pairs.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        pairs.insert(0, head)
+    return ",".join(pairs + [tail])
+
+
+def format_money(value, currency: str = "USD", whole: bool = False) -> str:
+    """A money string or number ("1284.5") as the person reads it
+    ("$1,284.50"), server-side, for the redesigned pages that render the
+    services.screens dicts directly. `whole` drops the cents (a hero
+    figure, a chart label). Negative amounts read "-$12.00". Never used
+    to convert: `value` must already be in `currency`."""
+    if value is None or value == "":
+        return ""
+    amount = value if isinstance(value, Decimal) else Decimal(str(value))
+    places = Decimal("1") if whole else Decimal("0.01")
+    amount = amount.quantize(places, rounding=ROUND_HALF_UP)
+    sign = "-" if amount < 0 else ""
+    text = f"{abs(amount):.{0 if whole else 2}f}"
+    whole_part, _, cents = text.partition(".")
+    grouped = _group_digits(whole_part, currency)
+    symbol = CURRENCY_SYMBOLS.get(currency, "")
+    if currency == "EUR":
+        # German-style, as currency.js formats euros everywhere else
+        # (its de-DE locale): 1.234,56 €.
+        grouped = grouped.replace(",", ".")
+        return f"{sign}{grouped}" + (f",{cents}" if cents else "") + f" {symbol}"
+    return f"{sign}{symbol}{grouped}" + (f".{cents}" if cents else "")
 
 def is_ajax_request() -> bool:
     """True when the request expects a JSON response rather than a full page."""

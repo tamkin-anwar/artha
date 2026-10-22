@@ -1,0 +1,34 @@
+{% from "partials/money_macros.html" import tx_mark, tx_amount %}
+{# One page of Activity, grouped by day. Rendered into the page and again
+   on its own for "Show more" (static/js/activity.js merges a day that
+   spans two pages). #}
+{% set cur = screen.currency %}
+{% for group in groups %}
+<section class="day" data-day="{{ group.iso }}" aria-label="{{ group.label }}">
+    <h2 class="day-head">
+        <span>{{ group.label }}</span>
+        <span class="day-total" data-day-total="{{ group.spent }}">{% if group.spent %}{{ group.spent|money(cur) }}{% endif %}</span>
+    </h2>
+    {% for tx in group['items'] %}
+    <a class="tx-row activity-row{{ ' is-upcoming' if tx.upcoming }}" href="?selected={{ tx.id }}" data-tx-id="{{ tx.id }}" data-tx='{{ tx|tojson|forceescape }}'>
+        <span class="tx-mark" aria-hidden="true">{{ tx_mark(tx.description) }}</span>
+        <span class="tx-text">
+            <span class="tx-name">{{ tx.description }}</span>
+            <span class="tx-detail">
+                {{- tx.category_label -}}
+                {%- if tx.needs_review %} &middot; <span class="review-dot">To review</span>{% endif -%}
+                {%- if tx.upcoming %} &middot; Scheduled{% endif -%}
+                {%- if tx.is_recurring %} &middot; {{ {'weekly': 'Repeats weekly', 'biweekly': 'Every 2 weeks'}.get(tx.recurrence_interval, 'Repeats monthly') }}{% endif -%}
+                {%- if tx.source == 'apple_pay' %} &middot; Apple Pay{% endif -%}
+            </span>
+        </span>
+        {{ tx_amount(tx, cur) }}
+    </a>
+    {% endfor %}
+</section>
+{% endfor %}
+{% if screen.next_offset %}
+<div class="show-more" data-next-offset="{{ screen.next_offset }}">
+    <button type="button" class="btn-quiet btn-small" data-show-more>Show more</button>
+</div>
+{% endif %}

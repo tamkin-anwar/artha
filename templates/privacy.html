@@ -16,13 +16,13 @@
                 />
             </span>
 
-            <div style="font-family:'Fraunces',serif; font-size:2.25rem; font-weight:600; color:var(--gold);">
+            <div style="font-family:var(--font-display); font-size:2.25rem; font-weight:700; letter-spacing:-0.5px; color:var(--text-primary);">
                 Artha
             </div>
         </div>
 
         <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Privacy and security">
-            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold mb-2">
+            <h1 style="font-family:var(--font-display);" class="text-center text-2xl font-semibold mb-2">
                 Privacy &amp; Security
             </h1>
             <p class="text-center text-sm text-secondary mb-8">
@@ -50,7 +50,7 @@
 
             <div class="space-y-7">
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">Where your data lives</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Where your data lives</h2>
                     <p class="text-sm text-secondary leading-relaxed">
                         Everything you enter into Artha, transactions, account balances, notes, scenarios, calendar events, lives in a single
                         Postgres database hosted on Render, a SOC 2 Type II and ISO 27001 certified infrastructure
@@ -60,7 +60,7 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">How your account is protected</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">How your account is protected</h2>
                     <ul class="text-sm text-secondary space-y-2">
                         <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Your password is hashed</strong>, never stored in plain text. Not even Artha's own operator can read it back.</span></li>
                         <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Two-factor authentication is optional and free</strong>: a code from an authenticator app on top of your password, with one-time recovery codes for a lost phone.</span></li>
@@ -70,18 +70,18 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">Your bank statement, step by step</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Your bank statement, step by step</h2>
                     <ol class="text-sm text-secondary space-y-2">
-                        <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5" >1.</span><span>You upload a PDF or CSV. It's read directly from the upload into memory, never written to disk or any storage bucket, anywhere.</span></li>
-                        <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">2.</span><span>A free, offline parser reads it first, entirely on Artha's own server. No external call, no cost, for the large majority of statements.</span></li>
-                        <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">3.</span><span>Only if that fails, the extracted text, never the original file, is sent once to Claude to make sense of an unusual layout.</span></li>
-                        <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">4.</span><span>You review every row before anything is saved. Edit or uncheck any line first.</span></li>
-                        <li class="flex gap-3"><span style="font-family:'JetBrains Mono',monospace;" class="text-xs mt-0.5">5.</span><span>You click Import, or you don't. Close the tab instead, and nothing from that statement was ever saved.</span></li>
+                        <li class="flex gap-3"><span style="font-family:var(--font-figure);" class="text-xs mt-0.5" >1.</span><span>You upload a PDF or CSV. It's read directly from the upload into memory, never written to disk or any storage bucket, anywhere.</span></li>
+                        <li class="flex gap-3"><span style="font-family:var(--font-figure);" class="text-xs mt-0.5">2.</span><span>A free, offline parser reads it first, entirely on Artha's own server. No external call, no cost, for the large majority of statements.</span></li>
+                        <li class="flex gap-3"><span style="font-family:var(--font-figure);" class="text-xs mt-0.5">3.</span><span>Only if that fails, the extracted text, never the original file, is sent once to Claude to make sense of an unusual layout.</span></li>
+                        <li class="flex gap-3"><span style="font-family:var(--font-figure);" class="text-xs mt-0.5">4.</span><span>You review every row before anything is saved. Edit or uncheck any line first.</span></li>
+                        <li class="flex gap-3"><span style="font-family:var(--font-figure);" class="text-xs mt-0.5">5.</span><span>You click Import, or you don't. Close the tab instead, and nothing from that statement was ever saved.</span></li>
                     </ol>
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">The AI Assistant</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">The AI Assistant</h2>
                     <p class="text-sm text-secondary leading-relaxed mb-2">
                         When you ask it something, it's handed a snapshot built for that one question, your budgets,
                         upcoming notes and events, and recent transactions, not a permanent memory of everything you've
@@ -96,7 +96,7 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">The iPhone app</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">The iPhone app</h2>
                     <ul class="text-sm text-secondary space-y-2">
                         <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">Your password isn't kept on the phone.</strong> Signing in gives that one iPhone its own key, held in the iPhone's Keychain. Artha's server stores only a one-way hash of it, and signing out, changing your password, or deleting your account turns it off.</span></li>
                         <li class="flex gap-2"><span style="color:var(--emerald);" class="mt-0.5">&#10003;</span><span><strong class="text-primary">A copy of your latest numbers stays on the phone</strong> so the app opens instantly. It's encrypted whenever the phone is locked, and erased when you sign out. The copy your widgets read is unlocked after the first unlock since the phone last restarted, so Lock Screen widgets can show it.</span></li>
@@ -109,7 +109,7 @@
                 </div>
 
                 <div>
-                    <h2 style="font-family:'Fraunces',serif;" class="text-lg font-semibold mb-2">What Artha doesn't do</h2>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">What Artha doesn't do</h2>
                     <ul class="text-sm text-secondary space-y-2">
                         <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't sell or share your data with advertisers, data brokers, or anyone else.</span></li>
                         <li class="flex gap-2"><span style="color:var(--red);" class="mt-0.5">&#10005;</span><span>Doesn't run analytics or ad-tracking scripts of any kind.</span></li>
@@ -128,7 +128,7 @@
 
             <p class="text-center text-sm mt-5">
                 {% if current_user.is_authenticated %}
-                    <a href="{{ url_for('dashboard.index') }}" class="auth-link">Back to dashboard</a>
+                    <a href="{{ url_for('dashboard.index') }}" class="auth-link">Back to Today</a>
                 {% else %}
                     <a href="{{ url_for('auth.login') }}" class="auth-link">Back to login</a>
                 {% endif %}

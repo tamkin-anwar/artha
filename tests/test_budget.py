@@ -91,12 +91,13 @@ def test_finance_page_shows_over_tier_past_cap(auth_client, user):
     assert b"over budget" in resp.data
 
 
-def test_dashboard_banner_hidden_when_under_threshold(auth_client, user):
+def test_dashboard_shows_on_pace_when_under_threshold(auth_client, user):
     _add_expense(user, "100")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
     resp = auth_client.get("/")
-    assert b"monthly budget" not in resp.data
+    assert b"Over budget" not in resp.data
+    assert b"5% of your $2,000 budget" in resp.data
 
 
 def test_dashboard_banner_shown_when_over_cap(auth_client, user):
@@ -104,13 +105,10 @@ def test_dashboard_banner_shown_when_over_cap(auth_client, user):
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
     body = auth_client.get("/").get_data(as_text=True)
-    # The dollar figures are wrapped in spans (client-side reformatted to
-    # the user's chosen currency) rather than plain inline text — assert
-    # on the surrounding copy and the value separately instead of one
-    # exact substring.
-    assert "over your" in body
-    assert "monthly budget" in body
-    assert 'data-money-value="2000.0"' in body
+    # Formatted server-side in the user's own currency (utils.format_money).
+    assert "Over budget" in body
+    assert "$500 over, counting bills still due" in body
+    assert "125% of your $2,000 budget" in body
 
 
 def test_dashboard_matches_finance_tier_at_exact_boundary(auth_client, user):
@@ -126,7 +124,7 @@ def test_dashboard_matches_finance_tier_at_exact_boundary(auth_client, user):
     dashboard_resp = auth_client.get("/")
 
     assert b"getting close" in finance_resp.data
-    assert b"spent 90% of your" in dashboard_resp.data
+    assert b"90% of your" in dashboard_resp.data
 
 
 # --- Pure unit tests for the shared threshold logic itself ---
@@ -154,13 +152,18 @@ def test_budget_status_over_tier_at_boundary():
 # --- "Safe to spend" (dashboard) ---
 
 
+def _safe_value(body: str) -> str:
+    """The Safe to spend figure on Today, as the two-decimal string the
+    page carries in data-amount (services/screens.py's money())."""
+    after = body.split('data-hero-view="safe"', 1)[1]
+    return after.split('data-amount="', 1)[1].split('"', 1)[0]
+
+
 def test_dashboard_safe_to_spend_absent_without_a_budget(auth_client, user):
     _add_expense(user, "100")
     body = auth_client.get("/").get_data(as_text=True)
-    # ">Safe to Spend<", not the bare phrase -- the template's own HTML
-    # comment above the card mentions "Safe to Spend" too, and that
-    # comment renders regardless of whether the card itself does.
-    assert ">Safe to Spend<" not in body
+    assert 'data-hero-view="safe"' not in body
+    assert "Set a budget" in body
 
 
 def test_dashboard_safe_to_spend_is_cap_minus_spent_with_no_upcoming_bills(auth_client, user):
@@ -168,8 +171,8 @@ def test_dashboard_safe_to_spend_is_cap_minus_spent_with_no_upcoming_bills(auth_
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
     body = auth_client.get("/").get_data(as_text=True)
-    assert ">Safe to Spend<" in body
-    assert 'data-money-value="1500.0"' in body
+    assert 'data-hero-view="safe"' in body
+    assert _safe_value(body) == "1500.00"
 
 
 def test_dashboard_safe_to_spend_nets_out_an_upcoming_recurring_bill(auth_client, user):
@@ -201,9 +204,9 @@ def test_dashboard_safe_to_spend_nets_out_an_upcoming_recurring_bill(auth_client
     db.session.commit()
 
     body = auth_client.get("/").get_data(as_text=True)
-    # 2000 cap - 500 already spent - 300 upcoming = 1200
-    assert 'data-money-value="1200.0"' in body
-    assert "in upcoming bills" in body
+    # 2000 cap - 500 already spent - 300 upcoming = 1200 (Today's catch-up
+    # posts this month's Rent ahead, so it counts as spent already).
+    assert _safe_value(body) == "1200.00"
 
 
 def test_dashboard_safe_to_spend_ignores_a_bill_already_posted_this_month(auth_client, user):
@@ -231,4 +234,4 @@ def test_dashboard_safe_to_spend_ignores_a_bill_already_posted_this_month(auth_c
 
     body = auth_client.get("/").get_data(as_text=True)
     # 2000 cap - (500 + 300 already spent) - 0 upcoming = 1200, not 900.
-    assert 'data-money-value="1200.0"' in body
+    assert _safe_value(body) == "1200.00"

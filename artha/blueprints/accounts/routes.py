@@ -161,20 +161,6 @@ def net_worth_summary(user) -> dict | None:
     }
 
 
-def _staleness_tier(balance_updated_at: datetime) -> str:
-    """Visual staleness indicator, the cheap research-backed alternative to
-    a full push-reminder system for keeping manual balances honest."""
-    updated = balance_updated_at
-    if updated.tzinfo is None:
-        updated = updated.replace(tzinfo=timezone.utc)
-    days = (datetime.now(timezone.utc) - updated).days
-    if days >= 90:
-        return "stale"
-    if days >= 30:
-        return "aging"
-    return "fresh"
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -182,56 +168,37 @@ def _staleness_tier(balance_updated_at: datetime) -> str:
 @accounts_bp.route("/")
 @login_required
 def index():
-    rates = get_rates()
-    accounts, total_assets_usd, total_liabilities_usd = _account_balances_usd(current_user.id, rates)
+    """Wealth: net worth now and over time, and every account behind it,
+    from the same dict the native app's Wealth tab reads
+    (services/screens.py's wealth_screen)."""
+    from ...services.screens import wealth_screen
 
-    display_currency = current_user.preferred_currency or "USD"
-    total_assets = float(convert_usd_to(total_assets_usd, display_currency, rates))
-    total_liabilities = float(convert_usd_to(total_liabilities_usd, display_currency, rates))
-    net_worth = total_assets - total_liabilities
+    wealth = wealth_screen(current_user)
+    groups = {"cash": "Cash", "investments": "Investments", "property": "Property", "debts": "Debts"}
+    grouped = []
+    for key, label in groups.items():
+        rows = [a for a in wealth["accounts"] if a["group"] == key]
+        if not rows:
+            continue
+        for a in rows:
+            days = a["days_since_update"] or 0
+            a["staleness"] = "stale" if days >= 90 else ("aging" if days >= 30 else "fresh")
+        total = sum(
+            (Decimal(a["display_balance"] or a["balance"]) for a in rows),
+            Decimal("0"),
+        )
+        grouped.append({"key": key, "label": label, "accounts": rows, "total": total})
 
-    accounts_view = []
-    for a in accounts:
-        accounts_view.append({
-            "account": a,
-            "staleness": _staleness_tier(a.balance_updated_at),
-            # Shown as a muted "≈" line under a balance held in a different
-            # currency than the one the user displays everything in, so
-            # it's visible how that account feeds the converted totals.
-            "is_foreign": (a.currency or "USD") != display_currency,
-            "display_balance": float(convert_amount(a.current_balance, a.currency or "USD", display_currency, rates)),
-        })
-    asset_rows = [row for row in accounts_view if not row["account"].is_liability]
-    liability_rows = [row for row in accounts_view if row["account"].is_liability]
-
-    # Trend chart needs at least two points to draw a line that means
-    # anything — a single dot (every brand-new user, day one) isn't a
-    # trend, it's just today's number restated, so the template shows a
-    # "come back after a few updates" note instead of an empty-looking chart.
-    snapshots = (
-        NetWorthSnapshot.query.filter_by(user_id=current_user.id)
-        .order_by(NetWorthSnapshot.snapshot_date.asc())
-        .all()
-    )
-    chart_points = [
-        {
-            "date": s.snapshot_date.strftime("%Y-%m-%d"),
-            "net_worth": float(convert_usd_to(s.net_worth_usd, display_currency, rates)),
+    change = None
+    history = wealth["history"]
+    if len(history) >= 2:
+        first, last = history[0], history[-1]
+        change = {
+            "amount": Decimal(last["net_worth"]) - Decimal(first["net_worth"]),
+            "since": datetime.strptime(first["date"], "%Y-%m-%d").strftime("%b %-d, %Y"),
         }
-        for s in snapshots
-    ]
 
-    return render_template(
-        "accounts.html",
-        asset_rows=asset_rows,
-        liability_rows=liability_rows,
-        total_assets=total_assets,
-        total_liabilities=total_liabilities,
-        net_worth=net_worth,
-        chart_points=chart_points,
-        account_types=ACCOUNT_TYPES,
-        currency_codes=sorted(CURRENCY_CODES),
-    )
+    return render_template("accounts.html", wealth=wealth, groups=grouped, change=change)
 
 
 @accounts_bp.route("/add", methods=["GET", "POST"])

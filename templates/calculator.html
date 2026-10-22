@@ -79,7 +79,7 @@
         resize: none;
         overflow: hidden;
         color: var(--text-primary);
-        font-family: 'Inter', sans-serif;
+        font-family:var(--font-body);
         font-size: 14px;
         line-height: 36px;
         padding: 0 16px;
@@ -97,7 +97,7 @@
         line-height: 36px;
         padding: 0 14px;
         text-align: right;
-        font-family: 'JetBrains Mono', monospace;
+        font-family:var(--font-figure);
         font-size: 14px;
         color: var(--gold);
         white-space: nowrap;
@@ -160,14 +160,14 @@
         border-radius: 0 0 12px 12px;
     }
     .expr-total-label {
-        font-family: 'Inter', sans-serif;
+        font-family:var(--font-body);
         font-size: 12px;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--text-secondary);
     }
     .expr-total-value {
-        font-family: 'JetBrains Mono', monospace;
+        font-family:var(--font-figure);
         font-size: 18px;
         font-weight: 600;
         color: var(--gold);
@@ -178,7 +178,7 @@
         height: 68px;
         border: none;
         border-radius: 16px;
-        font-family: 'JetBrains Mono', monospace;
+        font-family:var(--font-figure);
         font-size: 20px;
         cursor: pointer;
         transition: transform 0.08s ease;
@@ -186,8 +186,8 @@
     .calc-btn:hover { filter: brightness(1.15); }
     .calc-btn:active { transform: scale(0.93); }
     .calc-btn-number { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-subtle); }
-    .calc-btn-operator { background: rgba(212,168,67,0.15); color: var(--gold); border: 1px solid rgba(212,168,67,0.25); }
-    .calc-btn-equals { background: var(--gold); color: #000; font-weight: 700; font-size: 24px; }
+    .calc-btn-operator { background: color-mix(in srgb, var(--gold) 15%, transparent); color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); }
+    .calc-btn-equals { background: var(--gold); color: var(--on-accent); font-weight: 700; font-size: 24px; }
     .calc-btn-clear { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
     .calc-btn-func { background: var(--bg-hover); color: var(--text-secondary); }
 
@@ -202,7 +202,7 @@
 </style>
 
 <div class="eyebrow" style="margin-bottom:8px;">CALCULATOR</div>
-<h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Quick math, no tab-switching</h1>
+<h1 class="page-title" style="margin:0 0 24px;">Quick math, no tab-switching</h1>
 
 <div class="calc-page-layout">
     <!-- LEFT: Smart expression editor -->
@@ -239,8 +239,8 @@
         <input type="text" id="calc-keyboard-input" aria-hidden="true" tabindex="-1">
 
         <div style="text-align:right; margin-bottom:16px; padding:0 4px;">
-            <div id="calc-expr-line" style="font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-secondary); min-height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">&nbsp;</div>
-            <div id="calc-result-display" style="font-family:'Fraunces',serif; font-size:42px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">0</div>
+            <div id="calc-expr-line" style="font-family:var(--font-figure); font-size:14px; color:var(--text-secondary); min-height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">&nbsp;</div>
+            <div id="calc-result-display" style="font-family:var(--font-display); font-size:42px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">0</div>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; border-radius:16px; overflow:hidden;">

@@ -50,7 +50,7 @@
     .cal-day-cell.cal-day-is-today .cal-day-number {
         display: inline-flex; align-items: center; justify-content: center;
         width: 20px; height: 20px; border-radius: 50%;
-        background: var(--gold); color: #000; font-weight: 600;
+        background: var(--gold); color: var(--on-accent); font-weight: 600;
     }
     .cal-dots { display: flex; align-items: center; gap: 3px; margin-top: auto; }
     .cal-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
@@ -59,7 +59,7 @@
        + expense on the same date) still read as a single clean signal. */
     .cal-day-net {
         display: inline-flex; align-items: center; align-self: flex-start;
-        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+        font-family:var(--font-figure); font-size: 10px; font-weight: 600;
         padding: 2px 7px; border-radius: 999px; margin-top: 4px; line-height: 1.3;
         white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
     }
@@ -105,7 +105,7 @@
     .cal-schedule-hour-label {
         position: absolute; left: 8px; width: 34px; text-align: right;
         font-size: 10px; color: var(--text-muted); transform: translateY(-6px);
-        font-family: 'JetBrains Mono', monospace; pointer-events: none;
+        font-family:var(--font-figure); pointer-events: none;
     }
     .cal-schedule-now-line { position: absolute; left: 46px; right: 6px; height: 2px; background: var(--gold); z-index: 3; pointer-events: none; }
     .cal-schedule-now-dot { position: absolute; left: -5px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
@@ -147,7 +147,7 @@
     .dark .cal-event-modal { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
     .cal-event-modal-title {
         display: block; width: 100%; box-sizing: border-box; border: none; outline: none;
-        background: none; color: var(--text-primary); font-family: 'Fraunces', serif;
+        background: none; color: var(--text-primary); font-family:var(--font-display);
         font-size: 21px; font-weight: 500; padding: 0 0 14px; margin-bottom: 18px;
         border-bottom: 1px solid var(--border-subtle);
     }
@@ -264,7 +264,7 @@
 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:14px;">
     <div style="display:flex; align-items:center; gap:6px;">
         <a href="{{ url_for('dashboard.calendar_page', month=prev_month_value) }}" class="cal-nav-btn" aria-label="Previous month">&lt;</a>
-        <h1 style="font-family:'Fraunces',serif; font-size:28px; font-weight:400; color:var(--text-primary); margin:0; min-width:200px; text-align:center;">{{ month_label }}</h1>
+        <h1 class="page-title" style="margin:0; min-width:200px; text-align:center;">{{ month_label }}</h1>
         <a href="{{ url_for('dashboard.calendar_page', month=next_month_value) }}" class="cal-nav-btn" aria-label="Next month">&gt;</a>
     </div>
     <div style="display:flex; gap:10px;" class="cal-toolbar-btn-row">
@@ -485,12 +485,12 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
 
         var html = "";
         html += '<div style="margin-bottom:18px;">';
-        html += '<div style="font-family:\'Fraunces\',serif; font-size:26px; color:var(--text-primary);">' + header.dayName + '</div>';
+        html += '<div style="font-family:var(--font-display); font-size:26px; color:var(--text-primary);">' + header.dayName + '</div>';
         html += '<div style="font-size:13px; color:var(--text-secondary); margin-top:2px;">' + header.fullDate + '</div>';
         html += '</div>';
 
         html += '<div class="cal-schedule">';
-        html += '<div class="cal-section-label" style="margin:0;">Schedule</div>';
+        html += '<div class="cal-section-label">Schedule</div>';
         html += '<p class="cal-schedule-hint">Drag to block time</p>';
         html += '<div class="cal-schedule-viewport scrollbar-thin" id="schedule-viewport">';
         html += '<div class="cal-schedule-grid" id="schedule-grid"></div>';
@@ -527,7 +527,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                     html += '<div style="font-size:14px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:4px;">' + '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + '</span>' + (t.is_recurring ? '<i data-lucide="repeat" aria-hidden="true" style="width:11px; height:11px; stroke-width:2; color:var(--gold); flex-shrink:0;"></i>' : '') + '</div>';
                     html += '<span class="cal-type-badge ' + t.type + '">' + t.type + '</span>';
                     html += '</div>';
-                    html += '<div style="font-family:\'JetBrains Mono\',monospace; font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + escapeHtml(formatMoneyIn(Math.abs(t.amount), t.currency)) + '</div>';
+                    html += '<div style="font-family:var(--font-figure); font-size:14px; color:' + color + '; white-space:nowrap;">' + (signedAmount >= 0 ? "+" : "-") + escapeHtml(formatMoneyIn(Math.abs(t.amount), t.currency)) + '</div>';
                     html += '</div>';
                 });
                 html += '</div>';
@@ -535,7 +535,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 var netColor = net >= 0 ? "var(--emerald)" : "var(--red)";
                 html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-subtle);">';
                 html += '<span style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Net</span>';
-                html += '<span style="font-family:\'JetBrains Mono\',monospace; font-size:16px; font-weight:600; color:' + netColor + ';">' + formatMoney(net) + '</span>';
+                html += '<span style="font-family:var(--font-figure); font-size:16px; font-weight:600; color:' + netColor + ';">' + formatMoney(net) + '</span>';
                 html += '</div>';
             }
 

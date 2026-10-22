@@ -1,0 +1,41 @@
+{# Shared pieces of the redesigned money pages (Today, Activity, Plan,
+   Wealth). Each takes the dicts from services/screens.py as they are. #}
+
+{% macro tx_mark(name) -%}
+    {%- set words = (name or "").split() -%}
+    {%- if words|length > 1 -%}{{ (words[0][0] ~ words[1][0])|upper }}{%- else -%}{{ (name or "?")[:2]|upper }}{%- endif -%}
+{%- endmacro %}
+
+{# One transaction's own amount, in its own currency, never converted
+   (CLAUDE.md's multi-currency rule). A foreign one carries its
+   converted equivalent underneath, separately. #}
+{% macro tx_amount(tx, display_currency) -%}
+    <span class="tx-figure{{ ' tx-income' if tx.type == 'income' }}">
+        {{- '+' if tx.type == 'income' }}{{ tx.amount|money(tx.currency) -}}
+        {%- if tx.display_amount %}<small>about {{ tx.display_amount|money(display_currency) }}</small>{% endif -%}
+    </span>
+{%- endmacro %}
+
+{% macro check_icon() -%}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
+{%- endmacro %}
+
+{% macro alert_icon() -%}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>
+{%- endmacro %}
+
+{# The status capsule shared by Today and Plan: on pace, ahead of pace,
+   or over budget. #}
+{% macro pace_pill(status) -%}
+    {%- if status == 'over' -%}
+        <span class="pill pill-bad">{{ alert_icon() }}Over budget</span>
+    {%- elif status == 'ahead' -%}
+        <span class="pill pill-caution">{{ alert_icon() }}Ahead of pace</span>
+    {%- elif status == 'on_pace' -%}
+        <span class="pill pill-good">{{ check_icon() }}On pace</span>
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro per_day_line(per_day, days_left, currency) -%}
+    {{ per_day|money(currency, true) }} a day for {{ days_left }} {{ 'day' if days_left == 1 else 'days' }}
+{%- endmacro %}

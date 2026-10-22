@@ -51,7 +51,7 @@
     </a>
 
     <div class="eyebrow" style="margin-bottom:6px;">SCENARIOS</div>
-    <h1 style="font-family:'Fraunces',serif; font-size:26px; font-weight:600; color:var(--text-primary); margin:0 0 24px;">{{ "Edit Scenario" if mode == "edit" else "New Scenario" }}</h1>
+    <h1 class="page-title" style="margin:0 0 24px;">{{ "Edit Scenario" if mode == "edit" else "New Scenario" }}</h1>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -149,7 +149,7 @@
                             type="number" id="cost_input_one_time_cost" step="0.01" min="0"
                             value="{{ '%.2f'|format(init_one_time|float) }}"
                             class="field-input w-full"
-                            style="padding-left:2.25rem; font-family:'JetBrains Mono',monospace;"
+                            style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
                     <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">A single payment: flights, purchases, deposits</p>
@@ -163,7 +163,7 @@
                             type="number" id="cost_input_monthly_cost" step="0.01" min="0"
                             value="{{ '%.2f'|format(init_monthly_cost|float) }}"
                             class="field-input w-full"
-                            style="padding-left:2.25rem; font-family:'JetBrains Mono',monospace;"
+                            style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
                     <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Recurring cost each month: rent, subscriptions, loan payments</p>
@@ -177,7 +177,7 @@
                             type="number" id="cost_input_monthly_savings" step="0.01" min="0"
                             value="{{ '%.2f'|format(init_monthly_savings|float) }}"
                             class="field-input w-full"
-                            style="padding-left:2.25rem; font-family:'JetBrains Mono',monospace;"
+                            style="padding-left:2.25rem; font-family:var(--font-figure);"
                         >
                     </div>
                     <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">Money set aside each month toward a goal</p>

@@ -541,33 +541,3 @@ def archive(scenario_id):
         flash("Error archiving scenario.", "error")
         return redirect(url_for("scenarios.index"))
 
-
-# ---------------------------------------------------------------------------
-# Dashboard widget data — registered here (not in dashboard/routes.py) so the
-# widget's data is available to templates/index.html without modifying the
-# existing dashboard blueprint.
-# ---------------------------------------------------------------------------
-
-@scenarios_bp.app_context_processor
-def inject_scenario_widget_data():
-    if not current_user.is_authenticated or request.endpoint != "dashboard.index":
-        return {}
-
-    active = (
-        Scenario.query.filter_by(user_id=current_user.id, status="active")
-        .order_by(Scenario.created_at.desc())
-        .all()
-    )
-    total_monthly_impact = sum((s.net_monthly_impact for s in active), Decimal("0"))
-    top_three = active[:3]
-
-    return {
-        "scenario_widget_scenarios": top_three,
-        "scenario_widget_total_count": len(active),
-        "scenario_widget_total_monthly_impact": total_monthly_impact,
-        # Same _verdict() the detail/list pages use — previously this
-        # widget computed its own simplified verdict inline in the
-        # template, so it could disagree with the detail page for the
-        # exact same scenario.
-        "scenario_widget_verdicts": {s.id: _verdict(s) for s in top_three},
-    }

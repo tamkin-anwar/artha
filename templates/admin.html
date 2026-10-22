@@ -23,7 +23,7 @@
         background: var(--bg-card); transition: background 0.15s ease, color 0.15s ease;
     }
     .admin-status-tab:hover { background: var(--bg-hover); }
-    .admin-status-tab.admin-status-active { background: var(--gold); color: #000; border-color: var(--gold); }
+    .admin-status-tab.admin-status-active { background: var(--gold); color: var(--on-accent); border-color: var(--gold); }
 
     .admin-feedback-card { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: var(--bg-card); }
     .admin-feedback-card:last-child { margin-bottom: 0; }
@@ -45,7 +45,7 @@
 </style>
 
 <div class="eyebrow" style="margin-bottom:8px;">ADMIN</div>
-<h1 style="font-family:'Fraunces',serif; font-size:28px; font-weight:400; color:var(--text-primary); margin:0 0 24px;">Overview</h1>
+<h1 class="page-title" style="margin:0 0 24px;">Overview</h1>
 
 <!-- Stat cards -->
 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
@@ -56,7 +56,7 @@
             </span>
             <span class="eyebrow">Users</span>
         </div>
-        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_users }}</div>
+        <div class="stat-number" style="font-family:var(--font-figure); font-size:24px;">{{ total_users }}</div>
     </div>
     <div class="glass-card" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -65,7 +65,7 @@
             </span>
             <span class="eyebrow">Open feedback</span>
         </div>
-        <div id="admin-open-count-tile" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ open_count }}</div>
+        <div id="admin-open-count-tile" class="stat-number" style="font-family:var(--font-figure); font-size:24px;">{{ open_count }}</div>
     </div>
     <div class="glass-card" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -74,7 +74,7 @@
             </span>
             <span class="eyebrow">Total feedback</span>
         </div>
-        <div id="admin-total-count-tile" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_feedback }}</div>
+        <div id="admin-total-count-tile" class="stat-number" style="font-family:var(--font-figure); font-size:24px;">{{ total_feedback }}</div>
     </div>
     <div class="glass-card" style="padding:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -83,7 +83,7 @@
             </span>
             <span class="eyebrow">Transactions logged</span>
         </div>
-        <div class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ total_transactions }}</div>
+        <div class="stat-number" style="font-family:var(--font-figure); font-size:24px;">{{ total_transactions }}</div>
     </div>
 </div>
 

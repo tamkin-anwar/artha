@@ -187,9 +187,8 @@ def test_recurring_occurrences_lists_every_weekly_date_in_range(app, user):
 # --- Safe to Spend -----------------------------------------------------------
 
 def _safe_value(body: str) -> str:
-    marker = '<div class="eyebrow" style="margin-bottom:8px;">Safe to Spend</div>'
-    after = body.split(marker, 1)[1]
-    return after.split('data-money-value="', 1)[1].split('"', 1)[0]
+    after = body.split('data-hero-view="safe"', 1)[1]
+    return after.split('data-amount="', 1)[1].split('"', 1)[0]
 
 
 def test_safe_to_spend_subtracts_every_remaining_weekly_occurrence(auth_client, user):
@@ -220,7 +219,7 @@ def test_safe_to_spend_does_not_double_count_a_monthly_bill_already_generated(au
     body = auth_client.get("/").get_data(as_text=True)
 
     assert float(_safe_value(body)) == 1700.0
-    assert "in upcoming bills" in body
+    assert "in upcoming bills" not in body  # posted already, nothing still due
 
 
 # --- user-local "this month" -------------------------------------------------
@@ -247,7 +246,7 @@ def test_dashboard_month_follows_the_users_own_date_not_the_servers(auth_client,
         body = auth_client.get("/").get_data(as_text=True)
         totals = auth_client.get("/api/finance_totals").get_json()
 
-    assert 'data-money-value="123.0"' in body
+    assert "$123 came in this month" in body
     assert totals["income"] == 123.0
 
 

@@ -8,27 +8,27 @@
         height: 120px;
         border-radius: 50%;
         background: radial-gradient(circle at 30% 30%,
-            rgba(212, 168, 67, 0.6),
+            color-mix(in srgb, var(--gold) 60%, transparent),
             rgba(30, 58, 95, 0.8),
             rgba(10, 14, 23, 0.95));
         box-shadow:
-            0 0 40px rgba(212, 168, 67, 0.2),
+            0 0 40px color-mix(in srgb, var(--gold) 20%, transparent),
             0 0 80px rgba(30, 58, 95, 0.3),
-            inset 0 0 40px rgba(212, 168, 67, 0.1);
+            inset 0 0 40px color-mix(in srgb, var(--gold) 10%, transparent);
         animation: orb-breathe 4s ease-in-out infinite;
         filter: blur(0.5px);
     }
 
     @keyframes orb-breathe {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(212,168,67,0.2), 0 0 80px rgba(30,58,95,0.3); }
-        50% { transform: scale(1.08); box-shadow: 0 0 60px rgba(212,168,67,0.35), 0 0 120px rgba(30,58,95,0.4); }
+        0%, 100% { transform: scale(1); box-shadow: 0 0 40px color-mix(in srgb, var(--gold) 20%, transparent), 0 0 80px rgba(30,58,95,0.3); }
+        50% { transform: scale(1.08); box-shadow: 0 0 60px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 120px rgba(30,58,95,0.4); }
     }
 
     .ai-orb.thinking {
         animation: orb-think 1.2s ease-in-out infinite;
         background: radial-gradient(circle at 40% 40%,
             rgba(34, 197, 94, 0.5),
-            rgba(212, 168, 67, 0.6),
+            color-mix(in srgb, var(--gold) 60%, transparent),
             rgba(30, 58, 95, 0.9));
     }
 
@@ -81,8 +81,8 @@
 
     .ai-bubble-user {
         max-width: 75%;
-        background: linear-gradient(135deg, var(--gold-dim), rgba(212,168,67,0.08));
-        border: 1px solid rgba(212,168,67,0.2);
+        background: linear-gradient(135deg, var(--gold-dim), color-mix(in srgb, var(--gold) 8%, transparent));
+        border: 1px solid color-mix(in srgb, var(--gold) 20%, transparent);
         border-radius: 18px 18px 4px 18px;
         color: var(--text-primary);
         font-size: 14px;
@@ -160,7 +160,7 @@
         resize: none;
         max-height: 130px;
         line-height: 1.4;
-        font-family: 'Inter', sans-serif;
+        font-family:var(--font-body);
     }
     #ai-input::placeholder { color: var(--text-muted); }
 
@@ -187,7 +187,7 @@
         height: 40px;
         border-radius: 50%;
         background: var(--gold);
-        color: #000;
+        color: var(--on-accent);
         border: none;
         cursor: pointer;
         flex-shrink: 0;
@@ -214,7 +214,7 @@
 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
     <div>
         <div class="eyebrow" style="margin-bottom:6px;">AI ASSISTANT</div>
-        <h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0;">Artha AI</h1>
+        <h1 class="page-title">Artha AI</h1>
     </div>
     <button
         id="ai-clear-btn"
@@ -243,7 +243,7 @@
     >
         <div id="ai-empty-state" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; text-align:center;">
             <div class="ai-orb" id="ai-orb"></div>
-            <div style="font-family:'Fraunces',serif; font-size:24px; color:var(--text-primary);">Artha AI</div>
+            <div style="font-family:var(--font-display); font-size:24px; color:var(--text-primary);">Artha AI</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:480px;">
                 <button type="button" class="ai-chip" data-chip="insights">Get financial insights</button>
                 <button type="button" class="ai-chip" data-chip="spend">How much did I spend this month?</button>

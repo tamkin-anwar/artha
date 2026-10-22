@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% from "partials/money_macros.html" import pace_pill, per_day_line %}
+{% block title %}Plan{% endblock %}
+{% block content %}
+{% set cur = plan.currency %}
+{% set month = plan.month %}
+{% set bd = plan.breakdown %}
+{% set typical = plan.typical %}
+{% set month_param = plan.date[:7] %}
+
+<div class="page plan" id="plan" data-currency="{{ cur }}">
+    <header class="page-head">
+        <div class="page-head-text">
+            <span class="page-eyebrow">{{ month.days_left }} {{ 'day' if month.days_left == 1 else 'days' }} left</span>
+            <h1 class="page-title">{{ month.name }} plan</h1>
+        </div>
+    </header>
+
+    <div class="cols">
+        <div class="col">
+            {# The budget, split the way people think about it: bills first,
+               then everyday spending, then what's left (the same math as
+               Today's Safe to spend, services/month_plan.py). #}
+            <section class="card plan-budget" aria-labelledby="budget-label">
+                <div class="section-head" style="padding:0;">
+                    <h2 class="section-label" id="budget-label">Budget</h2>
+                    {% if plan.budget %}<button type="button" class="link-accent" data-edit-budget aria-expanded="false" aria-controls="budget-form">Edit</button>{% endif %}
+                </div>
+
+                {% if plan.budget %}
+                    <div class="plan-budget-figure figure">{{ plan.budget.cap|money(cur, true) }}</div>
+                    {% set cap_f = plan.budget.cap|float %}
+                    {% set bills_f = bd.bills|float %}
+                    {% set everyday_f = bd.everyday_spent|float %}
+                    {% set left_f = bd.left|float %}
+                    <div class="split-bar" aria-hidden="true">
+                        {% if bills_f > 0 %}<span style="flex:{{ bills_f }}; background:var(--bills-bar);"></span>{% endif %}
+                        {% if everyday_f > 0 %}<span style="flex:{{ everyday_f }}; background:var(--accent);"></span>{% endif %}
+                        {% if left_f > 0 %}<span style="flex:{{ left_f }}; background:var(--raised);"></span>{% endif %}
+                    </div>
+                    <div class="split-rows">
+                        <div class="split-row">
+                            <span class="split-key" style="--key:var(--bills-bar);"><b>Bills</b><small>{% if plan.bills_coming|float > 0 %}{{ plan.bills_coming|money(cur, true) }} still to come{% elif plan.bills %}All paid{% else %}No repeating bills yet{% endif %}</small></span>
+                            <b class="figure">{{ bd.bills|money(cur, true) }}</b>
+                        </div>
+                        <div class="split-row">
+                            <span class="split-key" style="--key:var(--accent);"><b>Everyday spending</b><small>of {{ bd.everyday_budget|money(cur, true) }} after bills</small></span>
+                            <b class="figure">{{ bd.everyday_spent|money(cur, true) }}</b>
+                        </div>
+                        <div class="split-row">
+                            <span class="split-key" style="--key:var(--raised);">
+                                <b>{{ 'Over by' if bd.status == 'over' else 'Left to spend' }}</b>
+                                <small>{% if bd.status == 'over' %}counting bills still due{% else %}{{ per_day_line(bd.per_day, month.days_left, cur) }}{% endif %}</small>
+                            </span>
+                            <b class="figure{{ ' is-bad' if bd.status == 'over' }}">{{ (bd.over_by if bd.status == 'over' else bd.left)|money(cur, true) }}</b>
+                        </div>
+                    </div>
+                    <div>{{ pace_pill(bd.status) }}</div>
+                {% else %}
+                    <p class="plan-intro">
+                        {% if typical %}You usually spend <b>{{ typical.overall|money(cur, true) }}</b> a month. A budget turns that into a daily number you can trust.
+                        {% else %}Pick what you want to spend in a month, bills included. Artha splits it into bills, everyday spending and what's left.{% endif %}
+                    </p>
+                {% endif %}
+
+                <form class="inline-form" id="budget-form" {% if plan.budget %}hidden{% endif %} novalidate>
+                    <label class="money-field">
+                        <span class="visually-hidden">Monthly budget in {{ cur }}</span>
+                        <span class="money-field-code">{{ cur }}</span>
+                        <input name="monthly_cap" inputmode="decimal" autocomplete="off" placeholder="{{ (typical.overall|float|round(-1)|int) if typical else '3000' }}" value="{{ plan.budget.cap if plan.budget else '' }}">
+                    </label>
+                    <button type="submit" class="btn-inverse btn-small">{{ 'Save' if plan.budget else 'Set budget' }}</button>
+                    {% if plan.budget %}<button type="button" class="btn-destructive btn-small" data-clear-budget>Remove</button>{% endif %}
+                    <p class="sheet-error" role="alert" hidden></p>
+                </form>
+            </section>
+
+            <section class="section" id="bills" aria-labelledby="bills-label">
+                <div class="section-head">
+                    <h2 class="section-label" id="bills-label">Bills this month</h2>
+                    {% if plan.bills %}<b class="figure">{{ plan.bills_total|money(cur, true) }}</b>{% endif %}
+                </div>
+                {% if plan.bills %}
+                <div class="card-list">
+                    {% for bill in plan.bills %}
+                    <div class="bill-row">
+                        <span class="bill-date"><small>{{ bill.weekday }}</small><b class="figure">{{ bill.day }}</b></span>
+                        <span class="tx-text">
+                            <span class="tx-name">{{ bill.description }}</span>
+                            <span class="tx-detail">
+                                {{ bill.category_label }} &middot;
+                                {% if bill.status == 'paid' %}<span class="is-good">Paid</span>
+                                {% elif bill.days_away == 0 %}Today
+                                {% elif bill.days_away == 1 %}Tomorrow
+                                {% else %}In {{ bill.days_away }} days{% endif %}
+                            </span>
+                        </span>
+                        <span class="tx-figure">{{ bill.amount|money(bill.currency) }}{% if bill.display_amount %}<small>about {{ bill.display_amount|money(cur) }}</small>{% endif %}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-note" style="padding:0 4px;">Rent, phone, subscriptions: anything that repeats shows up here. Set a purchase to repeat when you add it.</p>
+                {% endif %}
+            </section>
+        </div>
+
+        <div class="col">
+            <section class="section" aria-labelledby="limits-label">
+                <div class="section-head">
+                    <h2 class="section-label" id="limits-label">Category limits</h2>
+                    {% if plan.unbudgeted_categories %}<button type="button" class="link-accent" data-add-limit aria-expanded="false" aria-controls="limit-form">Add</button>{% endif %}
+                </div>
+
+                <form class="card inline-form limit-form" id="limit-form" hidden novalidate>
+                    <label class="select-field">
+                        <span class="visually-hidden">Category</span>
+                        <select name="category">
+                            {% for c in plan.unbudgeted_categories %}
+                                <option value="{{ c.key }}" data-typical="{{ (typical.by_category.get(c.key) if typical else '') or '' }}">{{ c.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="money-field">
+                        <span class="visually-hidden">Monthly limit in {{ cur }}</span>
+                        <span class="money-field-code">{{ cur }}</span>
+                        <input name="monthly_cap" inputmode="decimal" autocomplete="off" placeholder="0">
+                    </label>
+                    <button type="submit" class="btn-inverse btn-small">Add limit</button>
+                    <p class="limit-hint" data-limit-hint></p>
+                    <p class="sheet-error" role="alert" hidden></p>
+                </form>
+
+                {% if plan.category_budgets %}
+                <div class="card-list">
+                    {% for c in plan.category_budgets %}
+                    {% set over = c.over_by|float > 0 %}
+                    <div class="limit-row" data-category="{{ c.key }}">
+                        <div class="limit-top">
+                            <a class="tx-text limit-name" href="{{ url_for('finance.activity_page', month=month_param, category=c.key) }}">
+                                <span class="tx-name">{{ c.label }}</span>
+                                <span class="tx-detail">{{ c.spent|money(cur, true) }} of {{ c.cap|money(cur, true) }}</span>
+                            </a>
+                            <b class="limit-left{{ ' is-bad' if over }}">{{ (c.over_by|money(cur, true) ~ ' over') if over else (c.left|money(cur, true) ~ ' left') }}</b>
+                            <button type="button" class="icon-plain" data-edit-limit="{{ c.key }}" data-cap="{{ c.cap }}" aria-label="Change the {{ c.label }} limit">
+                                <i data-lucide="pencil" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="meter" role="meter" aria-label="{{ c.label }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ [c.percent_used, 100]|min|round|int }}">
+                            <span style="width:{{ [c.percent_used, 100]|min }}%; background:{{ 'var(--bad)' if over else ('var(--caution)' if c.percent_used >= 85 else 'var(--accent)') }};"></span>
+                        </div>
+                        <form class="inline-form limit-edit" hidden novalidate>
+                            <label class="money-field">
+                                <span class="visually-hidden">{{ c.label }} limit in {{ cur }}</span>
+                                <span class="money-field-code">{{ cur }}</span>
+                                <input name="monthly_cap" inputmode="decimal" autocomplete="off" value="{{ c.cap }}">
+                            </label>
+                            <button type="submit" class="btn-inverse btn-small">Save</button>
+                            <button type="button" class="btn-destructive btn-small" data-remove-limit="{{ c.key }}">Remove</button>
+                            <p class="sheet-error" role="alert" hidden></p>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-note" style="padding:0 4px;">A limit on one category, like dining or shopping, warns you before it runs over.</p>
+                {% endif %}
+            </section>
+
+            {% set months = history.months %}
+            {% set current_month = months[-1] if months else none %}
+            <section class="card month-by-month" aria-labelledby="mbm-label">
+                <div class="mbm-head">
+                    {% if history.average_spent %}
+                        {% set diff = (current_month.spent|float) - (history.average_spent|float) %}
+                        <h2 id="mbm-label" class="mbm-title">You usually spend {{ history.average_spent|money(cur, true) }} a month</h2>
+                        <p class="mbm-sub">{{ current_month.name }} so far: {{ current_month.spent|money(cur, true) }},
+                            {% if diff > 0 %}{{ diff|money(cur, true) }} past the usual.{% elif diff < 0 %}{{ (-diff)|money(cur, true) }} under the usual.{% else %}right on the usual.{% endif %}</p>
+                    {% else %}
+                        <h2 id="mbm-label" class="mbm-title">Month by month</h2>
+                        <p class="mbm-sub">Your usual month shows up here after your first full month.</p>
+                    {% endif %}
+                </div>
+                {% if months %}
+                {% set top = ([history.average_spent|float if history.average_spent else 0] + months|map(attribute='spent')|map('float')|list + months|map(attribute='income')|map('float')|list)|max %}
+                {% set top = top if top > 0 else 1 %}
+                <div class="mbm-chart" role="img" aria-label="Spending and income by month: {% for m in months %}{{ m.name }}{{ ' so far' if m.is_current }} spent {{ m.spent|money(cur, true) }} and {{ m.income|money(cur, true) }} came in{{ '; ' if not loop.last }}{% endfor %}">
+                    {% if history.average_spent %}
+                        <div class="mbm-usual" style="bottom:{{ (history.average_spent|float / top * 100)|round(2) }}%;"></div>
+                    {% endif %}
+                    {% for m in months %}
+                    <a class="mbm-month{{ ' is-current' if m.is_current }}" href="{{ url_for('finance.activity_page', month=m.month) }}" title="{{ m.name }}: {{ m.spent|money(cur, true) }} spent, {{ m.income|money(cur, true) }} came in">
+                        <span class="mbm-bar mbm-spent" style="height:{{ [(m.spent|float / top * 100), 1]|max|round(2) }}%;"></span>
+                        <span class="mbm-bar mbm-income" style="height:{{ [(m.income|float / top * 100), 1]|max|round(2) }}%;"></span>
+                    </a>
+                    {% endfor %}
+                </div>
+                <div class="mbm-labels" aria-hidden="true">
+                    {% for m in months %}<span class="{{ 'is-current' if m.is_current }}">{{ m.label }}</span>{% endfor %}
+                </div>
+                <div class="mbm-legend" aria-hidden="true">
+                    <span><i style="background:var(--accent);"></i>Spent</span>
+                    <span><i style="background:color-mix(in srgb, var(--good) 55%, transparent);"></i>Came in</span>
+                    {% if history.average_spent %}<span><i class="is-dashed"></i>Usual</span>{% endif %}
+                </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="{{ url_for('static', filename='js/plan.js') }}"></script>
+{% endblock %}

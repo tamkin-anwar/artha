@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1f2937" />
+    <meta name="theme-color" content="#0a0e17" />
     <title>Offline</title>
     <style>
         :root { color-scheme: light dark; }
@@ -13,33 +13,34 @@
         display: grid;
         place-items: center;
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        background: #f3f4f6;
-        color: #111827;
+        background: #f4f6fa;
+        color: #0b1020;
         }
         @media (prefers-color-scheme: dark) {
-        body { background: #111827; color: #f9fafb; }
-        .muted { color: #d1d5db; }
-        .icon { color: #60a5fa; }
+        body { background: #0a0e17; color: #f2f4f8; }
+        .muted { color: #a3abbd; }
+        .icon { color: #6e95ff; }
+        button { background: #f2f4f8 !important; color: #0a0e17 !important; }
         }
         .card { text-align: center; padding: 24px; max-width: 520px; }
-        .icon { width: 64px; height: 64px; margin: 0 auto 16px; color: #2563eb; animation: pulse 1.5s ease-in-out infinite; }
+        .icon { width: 64px; height: 64px; margin: 0 auto 16px; color: #2f5fd0; animation: pulse 1.5s ease-in-out infinite; }
         h1 { margin: 0 0 12px; font-size: 2rem; line-height: 1.2; }
-        p { margin: 0 0 20px; color: #4b5563; }
-        .muted { color: #4b5563; }
+        p { margin: 0 0 20px; color: #586174; }
+        .muted { color: #586174; }
         button {
         appearance: none;
         border: 0;
-        background: #2563eb;
+        background: #0b1020;
         color: #fff;
         padding: 10px 16px;
-        border-radius: 10px;
+        border-radius: 999px;
         cursor: pointer;
         font-weight: 600;
         transition: transform .08s ease, filter .15s ease;
         }
         button:hover { filter: brightness(1.05); transform: translateY(-1px); }
         button:active { transform: translateY(0px) scale(0.98); }
-        button:focus { outline: 2px solid #93c5fd; outline-offset: 3px; }
+        button:focus { outline: 2px solid #6e95ff; outline-offset: 3px; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
     </style>
     </head>

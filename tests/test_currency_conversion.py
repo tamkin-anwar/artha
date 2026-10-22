@@ -208,7 +208,7 @@ def test_dashboard_income_expense_are_currency_correct(app, auth_client, user):
 
     resp = auth_client.get("/")
     assert resp.status_code == 200
-    assert "$100.00" in resp.get_data(as_text=True)
+    assert "$100 came in this month" in resp.get_data(as_text=True)
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +232,7 @@ def test_budget_status_compares_in_the_users_own_currency(app, auth_client, user
     resp = auth_client.get("/")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
-    assert "You've spent 92% of your" in body
+    assert "92% of your £100 budget" in body
 
 
 def test_budget_cap_stays_correct_after_switching_display_currency(app, auth_client, user):
@@ -260,7 +260,7 @@ def test_budget_cap_stays_correct_after_switching_display_currency(app, auth_cli
     # $713.05 spent against a real $5,000 cap is 14%, nowhere near
     # "over" -- if the cap were misread as ৳5,000 instead of the
     # converted ~৳613,850 it actually is, this would wrongly say "over".
-    assert "over your" not in body
+    assert "Over budget" not in body
 
 
 def test_set_budget_captures_currency_active_at_save_time(app, auth_client, user):

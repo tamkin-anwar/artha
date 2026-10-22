@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% from "partials/money_macros.html" import tx_mark, tx_amount, pace_pill, per_day_line %}
+{% block title %}Today{% endblock %}
 {% block content %}
-
 
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -16,622 +16,232 @@
     {% endif %}
 {% endwith %}
 
+{% set cur = screen.currency %}
+{% set safe = screen.safe_to_spend %}
+{% set month = screen.month %}
+{% set month_param = screen.date[:7] %}
 
-    <!-- Greeting -->
-    <div style="margin-bottom:16px;">
-        <div class="eyebrow" style="margin-bottom:8px;">DASHBOARD</div>
-        <h1 style="font-family:'Fraunces',serif; font-size:36px; font-weight:300; color:var(--text-primary); margin:0 0 6px;">
-            Welcome back, {{ current_user.first_name or current_user.username }}.
-        </h1>
-        <p id="dashboard-summary-line" style="color:var(--text-secondary); font-size:15px; margin:0;">{{ dashboard_summary }}</p>
-    </div>
-
-    <div id="dashboard-budget-banner">
-    {% if budget.has_budget and budget.tier != 'ok' %}
-        {% set is_over = budget.tier == 'over' %}
-        <div class="dashboard-card-in" style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; margin-bottom:16px; background:{{ 'var(--red-dim)' if is_over else 'var(--gold-dim)' }}; border:1px solid {{ 'var(--red)' if is_over else 'var(--gold)' }}; color:{{ 'var(--red)' if is_over else 'var(--gold)' }}; font-size:13px;">
-            <i data-lucide="{{ 'alert-octagon' if is_over else 'alert-triangle' }}" aria-hidden="true" style="width:16px; height:16px; stroke-width:2; flex-shrink:0;"></i>
-            <span style="flex:1; min-width:0;">
-                {% if is_over %}
-                    You're <span class="dashboard-money" data-money-value="{{ budget.spent - budget.cap }}">${{ '%.2f'|format(budget.spent - budget.cap) }}</span> over your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
-                {% else %}
-                    You've spent {{ '%.0f'|format(budget.pct) }}% of your <span class="dashboard-money" data-money-value="{{ budget.cap }}">${{ '%.0f'|format(budget.cap) }}</span> monthly budget.
-                {% endif %}
-            </span>
-            <a href="{{ url_for('finance.finance_page') }}" style="color:inherit; text-decoration:underline; flex-shrink:0;">View</a>
+<div class="page today">
+    <header class="page-head">
+        <div class="page-head-text">
+            <span class="page-eyebrow">{{ today.strftime('%A, %b %-d') }}</span>
+            <h1 class="page-title">Today</h1>
         </div>
-    {% endif %}
-    </div>
+    </header>
 
-    <!-- Safe to Spend -- the rest of this month's budget headroom after
-         upcoming recurring bills, not just cap-minus-spent-so-far (that's
-         the existing Monthly Budget bar on Finance). A stat card, not an
-         alert banner, so it reads as a headline figure rather than a
-         warning -- only rendered when a budget actually exists, since
-         there's nothing to be "safe" against otherwise. -->
-    <div id="dashboard-safe-to-spend-panel">
-    {% if safe_to_spend is not none %}
-        <div class="glass-card dashboard-card-in" style="padding:20px; margin-bottom:16px;">
-            <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                <div>
-                    <div class="eyebrow" style="margin-bottom:8px;">Safe to Spend</div>
-                    <div class="stat-number dashboard-money {{ 'money-negative' if safe_to_spend < 0 else 'money-gold' }}" style="font-size:32px; font-family:'JetBrains Mono',monospace;" data-money-value="{{ safe_to_spend }}">${{ '%.2f'|format(safe_to_spend) }}</div>
+    <div class="cols">
+        <section class="col" aria-label="This month">
+
+            {# The hero figure, switchable like the app's: Safe to spend
+               by default, or spent this month, or net worth. The choice
+               is remembered per browser (static/js/today.js). #}
+            <div class="hero" id="hero" data-default="{{ 'safe' if safe else 'spent' }}">
+                <button type="button" class="hero-switch" id="hero-switch" aria-haspopup="menu" aria-expanded="false" aria-controls="hero-menu">
+                    <span id="hero-switch-label">{{ 'Safe to spend' if safe else 'Spent in ' ~ month.name }}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="hero-menu" id="hero-menu" role="menu" hidden>
+                    {% if safe %}<button type="button" role="menuitemradio" data-hero-choice="safe" data-label="Safe to spend">Safe to spend</button>{% endif %}
+                    <button type="button" role="menuitemradio" data-hero-choice="spent" data-label="Spent in {{ month.name }}">Spent in {{ month.name }}</button>
+                    {% if screen.net_worth %}<button type="button" role="menuitemradio" data-hero-choice="worth" data-label="Net worth">Net worth</button>{% endif %}
                 </div>
-                <p style="font-size:12px; color:var(--text-secondary); margin:0; text-align:right;">
-                    for the rest of {{ today.strftime('%B') }}
-                    {% if safe_to_spend_upcoming > 0 %}
-                        <br>after <span class="dashboard-money" data-money-value="{{ safe_to_spend_upcoming }}">${{ '%.2f'|format(safe_to_spend_upcoming) }}</span> in upcoming bills
-                    {% endif %}
-                </p>
-            </div>
-        </div>
-    {% endif %}
-    </div>
 
-    <!-- Net Worth -- total assets minus liabilities, as of right now.
-         Deliberately not gold (Net Balance/Safe to Spend's color) and not
-         labeled "balance" anywhere near it, so it never reads as the same
-         figure as this month's cash flow. Hidden entirely until the user
-         has added at least one account -- there's nothing to total yet. -->
-    {% if net_worth %}
-        <a href="{{ url_for('accounts.index') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px; margin-bottom:16px; display:block;">
-            <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                <div>
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                        <span class="finance-stat-icon stat-icon-violet">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        </span>
-                        <span class="eyebrow">Net Worth</span>
+                {% if safe %}
+                <div data-hero-view="safe">
+                    <div class="figure hero-figure" data-amount="{{ safe.amount }}">{{ (safe.amount if safe.status != 'over' else '0')|money(cur, true) }}</div>
+                    <div class="hero-meta">
+                        {{ pace_pill(safe.status) }}
+                        {% if safe.status == 'over' %}
+                            <span>{{ safe.over_by|money(cur, true) }} over, counting bills still due</span>
+                        {% else %}
+                            <span>{{ per_day_line(safe.per_day, month.days_left, cur) }}</span>
+                        {% endif %}
                     </div>
-                    <div class="stat-number dashboard-money {{ 'money-negative' if net_worth.net_worth < 0 else 'money-positive' }}" style="font-size:32px; font-family:'JetBrains Mono',monospace;" data-money-value="{{ net_worth.net_worth }}">${{ '%.2f'|format(net_worth.net_worth) }}</div>
-                </div>
-                <p style="font-size:12px; color:var(--text-secondary); margin:0; text-align:right;">
-                    {{ net_worth.account_count }} account{{ 's' if net_worth.account_count != 1 }}, as of today
-                </p>
-            </div>
-        </a>
-    {% endif %}
-
-    <!-- Quick add -->
-    <div class="glass-card dashboard-card-in" style="padding:16px 20px; margin-bottom:16px;">
-        <div style="display:flex; gap:8px; margin-bottom:12px;">
-            <button type="button" class="cost-tab-btn cost-tab-active" data-quick-tab="transaction">
-                <i data-lucide="wallet" aria-hidden="true"></i> Transaction
-            </button>
-            <button type="button" class="cost-tab-btn" data-quick-tab="note">
-                <i data-lucide="file-text" aria-hidden="true"></i> Note
-            </button>
-            <button type="button" class="cost-tab-btn" data-quick-tab="event">
-                <i data-lucide="calendar-plus" aria-hidden="true"></i> Event
-            </button>
-        </div>
-
-        <form method="POST" action="{{ url_for('finance.add_transaction') }}" id="quick-add-transaction" class="quick-add-form" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" name="description" placeholder="Description" required class="field-input" style="flex:2; min-width:160px; height:40px; font-size:14px;">
-            <div class="tx-amount-group" style="flex:1; min-width:110px; height:40px;">
-                <select
-                    name="currency"
-                    aria-label="Currency"
-                    class="tx-add-currency-select"
-                >
-                    <option value="USD" {{ "selected" if (current_user.preferred_currency or "USD") == "USD" }}>$ USD</option>
-                    <option value="GBP" {{ "selected" if current_user.preferred_currency == "GBP" }}>£ GBP</option>
-                    <option value="BDT" {{ "selected" if current_user.preferred_currency == "BDT" }}>৳ BDT</option>
-                    <option value="EUR" {{ "selected" if current_user.preferred_currency == "EUR" }}>€ EUR</option>
-                    <option value="CAD" {{ "selected" if current_user.preferred_currency == "CAD" }}>$ CAD</option>
-                    <option value="AUD" {{ "selected" if current_user.preferred_currency == "AUD" }}>$ AUD</option>
-                </select>
-                <input type="number" name="amount" placeholder="Amount" step="0.01" inputmode="decimal" required class="tx-amount-input" style="font-size:14px;">
-            </div>
-            <input type="date" name="date" value="{{ today_date }}" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:130px;">
-            <select name="type" class="field-input" style="height:40px; font-size:14px;">
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-            </select>
-            <label class="tx-recurring-toggle-label" title="Recurring">
-                <input type="checkbox" name="is_recurring" value="1" class="tx-recurring-checkbox">
-                <span class="tx-recurring-toggle-visual"><i data-lucide="repeat" aria-hidden="true"></i></span>
-            </label>
-            <button type="submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px;">Add</button>
-        </form>
-
-        <form method="POST" action="{{ url_for('dashboard.index') }}" id="quick-add-note" class="quick-add-form" style="display:none; gap:8px; align-items:center;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" name="note" placeholder="Write a quick note..." required class="field-input" style="flex:1; height:40px; font-size:14px;">
-            <button type="submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px;">Add</button>
-        </form>
-
-        <div id="quick-add-event" class="quick-add-form" style="display:none; flex-direction:column; gap:8px;">
-            <input type="text" id="quick-event-title" placeholder="Event title" class="field-input" style="height:40px; font-size:14px;">
-            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-                <input type="date" id="quick-event-date" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:130px;">
-                <input type="time" id="quick-event-start" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:100px;">
-                <span style="color:var(--text-muted); font-size:13px; flex-shrink:0;">&rarr;</span>
-                <input type="time" id="quick-event-end" class="field-input" style="height:40px; font-size:14px; flex:1; min-width:100px;">
-                <button type="button" id="quick-event-submit" class="btn-primary" style="height:40px; padding:0 18px; font-size:14px; white-space:nowrap;">Add</button>
-            </div>
-            <p id="quick-event-error" style="font-size:11px; color:var(--red); margin:0; display:none;">End must be after start.</p>
-        </div>
-    </div>
-
-    <!-- 4 Stat Cards -->
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
-        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon stat-icon-emerald">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
-                </span>
-                <span class="eyebrow">Income</span>
-            </div>
-            <div id="finance-income" class="stat-number money-positive" data-money-value="{{ income }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(income) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </a>
-        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon stat-icon-red">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/></svg>
-                </span>
-                <span class="eyebrow">Expenses</span>
-            </div>
-            <div id="finance-expense" class="stat-number money-negative" data-money-value="{{ expense }}" style="font-family:'JetBrains Mono',monospace; font-size:24px;">${{ "%.2f"|format(expense) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </a>
-        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon stat-icon-gold">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
-                </span>
-                <span class="eyebrow">Net Balance</span>
-            </div>
-            <div id="finance-balance" class="stat-number money-gold" data-money-value="{{ balance }}" style="font-size:24px;">${{ "%.2f"|format(balance) }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </a>
-        <a href="{{ url_for('finance.finance_page') }}" class="glass-card glass-card-link dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                <span class="finance-stat-icon stat-icon-sky">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                </span>
-                <span class="eyebrow">Transactions</span>
-            </div>
-            <div id="dashboard-tx-count" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">This month</div>
-        </a>
-    </div>
-
-    <!-- Today + Renewals -->
-    <div style="display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:16px;" class="dashboard-row">
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-                <span class="eyebrow">Today</span>
-                <a href="{{ url_for('dashboard.calendar_page') }}" style="font-size:12px; color:var(--gold); text-decoration:none;">Open calendar →</a>
-            </div>
-
-            <div id="dashboard-today-panel">
-            {% if todays_events or overdue_notes or due_today_notes or todays_renewals %}
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    {% for ev in todays_events %}
-                        <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle);">
-                            <span style="width:8px; height:8px; border-radius:50%; background:var(--note-{{ ev.color }}-text); flex-shrink:0;"></span>
-                            <span style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono',monospace; flex-shrink:0; min-width:78px;">{{ ev.start_label }}</span>
-                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ ev.title }}</span>
-                        </div>
-                    {% endfor %}
-                    {% for note in overdue_notes %}
-                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--red-dim); border:1px solid rgba(239,68,68,0.25); text-decoration:none;">
-                            <span class="finance-mini-icon" style="width:22px; height:22px; background:none; color:var(--red);">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path d="M12 9.5v4.5"/><circle cx="12" cy="17.1" r="0.75" fill="currentColor" stroke="none"/></svg>
-                            </span>
-                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ note.title or 'Untitled' }}</span>
-                            <span style="font-size:11px; color:var(--red); font-weight:600; flex-shrink:0;">Overdue</span>
-                        </a>
-                    {% endfor %}
-                    {% for note in due_today_notes %}
-                        <a href="{{ url_for('notes.notes_page') }}?open={{ note.id }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
-                            <span class="finance-mini-icon" style="width:22px; height:22px;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-                            </span>
-                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ note.title or 'Untitled' }}</span>
-                            <span style="font-size:11px; color:var(--gold); font-weight:600; flex-shrink:0;">Due today</span>
-                        </a>
-                    {% endfor %}
-                    {% for r in todays_renewals %}
-                        <a href="{{ url_for('finance.finance_page') }}" class="dashboard-list-row" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border-subtle); text-decoration:none;">
-                            <span class="finance-mini-icon" style="width:22px; height:22px;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
-                            </span>
-                            <span style="font-size:14px; color:var(--text-primary); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
-                            <span class="dashboard-money" style="font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); flex-shrink:0;" data-money-value="{{ r.amount }}" data-money-currency="{{ r.currency }}">${{ '%.2f'|format(r.amount) }}</span>
-                        </a>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">Nothing on the calendar or due today.</p>
-            {% endif %}
-            </div>
-        </div>
-
-        <div class="glass-card dashboard-card-in" style="padding:20px;">
-            <div class="eyebrow" style="margin-bottom:16px;">Renewals This Week</div>
-            <div id="dashboard-renewals-panel">
-            {% if renewals_this_week %}
-                <p class="stat-number dashboard-money" style="font-size:26px; margin:0 0 14px;" data-money-value="{{ renewals_total }}">${{ "%.2f"|format(renewals_total) }}</p>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                    {% for r in renewals_this_week[:4] %}
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                            <span style="font-size:13px; color:var(--text-primary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.description }}</span>
-                            <span style="font-size:11px; color:var(--text-muted); flex-shrink:0;">{{ r.due_label }}</span>
-                        </div>
-                    {% endfor %}
-                    {% if renewals_this_week|length > 4 %}
-                        <p style="font-size:11px; color:var(--text-muted); margin:0;">+{{ renewals_this_week|length - 4 }} more</p>
+                    {% if safe.bills_still_due|float > 0 %}
+                        <p class="hero-note">Leaves room for {{ safe.bills_still_due|money(cur, true) }} in upcoming bills.</p>
                     {% endif %}
                 </div>
-            {% else %}
-                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No renewals this week.</p>
+                {% endif %}
+
+                <div data-hero-view="spent"{% if safe %} hidden{% endif %}>
+                    <div class="figure hero-figure" data-amount="{{ screen.spent }}">{{ screen.spent|money(cur, true) }}</div>
+                    <div class="hero-meta">
+                        {% if screen.budget %}
+                            <span>{{ screen.budget.percent_used|round|int }}% of your {{ screen.budget.cap|money(cur, true) }} budget</span>
+                        {% elif screen.income|float > 0 %}
+                            <span>{{ screen.income|money(cur, true) }} came in this month</span>
+                        {% else %}
+                            <span>Set a monthly budget to see what's safe to spend.</span>
+                            <a class="link-accent" href="{{ url_for('finance.plan_page') }}">Set a budget</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if screen.net_worth %}
+                <div data-hero-view="worth" hidden>
+                    <div class="figure hero-figure" data-amount="{{ screen.net_worth.amount }}">{{ screen.net_worth.amount|money(cur, true) }}</div>
+                    <div class="hero-meta">
+                        <span>{{ screen.net_worth.assets|money(cur, true) }} in assets, {{ screen.net_worth.liabilities|money(cur, true) }} owed</span>
+                        <a class="link-accent" href="{{ url_for('accounts.index') }}">Wealth</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Spending this month against an even pace to the budget.
+               Drawn and made scrubbable by static/js/today.js from the
+               same spending_by_day the app's chart uses. #}
+            {% set last = screen.spending_by_day[-1] if screen.spending_by_day else none %}
+            <figure class="pace" id="pace"
+                    data-currency="{{ cur }}"
+                    data-days="{{ month.days_in_month }}"
+                    data-cap="{{ screen.budget.cap if screen.budget else '' }}"
+                    data-month="{{ month.name[:3] }}"
+                    data-series='{{ screen.spending_by_day|tojson }}'>
+                <svg viewBox="0 0 640 230" role="img" aria-label="Spending this month: {{ (last.spent if last else '0')|money(cur, true) }} by {{ month.name }} {{ month.day }}{% if screen.budget %}, against an even pace to the {{ screen.budget.cap|money(cur, true) }} budget{% endif %}"></svg>
+                <figcaption class="pace-labels">
+                    <span>{{ month.name[:3] }} 1</span>
+                    <span data-pace-readout>Today, {{ month.name[:3] }} {{ month.day }}: {{ (last.spent if last else '0')|money(cur, true) }} spent</span>
+                    <span>{{ month.name[:3] }} {{ month.days_in_month }}</span>
+                </figcaption>
+            </figure>
+
+            {% if screen.to_review %}
+            <div class="card notice">
+                <div class="notice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+                </div>
+                <div class="notice-text">
+                    <span class="notice-title">{{ screen.to_review }} {{ 'purchase' if screen.to_review == 1 else 'purchases' }} to review</span>
+                    <span>Logged on their own{% if screen.apple_pay %} with Apple Pay{% endif %}. A quick look keeps names and categories right.</span>
+                    <a class="link-accent" href="{{ url_for('finance.activity_page', review=1) }}">Review</a>
+                </div>
+            </div>
             {% endif %}
-            </div>
-        </div>
-    </div>
 
-    <!-- Chart + AI -->
-    <div style="display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:16px; align-items:stretch;" class="dashboard-row">
-        <div style="height:100%;">
-            {% include "widgets/chart.html" %}
-        </div>
-        <div id="widget-ai" style="height:100%;">
-            {% include "widgets/ai.html" %}
-        </div>
-    </div>
-
-    <!-- Scenarios + Notes -->
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;" class="dashboard-row">
-        <div>
-            {% include "widgets/scenarios.html" %}
-        </div>
-        <div class="glass-card" style="padding:20px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-                <span class="eyebrow">Notes</span>
-                <a href="{{ url_for('notes.notes_page') }}" style="font-size:12px; color:var(--gold); text-decoration:none;">View all →</a>
+            {% if screen.coming_up %}
+            <div class="section">
+                <div class="section-head">
+                    <h2 class="section-label">Coming up</h2>
+                    <a class="link-accent" href="{{ url_for('finance.plan_page') }}#bills" style="font-size:14px;">All bills</a>
+                </div>
+                <div class="date-cards">
+                    {% for bill in screen.coming_up[:3] %}
+                    <div class="card date-card">
+                        {% if bill.days_away == 0 %}
+                            <span class="date-card-when is-soon">TODAY</span>
+                        {% elif bill.days_away == 1 %}
+                            <span class="date-card-when is-soon">TOMORROW</span>
+                        {% elif bill.days_away < 7 %}
+                            <span class="date-card-when is-soon">{{ bill.weekday }}<span class="when-days"> &middot; {{ bill.days_away }} DAYS</span></span>
+                        {% else %}
+                            <span class="date-card-when">{{ bill.month_label }}</span>
+                        {% endif %}
+                        <span class="date-card-day">{{ bill.day }}</span>
+                        <span class="date-card-name" title="{{ bill.description }}">{{ bill.description }}</span>
+                        <span class="date-card-amount">{{ bill.amount|money(bill.currency) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-            <div id="dashboard-notes-panel">
-            {% set recent_notes = notes|sort(attribute='id', reverse=true) %}
-            {% if recent_notes %}
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                    {% for note in recent_notes[:3] %}
-                        {% set display_title = note.title if note.title else (note.preview|truncate(40, True) if note.preview else '') %}
-                        <a href="{{ url_for('notes.notes_page') }}" class="dashboard-list-row" style="display:block; padding:10px 14px; border-radius:8px; text-decoration:none;">
-                            <div style="font-weight:600; font-size:13px; color:var(--text-primary); overflow-wrap:break-word;">{{ display_title if display_title else 'Untitled' }}</div>
-                            <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">{{ note.preview|truncate(60) if note.preview else '' }}</div>
+            {% endif %}
+
+            {% if todays_events or due_today_notes or overdue_notes %}
+            <div class="section">
+                <div class="section-head"><h2 class="section-label">Also today</h2></div>
+                <div class="card-list also-list">
+                    {% for e in todays_events %}
+                        <a class="also-item" href="{{ url_for('dashboard.calendar_page') }}">
+                            <span aria-hidden="true" style="width:8px; height:8px; border-radius:50%; flex:none; background:var(--note-{{ e.color or 'sky' }}-text);"></span>
+                            <span>{{ e.title }}</span>
+                            <span class="also-tag">{{ e.start_label }}</span>
+                        </a>
+                    {% endfor %}
+                    {% for n in overdue_notes %}
+                        <a class="also-item" href="{{ url_for('notes.notes_page') }}">
+                            <span>{{ n.title or 'Untitled note' }}</span>
+                            <span class="also-tag is-late">Overdue</span>
+                        </a>
+                    {% endfor %}
+                    {% for n in due_today_notes %}
+                        <a class="also-item" href="{{ url_for('notes.notes_page') }}">
+                            <span>{{ n.title or 'Untitled note' }}</span>
+                            <span class="also-tag">Due today</span>
                         </a>
                     {% endfor %}
                 </div>
-            {% else %}
-                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:24px 0;">No notes yet.</p>
-            {% endif %}
             </div>
-        </div>
+            {% endif %}
+        </section>
+
+        <section class="col" aria-label="Where the money went and recent purchases">
+            {% if screen.categories %}
+            {% set top = screen.categories[:3] %}
+            {% set rest = screen.categories[3:] %}
+            <div class="band">
+                <div class="section-head" style="padding:0;">
+                    <h2 class="section-label">Where {{ month.name }} went</h2>
+                    <span class="band-total">{{ screen.spent|money(cur, true) }}</span>
+                </div>
+                {% set shades = ['1', '0.66', '0.4'] %}
+                <div class="band-bar" aria-hidden="true">
+                    {% for c in top %}
+                        <span style="flex:{{ c.amount }}; background:rgba(255,255,255,{{ shades[loop.index0] }});"></span>
+                    {% endfor %}
+                    {% if rest %}
+                        <span style="flex:{{ rest|map(attribute='amount')|map('float')|sum }}; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.4);"></span>
+                    {% endif %}
+                </div>
+                <div class="band-legend">
+                    {% for c in top %}
+                        <a href="{{ url_for('finance.activity_page', month=month_param, category=c.key or 'none') }}">
+                            <span><span class="band-swatch" style="background:rgba(255,255,255,{{ shades[loop.index0] }});"></span>{{ c.label }}</span><b>{{ c.amount|money(cur, true) }}</b>
+                        </a>
+                    {% endfor %}
+                    {% if rest %}
+                        <a href="{{ url_for('finance.activity_page', month=month_param, category=rest|map(attribute='key')|map('default', 'none', true)|join(',')) }}">
+                            <span><span class="band-swatch" style="border:1px solid rgba(255,255,255,0.5);"></span>Everything else</span><b>{{ (rest|map(attribute='amount')|map('float')|sum)|money(cur, true) }}</b>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="section">
+                <div class="section-head">
+                    <h2 class="section-label">Recent</h2>
+                    {% if screen.recent %}<a class="link-accent" href="{{ url_for('finance.activity_page') }}" style="font-size:14px;">See all</a>{% endif %}
+                </div>
+                {% if screen.recent %}
+                <div class="card-list">
+                    {% for tx in screen.recent %}
+                        <a class="tx-row" href="{{ url_for('finance.activity_page', selected=tx.id) }}">
+                            <span class="tx-mark" aria-hidden="true">{{ tx_mark(tx.description) }}</span>
+                            <span class="tx-text">
+                                <span class="tx-name">{{ tx.description }}</span>
+                                <span class="tx-detail">{{ tx.category_label }} &middot; {{ tx.when }}{% if tx.source == 'apple_pay' %} &middot; Apple Pay{% endif %}</span>
+                            </span>
+                            {{ tx_amount(tx, cur) }}
+                        </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card notice">
+                    <div class="notice-icon" aria-hidden="true"><i data-lucide="plus"></i></div>
+                    <div class="notice-text">
+                        <span class="notice-title">Add your first purchase</span>
+                        <span>Type what you spent and Artha files it for you. Or bring in months at once from a bank statement.</span>
+                        <span style="display:flex; gap:16px; flex-wrap:wrap;">
+                            <button type="button" class="link-accent" data-add-open>Add a purchase</button>
+                            <a class="link-accent" href="{{ url_for('finance.finance_page') }}#import">Import a statement</a>
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
     </div>
+</div>
 
-    <script type="module">
-        import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
-        import { updateChartData } from "{{ url_for('static', filename='js/chart.js') }}";
-        import { formatMoney, formatMoneyFromElement } from "{{ url_for('static', filename='js/currency.js') }}";
-
-        // Budget banner / renewals amounts are plain server-rendered "$"
-        // text with no id transactions.js's updateSummaryUI() (which only
-        // covers finance-income/expense/balance) reaches — without this,
-        // switching currency in Settings would correctly reformat the
-        // stat cards but silently leave these showing stale USD figures
-        // forever (a page reload doesn't fix it either, since the
-        // currency preference lives in localStorage, not anything the
-        // server renders from). Same .fp-money pattern finance.html uses
-        // for its own equivalent elements, scoped to this page's own class
-        // so the two never double-process each other's elements.
-        function formatDashboardMoneyElements() {
-            document.querySelectorAll(".dashboard-money[data-money-value]").forEach((el) => {
-                const raw = parseFloat(el.getAttribute("data-money-value"));
-                if (!Number.isFinite(raw)) return;
-                // Falls back to the globally-selected currency when an
-                // element carries no data-money-currency of its own
-                // (every aggregate figure on this page) -- only an
-                // element tagged with its own native currency (a single
-                // bill's own amount) actually diverges from formatMoney().
-                el.textContent = formatMoneyFromElement(el);
-            });
-        }
-        formatDashboardMoneyElements();
-        document.addEventListener("currency-refresh-ui", formatDashboardMoneyElements);
-
-        const tabs = document.querySelectorAll("[data-quick-tab]");
-        const forms = {
-            transaction: document.getElementById("quick-add-transaction"),
-            note: document.getElementById("quick-add-note"),
-            event: document.getElementById("quick-add-event"),
-        };
-
-        function selectQuickTab(name) {
-            tabs.forEach((btn) => btn.classList.toggle("cost-tab-active", btn.dataset.quickTab === name));
-            Object.entries(forms).forEach(([key, el]) => {
-                if (!el) return;
-                el.style.display = key === name ? "flex" : "none";
-            });
-        }
-
-        tabs.forEach((btn) => {
-            btn.addEventListener("click", () => selectQuickTab(btn.dataset.quickTab));
-        });
-
-        const eventTitleInput = document.getElementById("quick-event-title");
-        const eventDateInput = document.getElementById("quick-event-date");
-        const eventStartInput = document.getElementById("quick-event-start");
-        const eventEndInput = document.getElementById("quick-event-end");
-        const eventErrorEl = document.getElementById("quick-event-error");
-        const eventSubmitBtn = document.getElementById("quick-event-submit");
-
-        function toLocalIso(d) {
-            const pad = (n) => String(n).padStart(2, "0");
-            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
-        }
-        function toDateInputValue(d) {
-            const pad = (n) => String(n).padStart(2, "0");
-            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        }
-        function toTimeInputValue(d) {
-            const pad = (n) => String(n).padStart(2, "0");
-            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        }
-
-        function getCsrfToken() {
-            const meta = document.querySelector('meta[name="csrf-token"]');
-            return meta ? meta.content : "";
-        }
-
-        // Prefill with a sensible default (next 15-minute mark, 1 hour
-        // long) so the fields aren't empty, but every field stays fully
-        // editable rather than being a fixed "starts now" guess.
-        if (eventDateInput) {
-            const defaultStart = new Date();
-            defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
-            const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
-            eventDateInput.value = toDateInputValue(defaultStart);
-            eventStartInput.value = toTimeInputValue(defaultStart);
-            eventEndInput.value = toTimeInputValue(defaultEnd);
-        }
-
-        async function submitQuickEvent() {
-            const title = eventTitleInput.value.trim();
-            if (!title) {
-                showToast("Event title is required", "error");
-                return;
-            }
-            if (!eventDateInput.value || !eventStartInput.value || !eventEndInput.value) {
-                showToast("Date, start, and end time are required", "error");
-                return;
-            }
-
-            const [y, m, d] = eventDateInput.value.split("-").map(Number);
-            const [startH, startM] = eventStartInput.value.split(":").map(Number);
-            const [endH, endM] = eventEndInput.value.split(":").map(Number);
-            const start = new Date(y, m - 1, d, startH, startM);
-            const end = new Date(y, m - 1, d, endH, endM);
-
-            if (end <= start) {
-                eventErrorEl.style.display = "";
-                return;
-            }
-            eventErrorEl.style.display = "none";
-
-            eventSubmitBtn.disabled = true;
-            try {
-                const res = await fetch("{{ url_for('dashboard.create_event') }}", {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                    body: JSON.stringify({
-                        title,
-                        start: toLocalIso(start),
-                        end: toLocalIso(end),
-                        color: "sky",
-                    }),
-                });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    showToast(data.message || "Could not add event", "error");
-                    eventSubmitBtn.disabled = false;
-                    return;
-                }
-
-                showToast("Event added!", "success", 1500);
-
-                // Same in-place refresh as Transaction/Note above, not the
-                // full reload this used to do -- only Today's panel and the
-                // greeting's one-line summary can change from adding an
-                // event (see dashboard_summary's "N events today" clause),
-                // so those are the only two pulled from a fresh fetch.
-                const freshRes = await fetch(window.location.pathname + window.location.search, {
-                    credentials: "same-origin",
-                    headers: { "X-Requested-With": "XMLHttpRequest" },
-                    cache: "no-store",
-                });
-                if (freshRes.ok) {
-                    const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
-                    ["dashboard-today-panel", "dashboard-summary-line"].forEach((id) => {
-                        const freshEl = freshDoc.getElementById(id);
-                        const liveEl = document.getElementById(id);
-                        if (freshEl && liveEl) liveEl.innerHTML = freshEl.innerHTML;
-                    });
-                    if (window.lucide) window.lucide.createIcons();
-                }
-
-                // Reset to the same sensible next-15-minute-mark default the
-                // form opened with, rather than leaving it on whatever was
-                // just submitted.
-                const defaultStart = new Date();
-                defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
-                const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
-                eventTitleInput.value = "";
-                eventDateInput.value = toDateInputValue(defaultStart);
-                eventStartInput.value = toTimeInputValue(defaultStart);
-                eventEndInput.value = toTimeInputValue(defaultEnd);
-                eventSubmitBtn.disabled = false;
-            } catch {
-                showToast("Network error. Check your connection.", "error");
-                eventSubmitBtn.disabled = false;
-            }
-        }
-
-        if (eventSubmitBtn) {
-            eventSubmitBtn.addEventListener("click", submitQuickEvent);
-            // This widget is a plain <div>, not a <form> (its fields need
-            // individually-controlled JS validation, see the end-after-
-            // start check above), so Enter never submits it for free the
-            // way a real form would -- wired to every field, not just
-            // Title, so finishing on any one of them behaves the same way.
-            [eventTitleInput, eventDateInput, eventStartInput, eventEndInput].forEach((input) => {
-                input.addEventListener("keydown", (e) => {
-                    if (e.key === "Enter") {
-                        e.preventDefault();
-                        submitQuickEvent();
-                    }
-                });
-            });
-        }
-
-        // Quick-add transaction posts to the same finance.add_transaction
-        // endpoint the Finance page uses, but transactions.js's own submit
-        // handler never attaches here (it's gated behind #tx-list, which
-        // only exists on /finance) — without this, the browser would fall
-        // back to a plain form submit, working correctly but only via a
-        // full page reload rather than updating in place like every other
-        // add/edit/delete in the app now does.
-        const quickAddTxForm = document.getElementById("quick-add-transaction");
-        if (quickAddTxForm) {
-            quickAddTxForm.addEventListener("submit", async (e) => {
-                e.preventDefault();
-                const submitBtn = quickAddTxForm.querySelector('button[type="submit"]');
-                const formData = new FormData(quickAddTxForm);
-
-                if (submitBtn) submitBtn.disabled = true;
-                try {
-                    const res = await fetch(quickAddTxForm.action, {
-                        method: "POST",
-                        credentials: "same-origin",
-                        headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": getCsrfToken() },
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        showToast(data.message || "Error adding transaction", "error");
-                        return;
-                    }
-
-                    showToast("Transaction added!", "success", 1500);
-
-                    // Same DOM-diff pattern refreshFinancialSummary() uses
-                    // on the Finance page — re-fetch this same page and
-                    // pull the fresh numbers out of it, rather than a full
-                    // navigation.
-                    const freshRes = await fetch(window.location.pathname + window.location.search, {
-                        credentials: "same-origin",
-                        headers: { "X-Requested-With": "XMLHttpRequest" },
-                        cache: "no-store",
-                    });
-                    if (freshRes.ok) {
-                        const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
-                        [
-                            "finance-income", "finance-expense", "finance-balance",
-                            "dashboard-tx-count", "dashboard-budget-banner",
-                            // A new/edited transaction (spend, or marking one
-                            // recurring so it now counts as an upcoming bill)
-                            // changes this month's remaining headroom too.
-                            "dashboard-safe-to-spend-panel",
-                            // Marking a transaction recurring here can change
-                            // what Today/Renewals show (a bill due today or
-                            // this week) — without these, checking "recurring"
-                            // would silently need a reload to actually appear
-                            // anywhere, the same staleness bug as the rest of
-                            // this handler exists to avoid.
-                            "dashboard-today-panel", "dashboard-renewals-panel", "dashboard-summary-line",
-                        ].forEach((id) => {
-                            const freshEl = freshDoc.getElementById(id);
-                            const liveEl = document.getElementById(id);
-                            if (!freshEl || !liveEl) return;
-                            liveEl.innerHTML = freshEl.innerHTML;
-                            if (freshEl.hasAttribute("data-money-value")) {
-                                liveEl.setAttribute("data-money-value", freshEl.getAttribute("data-money-value"));
-                            }
-                        });
-                        if (window.lucide) window.lucide.createIcons();
-                    }
-
-                    await updateChartData();
-
-                    document.dispatchEvent(new CustomEvent("currency-refresh-ui"));
-
-                    const dateInput = quickAddTxForm.querySelector('input[name="date"]');
-                    const todayValue = new Date().toISOString().split("T")[0];
-                    quickAddTxForm.reset();
-                    if (dateInput) dateInput.value = todayValue;
-                } catch (err) {
-                    console.error("Error adding transaction:", err);
-                    showToast("Network error while adding transaction", "error");
-                } finally {
-                    if (submitBtn) submitBtn.disabled = false;
-                }
-            });
-        }
-
-        // Same in-place-update shape as the transaction handler above,
-        // rather than the plain form submit (full page reload + browser
-        // flash message) this used to fall back to -- the only other tab
-        // in this same quick-add card that still worked that way.
-        const quickAddNoteForm = document.getElementById("quick-add-note");
-        if (quickAddNoteForm) {
-            quickAddNoteForm.addEventListener("submit", async (e) => {
-                e.preventDefault();
-                const submitBtn = quickAddNoteForm.querySelector('button[type="submit"]');
-                const noteInput = quickAddNoteForm.querySelector('input[name="note"]');
-                const formData = new FormData(quickAddNoteForm);
-
-                if (submitBtn) submitBtn.disabled = true;
-                try {
-                    const res = await fetch(quickAddNoteForm.action, {
-                        method: "POST",
-                        credentials: "same-origin",
-                        headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": getCsrfToken() },
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        showToast(data.message || "Error adding note", "error");
-                        return;
-                    }
-
-                    showToast("Note added!", "success", 1500);
-
-                    const freshRes = await fetch(window.location.pathname + window.location.search, {
-                        credentials: "same-origin",
-                        headers: { "X-Requested-With": "XMLHttpRequest" },
-                        cache: "no-store",
-                    });
-                    if (freshRes.ok) {
-                        const freshDoc = new DOMParser().parseFromString(await freshRes.text(), "text/html");
-                        const freshEl = freshDoc.getElementById("dashboard-notes-panel");
-                        const liveEl = document.getElementById("dashboard-notes-panel");
-                        if (freshEl && liveEl) liveEl.innerHTML = freshEl.innerHTML;
-                    }
-
-                    if (noteInput) noteInput.value = "";
-                } catch (err) {
-                    console.error("Error adding note:", err);
-                    showToast("Network error while adding note", "error");
-                } finally {
-                    if (submitBtn) submitBtn.disabled = false;
-                }
-            });
-        }
-    </script>
-
-
+<script type="module" src="{{ url_for('static', filename='js/today.js') }}"></script>
 {% endblock %}

@@ -3,39 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Error</title>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <title>Something went wrong</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@800&display=swap" rel="stylesheet">
+    <!-- Standalone on purpose (no base.html, no style.css): an error
+         page has to render even when the thing that broke is the app
+         shell itself. The tokens below are a copy of style.css's. -->
     <style>
+        :root {
+            --bg: #f4f6fa; --ink: #0b1020; --secondary: #586174;
+            --accent: #2f5fd0; --on-accent: #ffffff; --code: #c93a3a;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0a0e17; --ink: #f2f4f8; --secondary: #a3abbd;
+                --accent: #6e95ff; --on-accent: #0a0e17; --code: #f06a6a;
+            }
+        }
         body {
-            background: #12151e;
-            color: #f0ede8;
-            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             text-align: center;
             margin: 0;
+            padding: 0 16px;
         }
-        main { display: flex; flex-direction: column; gap: 24px; align-items: center; }
-        h1 { font-family: 'Fraunces', serif; color: #ef4444; font-size: 64px; font-weight: 600; margin: 0; }
-        p { color: #8b95a8; font-size: 18px; margin: 0; }
+        main { display: flex; flex-direction: column; gap: 14px; align-items: center; max-width: 420px; }
+        .code { font-family: ui-rounded, "SF Pro Rounded", Nunito, system-ui, sans-serif; font-weight: 800; font-size: 72px; letter-spacing: -1.5px; line-height: 1; color: var(--code); }
+        h1 { font-size: 22px; font-weight: 700; margin: 0; text-wrap: balance; }
+        p { color: var(--secondary); font-size: 16px; line-height: 1.5; margin: 0 0 8px; }
         a {
-            background: #ef4444;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
+            background: var(--accent);
+            color: var(--on-accent);
+            padding: 12px 22px;
+            border-radius: 999px;
             font-weight: 600;
             text-decoration: none;
         }
-        a:hover { filter: brightness(1.1); }
+        a:hover { filter: brightness(1.08); }
+        a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     </style>
 </head>
 <body>
     <main>
-        <h1>500</h1>
-        <p>Something went wrong on our end. Please try again later.</p>
-        <a href="{{ url_for('dashboard.index') }}">Go Back Home</a>
+        <div class="code" aria-hidden="true">500</div>
+        <h1>Something went wrong on our side</h1>
+        <p>Try again in a minute. If it keeps happening, let us know.</p>
+        <a href="{{ url_for('dashboard.index') }}">Back to Today</a>
     </main>
 </body>
 </html>

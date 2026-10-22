@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v28";
+const CACHE_NAME = "artha-cache-v29";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -39,6 +39,7 @@ const ASSETS_TO_CACHE = [
     "/static/js/toast.js",
     "/static/js/search.js",
     "/static/js/csv_import.js",
+    "/static/js/shell.js",
     ];
 
     self.addEventListener("install", (event) => {

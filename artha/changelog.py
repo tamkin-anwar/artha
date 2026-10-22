@@ -26,6 +26,24 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-10-21",
+        "category": "new",
+        "title": "A new look, built around four places",
+        "body": "Today shows what's safe to spend and how the month is going. Activity lists every transaction by day, with everything editable in place. Plan splits your budget into bills, everyday spending and what's left. Wealth tracks your net worth. Reports, Notes, Calendar and the rest are under More.",
+    },
+    {
+        "date": "2026-10-21",
+        "category": "new",
+        "title": "Add from anywhere",
+        "body": "Press N, or tap the + button, to add a purchase or income from any page. Pick a category or let Artha choose, and set it to repeat if it's a bill.",
+    },
+    {
+        "date": "2026-10-21",
+        "category": "improved",
+        "title": "Light or dark, the way your device is set",
+        "body": "Artha now follows your device's light or dark setting, switching on its own at sunset if your device does. The theme toggle in Settings still pins one if you prefer.",
+    },
+    {
         "date": "2026-10-04",
         "category": "fixed",
         "title": "Repeating bills now show up even if you didn't open Finance that day",

@@ -162,6 +162,22 @@ and Artha shouldn't repeat that.
   never set it, since every row there is reviewed before saving.
   New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
+- **The website's money pages render the app's own screens** (the
+  2026-10 web redesign). `services/screens.py` builds the dicts behind
+  Today, Activity (`transactions_screen`), Plan, Month by month and
+  Wealth; the API returns them as JSON and the web pages (`index.html`,
+  `activity.html`, `plan.html`, `accounts.html`) render the same dicts,
+  so the two can't disagree. Money in them is two-decimal strings,
+  formatted in templates with the `money` filter
+  (`utils.format_money`, matching `currency.js`'s per-currency style:
+  BDT lakh grouping, EUR as `1.234,56 €`) instead of the older
+  `data-money-value` + client-side formatting. After any change the page
+  reloads (`shell.js`'s `toastAfterReload`) rather than patching numbers
+  client-side, per the currency trap below. Navigation matches the apps:
+  Today, Activity, Plan, Wealth, then More (AI Assistant, Scenarios,
+  Reports, which is the older `/finance` page with its charts and
+  statement import, Notes, Calendar, Calculator). The Add sheet
+  (`partials/add_sheet.html`, N on the keyboard) is on every page.
   `templates/privacy.html` has a section on the iPhone app; keep it in
   step with what the app does.
 - Models live in `artha/models/`, one file per model, exported through
@@ -306,6 +322,14 @@ and Artha shouldn't repeat that.
   against the new reality and updated in the same change, not left to go
   stale. A wrong privacy claim users actually see is worse than no page
   at all.
+- **Theme follows the device** (2026-10): `prefers-color-scheme` decides
+  light or dark, live, unless the person taps the theme toggle, which
+  pins a choice under `localStorage["theme-choice"]` (tapping back to
+  the device's own setting clears it). The older `"theme"` key is
+  deliberately ignored: the previous theme.js wrote the device setting
+  into it on every first visit, so it can't tell a choice from a
+  default. The FOUC script in `base.html` and `static/js/theme.js` must
+  agree on this.
 - **`hide_app_shell` pages split into two families, only one of which
   should ever be theme-aware (fixed 2026-08-31).** Login, Register,
   forgot/reset password, and the 2FA login-verify step are steps in

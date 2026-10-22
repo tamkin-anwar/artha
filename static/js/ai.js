@@ -16,7 +16,7 @@ function initAI() {
     const EMPTY_STATE_HTML = `
         <div id="ai-empty-state" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; text-align:center;">
             <div class="ai-orb" id="ai-orb"></div>
-            <div style="font-family:'Fraunces',serif; font-size:24px; color:var(--text-primary);">Artha AI</div>
+            <div style="font-family:var(--font-display); font-size:24px; color:var(--text-primary);">Artha AI</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:480px;">
                 <button type="button" class="ai-chip" data-chip="insights">Get financial insights</button>
                 <button type="button" class="ai-chip" data-chip="spend">How much did I spend this month?</button>

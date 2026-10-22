@@ -16,13 +16,13 @@
                 />
             </span>
 
-            <div style="font-family:'Fraunces',serif; font-size:2.25rem; font-weight:600; color:var(--gold);">
+            <div style="font-family:var(--font-display); font-size:2.25rem; font-weight:700; letter-spacing:-0.5px; color:var(--text-primary);">
                 Artha
             </div>
         </div>
 
         <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Recovery codes">
-            <h1 style="font-family:'Fraunces',serif;" class="text-center text-2xl font-semibold mb-2">
+            <h1 style="font-family:var(--font-display);" class="text-center text-2xl font-semibold mb-2">
                 Save your recovery codes
             </h1>
             <p class="text-center text-sm text-secondary mb-6">
@@ -31,7 +31,7 @@
             </p>
 
             <div class="settings-tile" style="border-radius:12px; padding:18px; margin-bottom:20px;">
-                <div id="recovery-codes-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary);">
+                <div id="recovery-codes-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:var(--font-figure); font-size:14px; color:var(--text-primary);">
                     {% for code in codes %}
                         <div>{{ code }}</div>
                     {% endfor %}

@@ -14,10 +14,9 @@ from ...changelog import CHANGELOG_ENTRIES
 from ...extensions import db, ai_limit, AI_CALCULATOR_LIMIT
 from ...models import Note, Transaction, Event, EventException, User
 from ...services.exchange_rate_service import get_rates, convert_usd_to
-from ...services.month_snapshot import build_month_snapshot
+from ...services.screens import today_screen
 from ...utils import derive_title_and_preview, sanitize_note_html, next_due_date, user_today, is_ajax_request, CURRENCY_SYMBOLS
 from ..finance.routes import TRANSACTION_CATEGORIES, generate_due_recurring
-from ..accounts.routes import net_worth_summary
 from . import dashboard_bp
 
 log = logging.getLogger(__name__)
@@ -76,13 +75,9 @@ def index():
 
     uid = current_user.id
     # The user's own local date, not the server's — otherwise the "Today"
-    # panel, greeting summary, and renewals-this-week can all disagree
-    # with the viewer's own calendar near a timezone boundary. Calendar
-    # solves the same problem client-side (see calendar.html's own
-    # localTodayString() correction); here the account already has
-    # User.timezone on hand (auto-detected the same way, see
-    # static/js/settings.js), so there's no need to duplicate that
-    # redirect-and-patch dance — this is just right on first render.
+    # panel and the month's figures can disagree with the viewer's own
+    # calendar near a timezone boundary (User.timezone, auto-detected, see
+    # static/js/settings.js).
     today = user_today(current_user)
 
     # Recurring bills used to be created only when /finance was opened, so
@@ -95,25 +90,16 @@ def index():
     except Exception:
         db.session.rollback()
 
-    notes = (
-        Note.query.filter_by(user_id=uid, archived=False)
-        .order_by(Note.position.asc(), Note.id.asc())
-        .all()
-    )
-    # This month's money picture (spending, income, budget, bills still
-    # due, Safe to Spend), computed by the same function the native app's
-    # API uses -- see services/month_snapshot.py, which also carries the
-    # reasoning behind each figure.
-    snapshot = build_month_snapshot(current_user, today)
-    transactions = snapshot.transactions
-    income = float(snapshot.income)
-    expense = float(snapshot.expense)
-    balance = income - expense
+    # The money on Today is the native app's Today screen, the same dict
+    # its API returns (services/screens.py), so the website and the
+    # iPhone app can never show different numbers.
+    screen = today_screen(current_user, today)
 
     # ------------------------------------------------------------------
-    # "Today" panel — time-blocked events + notes due today/overdue.
-    # Calendar and Notes both track time-sensitive things that never
-    # otherwise surface outside their own pages.
+    # "Also today": events and notes due, for the people who use Notes
+    # and Calendar here (the redesigned Today is about money; this keeps
+    # what's due today from disappearing for them). Only shown when
+    # there's something to show.
     # ------------------------------------------------------------------
     today_start_dt = datetime(today.year, today.month, today.day)
     today_end_dt = today_start_dt + timedelta(days=1)
@@ -123,8 +109,7 @@ def index():
     # own docstring) — normally that's /calendar loading. Without this,
     # today's occurrence of a recurring event silently wouldn't show up
     # here if nobody's opened Calendar recently enough to have already
-    # materialized it, even though it's a real, correct occurrence that
-    # would show up there.
+    # materialized it.
     _generate_recurring_events(uid, today_start_dt, today_end_dt)
 
     def _fmt_time(dt: datetime) -> str:
@@ -132,13 +117,8 @@ def index():
         return f"{hour12}:{dt.minute:02d} {'AM' if dt.hour < 12 else 'PM'}"
 
     todays_events = [
-        {
-            "id": e.id,
-            "title": e.title,
-            "color": e.color,
-            "start_label": _fmt_time(e.start),
-            "end_label": _fmt_time(e.end),
-        }
+        {"id": e.id, "title": e.title, "color": e.color,
+         "start_label": _fmt_time(e.start), "end_label": _fmt_time(e.end)}
         for e in Event.query.filter(
             Event.user_id == uid,
             Event.start >= today_start_dt,
@@ -161,76 +141,34 @@ def index():
     overdue_notes = [n for n in notes_due_or_overdue if n.due_date < today]
     due_today_notes = [n for n in notes_due_or_overdue if n.due_date == today]
 
-    # Recurring renewals landing within the next 7 days (built by
-    # build_month_snapshot above, in this user's display currency).
-    renewals_this_week = snapshot.renewals_this_week
-    renewals_total = snapshot.renewals_total
-
-    # Surfaced in the Today panel too, not moved out of Renewals This
-    # Week — that card still needs every one of them for its own weekly
-    # total to stay accurate. This is deliberate duplication: Today
-    # answers "what needs my attention right now," Renewals answers
-    # "what's my near-term recurring spending," and a bill due today is a
-    # real answer to both questions at once.
-    todays_renewals = [r for r in renewals_this_week if r["due"] == today]
-
-    # ------------------------------------------------------------------
-    # One-line contextual summary, capped at 3 clauses so it stays a
-    # single readable line even on a busy day.
-    # ------------------------------------------------------------------
-    summary_parts = []
-    if todays_events:
-        n = len(todays_events)
-        summary_parts.append(f"{n} event{'s' if n != 1 else ''} today")
-    if overdue_notes:
-        n = len(overdue_notes)
-        summary_parts.append(f"{n} note{'s' if n != 1 else ''} overdue")
-    elif due_today_notes:
-        n = len(due_today_notes)
-        summary_parts.append(f"{n} note{'s' if n != 1 else ''} due today")
-    if renewals_this_week:
-        renewals_symbol = CURRENCY_SYMBOLS.get(current_user.preferred_currency, "$")
-        summary_parts.append(f"{renewals_symbol}{renewals_total:,.0f} in renewals this week")
-    # Budget and Safe to Spend, also from build_month_snapshot (see its
-    # own comments for how bills still due are netted out without ever
-    # counting the same bill twice).
-    budget = snapshot.budget
-    safe_to_spend = snapshot.safe_to_spend
-    safe_to_spend_upcoming = snapshot.safe_to_spend_upcoming
-
-    summary_parts.append("spending on pace" if balance >= 0 else "spending ahead of income this month")
-    dashboard_summary = " · ".join(summary_parts[:3])
-
-    # Net worth (total assets minus liabilities, as of right now) is a
-    # different figure from Net Balance above (income minus expenses,
-    # this month only) — deliberately not reusing that card's gold styling
-    # or label so the two aren't mistaken for each other. None (card
-    # hidden entirely) until the user has actually added an account —
-    # same "nothing to show yet" gating as Safe to Spend.
-    net_worth = net_worth_summary(current_user)
+    for bill in screen["coming_up"]:
+        due = date.fromisoformat(bill["due"])
+        bill["weekday"] = due.strftime("%a").upper()
+        bill["month_label"] = due.strftime("%b").upper()
+        bill["day"] = f"{due.day:02d}"
+    for tx in screen["recent"]:
+        tx_date = date.fromisoformat(tx["date"]) if tx["date"] else today
+        tx["when"] = _relative_day(tx_date, today)
 
     return render_template(
         "index.html",
-        notes=notes,
-        transactions=transactions,
-        income=income,
-        expense=expense,
-        balance=balance,
+        screen=screen,
         today=today,
-        today_date=today.strftime("%Y-%m-%d"),
         todays_events=todays_events,
         overdue_notes=overdue_notes,
         due_today_notes=due_today_notes,
-        todays_renewals=todays_renewals,
-        renewals_this_week=renewals_this_week,
-        renewals_total=renewals_total,
-        dashboard_summary=dashboard_summary,
-        budget=budget,
-        safe_to_spend=safe_to_spend,
-        safe_to_spend_upcoming=safe_to_spend_upcoming,
-        net_worth=net_worth,
         categories=TRANSACTION_CATEGORIES,
     )
+
+
+def _relative_day(day: date, today: date) -> str:
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    if 0 < (today - day).days < 7:
+        return day.strftime("%A")
+    return day.strftime("%b %-d")
 
 
 # ---------------------------------------------------------------------------

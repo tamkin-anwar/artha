@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Finance{% endblock %}
+{% block title %}Reports{% endblock %}
 {% block content %}
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -15,8 +15,8 @@
     {% endif %}
 {% endwith %}
 
-<div class="eyebrow" style="margin-bottom:8px;">FINANCE</div>
-<h1 style="font-family:'Fraunces',serif; font-size:32px; font-weight:300; color:var(--text-primary); margin:0 0 24px;">Money, in one view</h1>
+<div class="page-eyebrow" style="margin-bottom:4px;">Charts, cash flow and statements</div>
+<h1 class="page-title" style="margin:0 0 24px;">Reports</h1>
 
 <div class="fp-toptabs scrollbar-hidden" role="tablist" aria-label="Finance views">
     <button type="button" id="fp-tab-overview" class="fp-toptab {{ 'fp-toptab-active' if active_tab == 'overview' }}" data-fp-tab="overview" role="tab" aria-selected="{{ 'true' if active_tab == 'overview' else 'false' }}" aria-controls="fp-pane-overview" tabindex="{{ '0' if active_tab == 'overview' else '-1' }}">Overview</button>
@@ -57,7 +57,7 @@
         {% set bar_color = 'var(--red)' if budget.tier == 'over' else ('var(--gold)' if budget.tier == 'warning' else 'var(--emerald)') %}
         <div id="budget-display">
             <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
-                <span class="fp-money" style="font-size:20px; font-family:'JetBrains Mono',monospace; color:var(--text-primary);" data-money-value="{{ budget.spent }}">${{ '%.2f'|format(budget.spent) }}</span>
+                <span class="fp-money" style="font-size:20px; font-family:var(--font-figure); color:var(--text-primary);" data-money-value="{{ budget.spent }}">${{ '%.2f'|format(budget.spent) }}</span>
                 <span style="font-size:13px; color:var(--text-secondary);">of <span class="fp-money" data-money-value="{{ budget.cap }}">${{ '%.2f'|format(budget.cap) }}</span></span>
             </div>
             <div style="height:8px; border-radius:999px; background:var(--bg-page); overflow:hidden;">
@@ -210,7 +210,7 @@
                 <div class="finance-ring-value" id="fp-savings-rate" style="color:{{ ring_color }};">{{ '%.0f'|format(savings_rate) }}%</div>
             </div>
             <div>
-                <p class="eyebrow" style="margin:0;">Savings Rate</p>
+                <p class="eyebrow">Savings Rate</p>
             </div>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
@@ -288,7 +288,7 @@
             </span>
             <span class="eyebrow">Income</span>
         </div>
-        <div id="fp-stat-income" class="stat-number money-positive fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ income }}">${{ "%.2f"|format(income) }}</div>
+        <div id="fp-stat-income" class="stat-number money-positive fp-money" style="font-family:var(--font-figure); font-size:24px;" data-money-value="{{ income }}">${{ "%.2f"|format(income) }}</div>
         <div id="fp-income-delta">
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.income.favorable else 'var(--red)' }};">
@@ -304,7 +304,7 @@
             </span>
             <span class="eyebrow">Expenses</span>
         </div>
-        <div id="fp-stat-expense" class="stat-number money-negative fp-money" style="font-family:'JetBrains Mono',monospace; font-size:24px;" data-money-value="{{ expense }}">${{ "%.2f"|format(expense) }}</div>
+        <div id="fp-stat-expense" class="stat-number money-negative fp-money" style="font-family:var(--font-figure); font-size:24px;" data-money-value="{{ expense }}">${{ "%.2f"|format(expense) }}</div>
         <div id="fp-expense-delta">
         {% if comparison %}
             <p style="font-size:12px; margin:6px 0 0; color:{{ 'var(--emerald)' if comparison.expense.favorable else 'var(--red)' }};">
@@ -336,7 +336,7 @@
             </span>
             <span class="eyebrow">Transactions</span>
         </div>
-        <div id="fp-stat-tx-count" class="stat-number" style="font-family:'JetBrains Mono',monospace; font-size:24px;">{{ transactions|length }}</div>
+        <div id="fp-stat-tx-count" class="stat-number" style="font-family:var(--font-figure); font-size:24px;">{{ transactions|length }}</div>
     </div>
 </div>
 
@@ -396,7 +396,7 @@
                 class="w-full min-w-0 sm:col-span-2"
                 style="background:var(--bg-sidebar); border:1px solid var(--border-subtle);
                        color:var(--text-primary); border-radius:8px; padding:10px 14px;
-                       font-family:'Inter',sans-serif; font-size:14px; height:2.75rem;"
+                       font-family:var(--font-body); font-size:14px; height:2.75rem;"
             >
         </div>
 
@@ -556,7 +556,7 @@
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("spending") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
-        <div class="fp-money" style="font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--red);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-money" style="font-family:var(--font-figure); font-size:26px; color:var(--red);" data-fp-total data-money-value="0">$0.00</div>
         <div class="fp-donut-row">
             <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
             <ul class="fp-category-list" data-fp-category-list></ul>
@@ -569,7 +569,7 @@
     <div class="glass-card finance-card-in" style="padding:20px; margin-bottom:24px;">
         {{ period_selector("income") }}
         <div class="eyebrow" style="margin:18px 0 4px;" data-fp-period-label>This Month</div>
-        <div class="fp-money" style="font-family:'JetBrains Mono',monospace; font-size:26px; color:var(--emerald);" data-fp-total data-money-value="0">$0.00</div>
+        <div class="fp-money" style="font-family:var(--font-figure); font-size:26px; color:var(--emerald);" data-fp-total data-money-value="0">$0.00</div>
         <div class="fp-donut-row">
             <div class="fp-donut-wrap"><canvas data-fp-donut></canvas></div>
             <ul class="fp-category-list" data-fp-category-list></ul>
@@ -586,15 +586,15 @@
         <div class="fp-cashflow-summary">
             <div>
                 <div class="eyebrow">Income</div>
-                <div class="fp-money" data-fp-cf-income data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--emerald);">$0.00</div>
+                <div class="fp-money" data-fp-cf-income data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--emerald);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow">Spending</div>
-                <div class="fp-money" data-fp-cf-expense data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--red);">$0.00</div>
+                <div class="fp-money" data-fp-cf-expense data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--red);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow" data-fp-cf-net-label>Net</div>
-                <div class="fp-money" data-fp-cf-net data-money-signed="1" data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px;">+$0.00</div>
+                <div class="fp-money" data-fp-cf-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:19px;">+$0.00</div>
             </div>
         </div>
 
@@ -614,15 +614,15 @@
         <div class="fp-cashflow-summary">
             <div>
                 <div class="eyebrow">Income</div>
-                <div class="fp-money" data-fp-rec-income data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--emerald);">$0.00</div>
+                <div class="fp-money" data-fp-rec-income data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--emerald);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow">Spending</div>
-                <div class="fp-money" data-fp-rec-expense data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px; color:var(--red);">$0.00</div>
+                <div class="fp-money" data-fp-rec-expense data-money-value="0" style="font-family:var(--font-figure); font-size:19px; color:var(--red);">$0.00</div>
             </div>
             <div>
                 <div class="eyebrow" data-fp-rec-net-label>Net</div>
-                <div class="fp-money" data-fp-rec-net data-money-signed="1" data-money-value="0" style="font-family:'JetBrains Mono',monospace; font-size:19px;">+$0.00</div>
+                <div class="fp-money" data-fp-rec-net data-money-signed="1" data-money-value="0" style="font-family:var(--font-figure); font-size:19px;">+$0.00</div>
             </div>
         </div>
 
@@ -676,7 +676,7 @@
     }
     .dark .csv-import-modal { box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3); }
     .csv-import-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-shrink:0; }
-    .csv-import-header h3 { font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0; color:var(--text-primary); }
+    .csv-import-header h3 { font-family:var(--font-display); font-weight:400; font-size:19px; margin:0; color:var(--text-primary); }
     .csv-import-close { background:none; border:none; color:var(--text-muted); cursor:pointer; line-height:0; padding:4px; }
     .csv-import-close:hover { color:var(--text-primary); }
     .csv-import-close svg, .csv-import-close i { width:18px; height:18px; }
@@ -700,7 +700,7 @@
        gold-toned note instead of blending into that sentence. */
     .csv-import-notice {
         font-size:12.5px; color:var(--gold); background:var(--amber-dim);
-        border:1px solid rgba(212,168,67,0.3); border-radius:8px;
+        border:1px solid color-mix(in srgb, var(--gold) 30%, transparent); border-radius:8px;
         padding:8px 12px; margin:0 0 12px; flex-shrink:0;
     }
     .csv-import-table-wrap { position:relative; flex:1; min-height:0; display:flex; }
@@ -791,7 +791,7 @@
     }
     .confirm-modal-icon svg, .confirm-modal-icon i { width: 20px; height: 20px; }
     .confirm-modal-title {
-        font-family: 'Fraunces', serif; font-size: 19px; font-weight: 500;
+        font-family:var(--font-display); font-size: 19px; font-weight: 500;
         color: var(--text-primary); margin-bottom: 6px;
     }
     .confirm-modal-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 22px; }
@@ -859,9 +859,9 @@
     .recurring-row:last-child { border-bottom:none; }
     .recurring-row-desc { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .recurring-row-category { font-size:11px; color:var(--text-muted); flex-shrink:0; }
-    .recurring-row-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; white-space:nowrap; }
+    .recurring-row-amount { font-family:var(--font-figure); flex-shrink:0; white-space:nowrap; }
     .recurring-due-badge {
-        font-family:'JetBrains Mono',monospace; font-size:10.5px;
+        font-family:var(--font-figure); font-size:10.5px;
         padding:2px 8px; border-radius:999px; flex-shrink:0;
         background:var(--bg-page); color:var(--text-secondary);
     }
@@ -936,7 +936,7 @@
     .fp-category-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
     .fp-category-label { flex:1; min-width:0; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .fp-category-pct { color:var(--text-muted); font-size:11.5px; flex-shrink:0; }
-    .fp-category-amount { font-family:'JetBrains Mono',monospace; flex-shrink:0; color:var(--text-primary); }
+    .fp-category-amount { font-family:var(--font-figure); flex-shrink:0; color:var(--text-primary); }
 
     .fp-cashflow-summary {
         display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
@@ -1113,7 +1113,7 @@ function renderTrendChart() {
 
     var emerald = getVar("--emerald", "#22c55e");
     var red = getVar("--red", "#ef4444");
-    var gold = getVar("--gold", "#d4a843");
+    var gold = getVar("--gold", "var(--gold)");
     var mutedColor = getVar("--text-muted", "#4a5468");
     var textPrimary = getVar("--text-primary", "#f0ede8");
     var glassBg = getVar("--glass-bg", "rgba(30,36,53,0.9)");
@@ -1227,7 +1227,7 @@ function renderTrendChart() {
                     titleColor: mutedColor,
                     titleFont: { size: 11, weight: "600" },
                     bodyColor: textPrimary,
-                    bodyFont: { size: 14, weight: "700", family: "'JetBrains Mono', monospace" },
+                    bodyFont: { size: 14, weight: "700", family: getComputedStyle(document.documentElement).getPropertyValue("--font-figure") },
                     callbacks: {
                         title: function (items) { return items[0].label; },
                         label: function (ctx) { return signedMoney(ctx.parsed.y); },
@@ -1255,7 +1255,7 @@ function renderTrendChart() {
                     // to the same value (all reading roughly the same
                     // width), not just the "run off the canvas edge" case
                     // the side padding above already covers.
-                    font: { size: 10, weight: "700", family: "'JetBrains Mono', monospace" },
+                    font: { size: 10, weight: "700", family: getComputedStyle(document.documentElement).getPropertyValue("--font-figure") },
                     formatter: function (value) { return signedMoney(value); },
                 } : false,
             },
@@ -1277,7 +1277,7 @@ function renderTrendChart() {
                         },
                         font: function (ctx) {
                             var isSelected = monthValues[ctx.index] === selectedMonthValue;
-                            return { size: 11, weight: isSelected ? "700" : "400", family: "'Inter', sans-serif" };
+                            return { size: 11, weight: isSelected ? "700" : "400", family: getComputedStyle(document.documentElement).getPropertyValue("--font-body") };
                         },
                     },
                 },
@@ -1414,7 +1414,7 @@ function fpRenderDonut(pane, data) {
                         titleColor: mutedColor,
                         titleFont: { size: 11, weight: "600" },
                         bodyColor: textPrimary,
-                        bodyFont: { size: 13, weight: "700", family: "'JetBrains Mono', monospace" },
+                        bodyFont: { size: 13, weight: "700", family: getComputedStyle(document.documentElement).getPropertyValue("--font-figure") },
                         callbacks: {
                             label: function (ctx) { return " " + ctx.label + ": " + formatMoney(ctx.parsed); },
                         },
@@ -1607,7 +1607,7 @@ function fpRenderCashflow(pane, data) {
                         titleColor: mutedColor,
                         titleFont: { size: 11, weight: "600" },
                         bodyColor: textPrimary,
-                        bodyFont: { size: 13, weight: "700", family: "'JetBrains Mono', monospace" },
+                        bodyFont: { size: 13, weight: "700", family: getComputedStyle(document.documentElement).getPropertyValue("--font-figure") },
                         callbacks: {
                             label: function (ctx) { return " " + ctx.dataset.label + ": " + formatMoney(ctx.parsed.y); },
                         },
@@ -1625,7 +1625,7 @@ function fpRenderCashflow(pane, data) {
                         align: "end",
                         offset: 4,
                         color: function (ctx) { return ctx.datasetIndex === 0 ? emerald : red; },
-                        font: { size: 11, weight: "700", family: "'JetBrains Mono', monospace" },
+                        font: { size: 11, weight: "700", family: getComputedStyle(document.documentElement).getPropertyValue("--font-figure") },
                         formatter: function (value) { return formatMoney(value); },
                     } : false,
                 },

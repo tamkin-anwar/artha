@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+{% set cur = screen.currency %}
+{% set filtered = filters.q or filters.type or filters.month or filters.category or filters.review %}
+
+<div class="activity" id="activity" data-currency="{{ cur }}" data-selected="{{ selected or '' }}">
+    <section class="activity-list" aria-label="Transactions">
+        <header class="page-head activity-head">
+            <div class="page-head-text">
+                <h1 class="page-title">Activity</h1>
+            </div>
+            <div class="page-actions">
+                <a class="chip" href="{{ url_for('finance.finance_page') }}#import">
+                    <i data-lucide="upload" aria-hidden="true" style="width:15px; height:15px;"></i>Import
+                </a>
+                <a class="chip" href="{{ url_for('finance.export_csv') }}">
+                    <i data-lucide="download" aria-hidden="true" style="width:15px; height:15px;"></i>Export
+                </a>
+            </div>
+        </header>
+
+        <form class="activity-search" method="get" action="{{ url_for('finance.activity_page') }}" role="search">
+            {% for key in ['type', 'month', 'category', 'review'] if filters[key] %}
+                <input type="hidden" name="{{ key }}" value="{{ filters[key] }}">
+            {% endfor %}
+            <label class="search-field">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                <span class="visually-hidden">Search transactions</span>
+                <input type="search" name="q" value="{{ filters.q }}" placeholder="Search transactions" autocomplete="off">
+            </label>
+        </form>
+
+        <div class="chip-row" role="group" aria-label="Show">
+            {% set base_args = {'q': filters.q or None, 'month': filters.month or None, 'category': filters.category or None, 'review': filters.review or None} %}
+            <a class="chip{{ ' is-on' if not filters.type }}" href="{{ url_for('finance.activity_page', **base_args) }}"{% if not filters.type %} aria-current="true"{% endif %}>All</a>
+            <a class="chip{{ ' is-on' if filters.type == 'expense' }}" href="{{ url_for('finance.activity_page', type='expense', **base_args) }}"{% if filters.type == 'expense' %} aria-current="true"{% endif %}>Expenses</a>
+            <a class="chip{{ ' is-on' if filters.type == 'income' }}" href="{{ url_for('finance.activity_page', type='income', **base_args) }}"{% if filters.type == 'income' %} aria-current="true"{% endif %}>Income</a>
+            {% if to_review and not filters.review %}
+                <a class="chip" href="{{ url_for('finance.activity_page', review=1) }}"><span class="review-dot" aria-hidden="true"></span>To review ({{ to_review }})</a>
+            {% endif %}
+        </div>
+
+        {% if filters.month or filters.category or filters.review or filters.q %}
+        <div class="filter-line">
+            <span>
+                {%- if filters.review %}Waiting for a look{% endif -%}
+                {%- if filters.q %}{{ ', ' if filters.review }}Matching &ldquo;{{ filters.q }}&rdquo;{% endif -%}
+                {%- if category_labels %}{{ ', ' if filters.review or filters.q }}{{ category_labels|join(', ') }}{% endif -%}
+                {%- if month_label %}{{ ' in ' if category_labels else (', ' if filters.review or filters.q) }}{{ month_label }}{% endif -%}
+            </span>
+            <a class="link-accent" href="{{ url_for('finance.activity_page') }}">Clear</a>
+        </div>
+        {% endif %}
+
+        {% if filters.review and groups %}
+        <div class="card notice">
+            <div class="notice-text">
+                <span class="notice-title">Logged on their own</span>
+                <span>Open each one to fix a name or category. If they all look right, mark them reviewed.</span>
+                <button type="button" class="link-accent" data-mark-reviewed>Mark all reviewed</button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="activity-days" id="activity-days">
+            {% if groups %}
+                {% include "partials/activity_rows.html" %}
+            {% elif filtered %}
+                <p class="empty-note" style="padding:24px 4px;">Nothing matches. <a class="link-accent" href="{{ url_for('finance.activity_page') }}">Show everything</a></p>
+            {% else %}
+                <div class="card notice" style="margin-top:8px;">
+                    <div class="notice-text">
+                        <span class="notice-title">No transactions yet</span>
+                        <span>Add a purchase, or bring in months at once from a bank statement.</span>
+                        <span style="display:flex; gap:16px; flex-wrap:wrap;">
+                            <button type="button" class="link-accent" data-add-open>Add a purchase</button>
+                            <a class="link-accent" href="{{ url_for('finance.finance_page') }}#import">Import a statement</a>
+                        </span>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {# The editor: a column beside the list on a wide screen, a sheet on a
+       narrower one. Filled from the row's data by static/js/activity.js;
+       saves through the same /update_transaction route as everywhere
+       else (finance.routes.update_transaction_fields). #}
+    <section class="activity-detail" id="activity-detail" aria-label="Transaction">
+        <div class="detail-empty" id="detail-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            <p>Pick a transaction to see or change it.</p>
+        </div>
+
+        <form class="detail" id="tx-editor" hidden novalidate>
+            <div class="detail-top">
+                <button type="button" class="sheet-close detail-close" data-detail-close aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+                <div class="tx-mark detail-mark" id="detail-mark" aria-hidden="true"></div>
+                <label class="detail-amount">
+                    <span class="visually-hidden">Amount</span>
+                    <span class="detail-symbol" id="detail-symbol"></span>
+                    <input class="figure" id="detail-amount" name="amount" inputmode="decimal" autocomplete="off">
+                </label>
+                <div class="detail-sub" id="detail-sub"></div>
+            </div>
+
+            <div class="card notice" id="detail-review" hidden>
+                <div class="notice-text">
+                    <span class="notice-title">Logged on its own</span>
+                    <span>Fix anything that's off, or tell Artha it's right.</span>
+                    <button type="button" class="link-accent" id="detail-looks-right">Looks right</button>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="field-row"><span>Name</span><input id="detail-description" name="description" maxlength="200" autocomplete="off"></label>
+                <div class="field-row">
+                    <span id="detail-type-label">Type</span>
+                    <div class="segmented segmented-inline" role="radiogroup" aria-labelledby="detail-type-label">
+                        <label><input type="radio" name="type" value="expense"><span>Expense</span></label>
+                        <label><input type="radio" name="type" value="income"><span>Income</span></label>
+                    </div>
+                </div>
+                <label class="field-row"><span>Date</span><input type="date" id="detail-date" name="date"></label>
+                <label class="field-row" id="detail-repeat-row"><span>Repeats</span>
+                    <select id="detail-interval" name="recurrence_interval">
+                        <option value="weekly">Every week</option>
+                        <option value="biweekly">Every 2 weeks</option>
+                        <option value="">Every month</option>
+                    </select>
+                </label>
+            </div>
+
+            <fieldset class="add-categories" id="detail-categories">
+                <legend class="section-label">Category</legend>
+                <div class="chip-row">
+                    {% for key, meta in categories.items() if key != 'income' %}
+                        <button type="button" class="chip" aria-pressed="false" data-category="{{ key }}">{{ meta.label }}</button>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
+            <p class="detail-source" id="detail-source"></p>
+            <p class="sheet-error" id="detail-error" role="alert" hidden></p>
+
+            <div class="detail-actions">
+                <button type="button" class="btn-destructive" id="detail-delete">Delete</button>
+                <button type="submit" class="btn-inverse" id="detail-save">Save</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<script type="module" src="{{ url_for('static', filename='js/activity.js') }}"></script>
+{% endblock %}

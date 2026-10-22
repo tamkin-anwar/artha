@@ -32,19 +32,64 @@ let toggleDebounce = false;
 export function toggleTheme() {
     if (toggleDebounce) return; // Ignore if toggling too fast
     toggleDebounce = true;
-    applyTheme(currentTheme === "dark" ? "light" : "dark");
+    const next = currentTheme === "dark" ? "light" : "dark";
+    rememberChoice(next);
+    applyTheme(next);
     setTimeout(() => { toggleDebounce = false; }, 300);
 }
 
-// Loads stored theme or system preference on initial load
-function loadStoredTheme() {
-    let storedTheme = localStorage.getItem("theme");
-    if (storedTheme !== "dark" && storedTheme !== "light") {
-        storedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        localStorage.setItem("theme", storedTheme);
+// Artha follows the device's light/dark setting unless the user has
+// tapped the toggle. A tap pins a choice under "theme-choice"; tapping
+// back to whatever the device is already showing clears the pin, so
+// the page goes back to following the device instead of being stuck
+// on a choice that only happened to match it. The older "theme" key
+// is deliberately not read (the previous version of this file wrote
+// the device's setting into it on every first visit, so it can't tell
+// a real choice from a default) -- the FOUC script in base.html makes
+// the same call before first paint.
+const CHOICE_KEY = "theme-choice";
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+function storedChoice() {
+    try {
+        const v = localStorage.getItem(CHOICE_KEY);
+        return v === "dark" || v === "light" ? v : null;
+    } catch (e) {
+        return null;
     }
-    setTheme(storedTheme);
 }
+
+function systemTheme() {
+    return systemDark.matches ? "dark" : "light";
+}
+
+function rememberChoice(theme) {
+    try {
+        if (theme === systemTheme()) localStorage.removeItem(CHOICE_KEY);
+        else localStorage.setItem(CHOICE_KEY, theme);
+    } catch (e) {}
+}
+
+// The browser chrome's tint (meta theme-color) follows the media query
+// on its own; a pinned choice that differs from the device needs both
+// tags pointed at the pinned ground instead.
+function syncThemeColor(theme) {
+    const ground = theme === "dark" ? "#0a0e17" : "#f4f6fa";
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
+        if (!meta.dataset.ground) meta.dataset.ground = meta.getAttribute("content");
+        meta.setAttribute("content", storedChoice() ? ground : meta.dataset.ground);
+    });
+}
+
+function loadStoredTheme() {
+    setTheme(storedChoice() || systemTheme());
+}
+
+// Live: switching the device to dark at sunset updates an open tab,
+// unless the user pinned a theme.
+systemDark.addEventListener("change", () => {
+    if (!storedChoice()) applyTheme(systemTheme());
+});
 
 // Init theme logic on DOM ready
 document.addEventListener("DOMContentLoaded", () => {
@@ -74,7 +119,7 @@ export function applyTheme(theme, suppressEvent = false) {
         const isDark = theme === "dark";
         document.documentElement.classList.toggle("dark", isDark);
         currentTheme = isDark ? "dark" : "light";
-        localStorage.setItem("theme", currentTheme);
+        syncThemeColor(currentTheme);
 
         // Update aria-pressed to string "true" or "false"
         toggleButtonIds.forEach(id => {

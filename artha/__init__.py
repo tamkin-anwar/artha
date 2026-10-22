@@ -163,8 +163,10 @@ def create_app(config_name: str = "default") -> Flask:
         return response
 
     # Note HTML is rendered raw (|safe) -- see utils.sanitize_note_html.
-    from .utils import sanitize_note_html
+    from .utils import format_money, sanitize_note_html
     app.jinja_env.filters["sanitize_note"] = sanitize_note_html
+    # {{ "1284.5"|money("GBP") }} -> "£1,284.50"; whole=True drops cents.
+    app.jinja_env.filters["money"] = format_money
 
     # ------------------------------------------------------------------
     # Error handlers

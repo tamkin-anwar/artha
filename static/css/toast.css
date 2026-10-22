@@ -80,7 +80,7 @@
    of that same duller chip left in the app. */
 .toast-success { --toast-accent: var(--emerald); --toast-accent-dim: rgba(34,197,94,0.18); }
 .toast-error   { --toast-accent: var(--red);     --toast-accent-dim: rgba(239,68,68,0.18); }
-.toast-info    { --toast-accent: var(--gold);    --toast-accent-dim: rgba(212,168,67,0.2); }
+.toast-info    { --toast-accent: var(--gold);    --toast-accent-dim: color-mix(in srgb, var(--gold) 20%, transparent); }
 .toast-warning { --toast-accent: var(--amber);   --toast-accent-dim: rgba(245,158,11,0.2); }
 
 /* Icon chip — the exact treatment used elsewhere for a small circular

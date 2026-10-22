@@ -11,7 +11,7 @@
             {% for s in scenarios %}
                 <div
                     class="scenario-list-card"
-                    style="position:relative; border-radius:12px; padding:14px; border:1px solid {% if s.id == active_id %}rgba(212,168,67,0.4){% else %}var(--border-subtle){% endif %}; background:{% if s.id == active_id %}var(--bg-card){% else %}rgba(255,255,255,0.02){% endif %};"
+                    style="position:relative; border-radius:12px; padding:14px; border:1px solid {% if s.id == active_id %}color-mix(in srgb, var(--gold) 40%, transparent){% else %}var(--border-subtle){% endif %}; background:{% if s.id == active_id %}var(--bg-card){% else %}rgba(255,255,255,0.02){% endif %};"
                 >
                     <a
                         href="{{ url_for('scenarios.detail', scenario_id=s.id) }}"

@@ -84,7 +84,7 @@
 
     .notes-header-row { margin-bottom: 20px; }
     .notes-heading {
-        font-family: 'Fraunces', serif;
+        font-family:var(--font-display);
         font-size: 28px;
         font-weight: 500;
         color: var(--text-primary);
@@ -166,7 +166,7 @@
     .notes-new-btn {
         box-sizing: border-box;
         background: var(--gold);
-        color: #000;
+        color: var(--on-accent);
         font-weight: 600;
         font-size: 13px;
         line-height: 1;
@@ -311,7 +311,7 @@
     .note-pin-btn.just-toggled { animation: checkPop 0.28s ease; }
 
     .note-card-title {
-        font-family: 'Fraunces', serif;
+        font-family:var(--font-display);
         font-size: 15.5px; font-weight: 500; line-height: 1.3;
         color: var(--text-primary);
         overflow-wrap: break-word;
@@ -336,7 +336,7 @@
 
     .note-due-pill {
         display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
-        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+        font-family:var(--font-figure); font-size: 10.5px;
         color: var(--text-secondary);
         background: rgba(0, 0, 0, 0.05);
         padding: 3px 8px; border-radius: 999px;
@@ -348,7 +348,7 @@
 
     .note-purge-pill {
         display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
-        font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+        font-family:var(--font-figure); font-size: 10.5px;
         color: var(--text-secondary);
         background: rgba(0, 0, 0, 0.05);
         padding: 3px 8px; border-radius: 999px;
@@ -390,12 +390,12 @@
         color: var(--gold); margin-bottom: 6px;
     }
     .notes-empty-icon svg, .notes-empty-icon i { width: 22px; height: 22px; }
-    .notes-empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-primary); }
+    .notes-empty-title { font-family:var(--font-display); font-size: 18px; color: var(--text-primary); }
     .notes-empty-sub { font-size: 13px; max-width: 320px; }
     .notes-empty-cta, .notes-clear-filters-btn {
         margin-top: 6px;
         display: inline-block;
-        background: var(--gold); color: #000; font-weight: 600; font-size: 13px;
+        background: var(--gold); color: var(--on-accent); font-weight: 600; font-size: 13px;
         border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer;
         text-decoration: none;
     }
@@ -443,7 +443,7 @@
     }
     .confirm-modal-icon svg, .confirm-modal-icon i { width: 20px; height: 20px; }
     .confirm-modal-title {
-        font-family: 'Fraunces', serif; font-size: 19px; font-weight: 500;
+        font-family:var(--font-display); font-size: 19px; font-weight: 500;
         color: var(--text-primary); margin-bottom: 6px;
     }
     .confirm-modal-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 22px; }
@@ -477,7 +477,7 @@
         display: block; flex: 1;
         border: none; outline: none; background: transparent;
         color: var(--text-primary);
-        font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500;
+        font-family:var(--font-display); font-size: 26px; font-weight: 500;
         caret-color: var(--gold);
     }
     #note-title-input::placeholder { color: var(--text-muted); }
@@ -566,7 +566,7 @@
     .notes-tb-btn {
         position: relative; width: 34px; height: 34px; border-radius: 6px;
         background: transparent; border: none; color: var(--text-secondary);
-        font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.12s ease;
+        font-family:var(--font-body); cursor: pointer; transition: all 0.12s ease;
         display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
     .notes-tb-btn svg, .notes-tb-btn i { width: 14px; height: 14px; }
@@ -585,7 +585,7 @@
     #note-content-editable {
         display: block; width: 100%; min-height: 260px; outline: none;
         background: transparent; color: var(--text-primary);
-        font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.8;
+        font-family:var(--font-body); font-size: 15px; line-height: 1.8;
         overflow-wrap: break-word;
         /* Explicit, high-contrast caret — the default (currentColor) can
            be hard to spot on a fresh empty line right after Enter, before
@@ -593,16 +593,16 @@
         caret-color: var(--gold);
     }
     #note-content-editable:empty::before { content: "Start writing..."; color: var(--text-muted); pointer-events: none; }
-    #note-content-editable h1 { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; }
-    #note-content-editable h2 { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; }
-    #note-content-editable h3 { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 8px 0 4px; }
+    #note-content-editable h1 { font-family:var(--font-display); font-size: 24px; font-weight: 600; color: var(--text-primary); margin: 16px 0 8px; }
+    #note-content-editable h2 { font-family:var(--font-display); font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; }
+    #note-content-editable h3 { font-family:var(--font-display); font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 8px 0 4px; }
     #note-content-editable blockquote { border-left: 3px solid var(--gold); padding-left: 16px; color: var(--text-secondary); font-style: italic; margin: 8px 0; }
     #note-content-editable li { margin: 4px 0; padding-left: 4px; }
     #note-content-editable ol { padding-left: 24px; margin: 8px 0; list-style: decimal; }
     #note-content-editable ol li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
     #note-content-editable ul { padding-left: 24px; margin: 8px 0; list-style: disc; }
     #note-content-editable ul li { margin: 4px 0; padding-left: 0; color: var(--text-primary); }
-    #note-content-editable code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--bg-card); color: var(--gold); padding: 2px 6px; border-radius: 4px; }
+    #note-content-editable code { font-family:var(--font-figure); font-size: 13px; background: var(--bg-card); color: var(--gold); padding: 2px 6px; border-radius: 4px; }
     #note-content-editable a { color: var(--gold); text-decoration: underline; }
 
     /* Checklists — both inside the editor and on the card face */

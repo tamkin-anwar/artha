@@ -1,0 +1,68 @@
+{# Add a transaction from anywhere: the sidebar's Add button, the phone's
+   + button, or N on the keyboard (static/js/shell.js). Posts to the same
+   /add_transaction route as every other add form, so it's validated,
+   currency-locked and categorized exactly the same way. #}
+{% set user_currency = current_user.preferred_currency or 'USD' %}
+<div class="sheet-backdrop" id="add-sheet" hidden>
+    <form class="sheet" id="add-form" role="dialog" aria-modal="true" aria-labelledby="add-title" novalidate>
+        <div class="sheet-head">
+            <h2 id="add-title" class="sheet-title">Add</h2>
+            <button type="button" class="sheet-close" data-add-close aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
+
+        <div class="segmented" role="radiogroup" aria-label="Type">
+            <label><input type="radio" name="type" value="expense" checked><span>Expense</span></label>
+            <label><input type="radio" name="type" value="income"><span>Income</span></label>
+        </div>
+
+        <div class="add-amount">
+            <label for="add-amount" class="visually-hidden">Amount</label>
+            <input id="add-amount" name="amount" class="figure" inputmode="decimal" autocomplete="off" placeholder="0" required>
+            <label for="add-currency" class="visually-hidden">Currency</label>
+            <select id="add-currency" name="currency" class="add-currency">
+                {% for code in ['USD', 'GBP', 'EUR', 'BDT', 'CAD', 'AUD'] %}
+                    <option value="{{ code }}"{{ ' selected' if code == user_currency }}>{{ code }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field-group">
+            <label class="field-row">
+                <span>Name</span>
+                <input name="description" id="add-description" placeholder="Coffee, rent, paycheck" autocomplete="off" maxlength="200" required>
+            </label>
+            <label class="field-row">
+                <span>Date</span>
+                <input type="date" name="date" id="add-date">
+            </label>
+            <label class="field-row">
+                <span>Repeats</span>
+                <select name="repeat" id="add-repeat">
+                    <option value="">Never</option>
+                    <option value="weekly">Every week</option>
+                    <option value="biweekly">Every 2 weeks</option>
+                    <option value="monthly">Every month</option>
+                </select>
+            </label>
+        </div>
+
+        <fieldset class="add-categories" id="add-categories">
+            <legend class="section-label">Category</legend>
+            <div class="chip-row">
+                <button type="button" class="chip" aria-pressed="true" data-category="">Let Artha pick</button>
+                {% for key, meta in transaction_categories.items() if key != 'income' %}
+                    <button type="button" class="chip" aria-pressed="false" data-category="{{ key }}">{{ meta.label }}</button>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <p class="sheet-error" id="add-error" role="alert" hidden></p>
+
+        <div class="sheet-actions">
+            <button type="button" class="btn-quiet" data-add-close>Cancel</button>
+            <button type="submit" class="btn-inverse" id="add-submit">Add</button>
+        </div>
+    </form>
+</div>

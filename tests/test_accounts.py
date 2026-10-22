@@ -149,9 +149,9 @@ def test_net_worth_sums_assets_minus_liabilities_same_currency(app, auth_client,
     resp = auth_client.get("/accounts/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    # Net worth = 1000 - 200 = 800, rendered as a raw value the page's
-    # formatter turns into the user's own currency (never a hardcoded "$").
-    assert 'accounts-money" data-money-value="800.0"' in body
+    # Net worth = 1000 - 200 = 800, formatted server-side in the user's
+    # own currency.
+    assert 'class="figure hero-figure">$800<' in body
 
 
 def test_net_worth_converts_mixed_currency_accounts_correctly(app, auth_client, user):
@@ -162,11 +162,11 @@ def test_net_worth_converts_mixed_currency_accounts_correctly(app, auth_client, 
     resp = auth_client.get("/accounts/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert 'data-money-value="100.0"' in body  # the converted total
+    assert 'class="figure hero-figure">$100<' in body  # the converted total
     # The account's own balance stays in its own currency...
-    assert 'data-money-value="80.00" data-money-currency="GBP"' in body
+    assert "£80.00" in body
     # ...with a converted "≈" line under it, since it isn't in USD.
-    assert "&asymp;" in body
+    assert "&asymp; $100.00" in body
 
 
 def test_account_in_the_display_currency_gets_no_converted_line(app, auth_client, user):
@@ -185,7 +185,7 @@ def test_accounts_page_never_hardcodes_a_dollar_sign_on_converted_totals(app, au
 
     body = auth_client.get("/accounts/").get_data(as_text=True)
 
-    assert 'data-money-value="80.0"' in body
+    assert 'class="figure hero-figure">£80<' in body
     assert "$80" not in body
 
 
@@ -209,19 +209,16 @@ def test_net_worth_summary_converts_to_preferred_currency(app, user):
 
 
 def test_dashboard_shows_net_worth_card_only_with_accounts(app, auth_client, user):
-    # ">Net Worth<" (the rendered eyebrow span), not a bare substring --
-    # the card is wrapped in an HTML comment that also contains the
-    # literal phrase "Net Worth" and would always match otherwise (the
-    # same class of false-positive test_budget.py's Safe to Spend test
-    # hit and fixed).
+    # Net worth is one of Today's hero figures, offered only once there's
+    # an account to add up.
     resp = auth_client.get("/")
-    assert ">Net Worth<" not in resp.get_data(as_text=True)
+    assert 'data-hero-view="worth"' not in resp.get_data(as_text=True)
 
     _add_account(user, balance="500")
     resp = auth_client.get("/")
     body = resp.get_data(as_text=True)
-    assert ">Net Worth<" in body
-    assert "$500.00" in body
+    assert 'data-hero-view="worth"' in body
+    assert 'data-amount="500.00">$500<' in body
 
 
 # ---------------------------------------------------------------------------

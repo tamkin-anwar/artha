@@ -19,7 +19,13 @@
 
     <!-- PWA -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="theme-color" content="#d4a843">
+    <!-- The browser chrome (Android's address bar, Safari's tab tint)
+         matches the page ground in each appearance. A meta tag can't
+         read a CSS variable, so these are the literal --bg-page values
+         from style.css; theme.js re-points them when the user overrides
+         the device's appearance with the toggle. -->
+    <meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0a0e17" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <!-- "black-translucent" draws the status bar transparent over
          Artha's own (dark-navy or cream) background instead of iOS's
@@ -36,17 +42,20 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon-180.png') }}">
 
-    <!-- Prevent FOUC: apply theme class early -->
+    <!-- Prevent FOUC: apply theme class early. Artha follows the
+         device's light/dark setting (the 2026-10 redesign); only an
+         explicit tap on the theme toggle pins one, stored under its own
+         "theme-choice" key. The older "theme" key isn't read on purpose:
+         the previous theme.js wrote the device's setting into it on
+         every first visit, so it can't tell a real choice from a
+         default. See static/js/theme.js for the rest. -->
     <script>
         (function () {
             try {
-                const stored = localStorage.getItem("theme");
+                const choice = localStorage.getItem("theme-choice");
                 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                if (stored === "dark" || (!stored && prefersDark)) {
-                    document.documentElement.classList.add("dark");
-                } else {
-                    document.documentElement.classList.remove("dark");
-                }
+                const dark = choice === "dark" || (choice !== "light" && prefersDark);
+                document.documentElement.classList.toggle("dark", dark);
             } catch (e) {}
         })();
     </script>
@@ -54,7 +63,12 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Text is the system face (San Francisco on Apple devices, Segoe
+         UI on Windows), matching the native app. Figures use the
+         rounded system face where one exists (ui-rounded, Apple only)
+         and Nunito everywhere else, so money reads the same as the
+         app's .rounded design. See --font-figure in style.css. -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 
     <!-- Tailwind — precompiled (see package.json's build:css and
          static/css/tailwind-src.css), not the CDN script. The CDN
@@ -83,7 +97,7 @@
     <script defer src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
 </head>
 
-<body style="background: var(--bg-page); color: var(--text-primary); font-family: 'Inter', sans-serif;" class="transition-colors duration-300" role="document" data-user-timezone="{{ current_user.timezone or '' if current_user.is_authenticated else '' }}"{% if current_user.is_authenticated %} data-display-currency="{{ current_user.preferred_currency or 'USD' }}"{% endif %}>
+<body style="background: var(--bg-page); color: var(--text-primary); font-family:var(--font-body);" class="transition-colors duration-300" role="document" data-user-timezone="{{ current_user.timezone or '' if current_user.is_authenticated else '' }}"{% if current_user.is_authenticated %} data-display-currency="{{ current_user.preferred_currency or 'USD' }}"{% endif %}>
     <noscript>
         <div class="bg-red-100 text-red-800 p-4 text-center font-semibold">
             JavaScript is disabled in your browser. This app requires JavaScript to function properly.
@@ -96,6 +110,8 @@
 
     {% else %}
         {% set is_dashboard_active = request.endpoint == 'dashboard.index' %}
+        {% set is_activity_active = request.endpoint == 'finance.activity_page' %}
+        {% set is_plan_active = request.endpoint == 'finance.plan_page' %}
         {% set is_finance_active = request.endpoint == 'finance.finance_page' %}
         {% set is_accounts_active = request.endpoint and request.endpoint.startswith('accounts.') %}
         {% set is_notes_active = request.endpoint == 'notes.notes_page' %}
@@ -105,13 +121,28 @@
         {% set is_ai_active = request.endpoint == 'ai.page' %}
         {% set is_admin_active = request.endpoint and request.endpoint.startswith('admin.') %}
 
+        {# The redesign's navigation (2026-10), the same four places as the
+           apps' tab bar: Today, Activity, Plan and Wealth, then everything
+           else under More. One macro so the sidebar and the phone drawer
+           can't drift apart. #}
+        {% macro primary_link(href, icon, label, active) -%}
+            <a href="{{ href }}" class="side-primary{{ ' is-active' if active }}"{% if active %} aria-current="page"{% endif %}>
+                <i data-lucide="{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>
+            </a>
+        {%- endmacro %}
+        {% macro more_link(href, icon, label, active) -%}
+            <a href="{{ href }}" class="side-more{{ ' is-active' if active }}"{% if active %} aria-current="page"{% endif %}>
+                <i data-lucide="{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>{{ caller() if caller }}
+            </a>
+        {%- endmacro %}
+
         <div style="display:flex; min-height:100vh;">
 
             <!-- SIDEBAR -->
-            <aside class="app-sidebar" style="width:220px; min-width:220px; background:var(--bg-sidebar); border-right:1px solid var(--border-subtle); display:flex; flex-direction:column; position:fixed; height:100vh; overflow-y:auto; z-index:50;">
+            <aside class="app-sidebar" style="width:240px; min-width:240px; background:var(--bg-sidebar); border-right:1px solid var(--border-subtle); display:flex; flex-direction:column; position:fixed; height:100vh; overflow-y:auto; z-index:50;">
 
                 <!-- Logo -->
-                <div style="padding:24px 20px 16px; border-bottom:1px solid var(--border-subtle);">
+                <div style="padding:22px 22px 12px;">
                     <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand">
                         <img
                             src="{{ url_for('static', filename='icons/artha-logo.png') }}"
@@ -123,44 +154,51 @@
                 </div>
 
                 <!-- Nav -->
-                <nav style="flex:1; padding:12px 10px; display:flex; flex-direction:column; gap:2px;" aria-label="Main navigation">
-                    <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'nav-active' if is_dashboard_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="layout-dashboard" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Dashboard
-                    </a>
-                    <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance
-                    </a>
-                    <a href="{{ url_for('accounts.index') }}" class="nav-link {{ 'nav-active' if is_accounts_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="landmark" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Accounts
-                    </a>
-                    <a href="{{ url_for('ai.page') }}" class="nav-link {{ 'nav-active' if is_ai_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="sparkles" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> AI Assistant
-                    </a>
-                    <a href="{{ url_for('scenarios.index') }}" class="nav-link {{ 'nav-active' if is_scenarios_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="git-branch" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Scenarios
-                    </a>
-                    <a href="{{ url_for('notes.notes_page') }}" class="nav-link {{ 'nav-active' if is_notes_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="file-text" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Notes
-                    </a>
-                    <a href="{{ url_for('dashboard.calendar_page') }}" class="nav-link {{ 'nav-active' if is_calendar_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="calendar" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calendar
-                    </a>
-                    <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                        <i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator
-                    </a>
-                    {% if current_user.is_authenticated and current_user.is_admin %}
-                        <a href="{{ url_for('admin.overview') }}" class="nav-link {{ 'nav-active' if is_admin_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;">
-                            <i data-lucide="shield" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Admin
-                            <!-- Always rendered (not conditionally omitted) so
-                                 admin.html's JS can find and update it after a
-                                 feedback status change — an inline style's
-                                 display value beats a [hidden] attribute's, so
-                                 toggling visibility has to happen in the style
-                                 itself, both here and from JS. -->
-                            <span id="admin-badge-desktop" style="margin-left:auto; background:var(--gold); color:#000; font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; align-items:center; justify-content:center; padding:0 4px; display:{{ 'inline-flex' if admin_open_feedback_count else 'none' }};">{{ admin_open_feedback_count or '' }}</span>
-                        </a>
-                    {% endif %}
+                <nav class="side-nav" aria-label="Main navigation">
+                    {{ primary_link(url_for('dashboard.index'), 'gauge', 'Today', is_dashboard_active) }}
+                    {{ primary_link(url_for('finance.activity_page'), 'list', 'Activity', is_activity_active) }}
+                    {{ primary_link(url_for('finance.plan_page'), 'target', 'Plan', is_plan_active) }}
+                    {{ primary_link(url_for('accounts.index'), 'bar-chart-3', 'Wealth', is_accounts_active) }}
+
+                    <button type="button" class="side-add" data-add-open aria-keyshortcuts="N">
+                        <i data-lucide="plus" aria-hidden="true"></i>Add<kbd>N</kbd>
+                    </button>
+
+                    <div class="side-heading" id="side-more-heading">More</div>
+                    <div role="group" aria-labelledby="side-more-heading" class="side-more-group">
+                        {{ more_link(url_for('ai.page'), 'sparkles', 'AI Assistant', is_ai_active) }}
+                        {{ more_link(url_for('scenarios.index'), 'git-branch', 'Scenarios', is_scenarios_active) }}
+                        {{ more_link(url_for('finance.finance_page'), 'pie-chart', 'Reports', is_finance_active) }}
+                        {{ more_link(url_for('notes.notes_page'), 'file-text', 'Notes', is_notes_active) }}
+                        {{ more_link(url_for('dashboard.calendar_page'), 'calendar', 'Calendar', is_calendar_active) }}
+                        {{ more_link(url_for('dashboard.calculator_page'), 'calculator', 'Calculator', is_calculator_active) }}
+                        {% if current_user.is_authenticated and current_user.is_admin %}
+                            {% call more_link(url_for('admin.overview'), 'shield', 'Admin', is_admin_active) %}
+                                <!-- Always rendered (not conditionally omitted) so
+                                     admin.html's JS can find and update it after a
+                                     feedback status change — an inline style's
+                                     display value beats a [hidden] attribute's, so
+                                     toggling visibility has to happen in the style
+                                     itself, both here and from JS. -->
+                                <span id="admin-badge-desktop" style="margin-left:auto; background:var(--gold); color:var(--on-inverse); font-size:10px; font-weight:600; min-width:17px; height:17px; border-radius:999px; align-items:center; justify-content:center; padding:0 4px; display:{{ 'inline-flex' if admin_open_feedback_count else 'none' }};">{{ admin_open_feedback_count or '' }}</span>
+                            {% endcall %}
+                        {% endif %}
+                    </div>
                 </nav>
+
+                <!-- Install Artha: shown only when the browser says the app
+                     can be installed (beforeinstallprompt, Chrome and Edge
+                     on Windows, ChromeOS, Android). Its own window and a
+                     taskbar spot is how Windows people get an "app" without
+                     a separate build. static/js/install.js. -->
+                <div class="install-card" id="install-card" hidden>
+                    <div class="install-card-title">Install Artha</div>
+                    <p>Its own window and a spot in your taskbar or dock.</p>
+                    <div class="install-card-actions">
+                        <button type="button" id="install-btn" class="install-card-btn">Install</button>
+                        <button type="button" id="install-dismiss" class="install-card-dismiss">Not now</button>
+                    </div>
+                </div>
 
                 <!-- User chip / account menu. The user's own name+avatar is
                      the conventional home for identity-scoped actions
@@ -168,7 +206,7 @@
                      app — it used to be a static, unclickable label with
                      those two actions buried in the unrelated top-right
                      "Preferences" gear instead. -->
-                <div style="padding:12px 8px 16px; border-top:1px solid var(--border-subtle); position:relative;">
+                <div style="padding:8px 8px 16px; position:relative;">
                     <button
                         id="account-btn"
                         type="button"
@@ -177,12 +215,12 @@
                         aria-haspopup="menu"
                         aria-expanded="false"
                     >
-                        <div style="width:32px; height:32px; border-radius:50%; background:var(--gold-dim); border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--gold); font-family:'Fraunces',serif; flex-shrink:0;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--text-primary); flex-shrink:0;">
                             {{ current_user.first_name[0] if current_user.is_authenticated and current_user.first_name else '?' }}
                         </div>
                         <div style="min-width:0; overflow:hidden; flex:1;">
                             <div style="font-size:13px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
-                            <div style="font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.email if current_user.is_authenticated and current_user.email else 'Personal OS' }}</div>
+                            <div style="font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.email if current_user.is_authenticated and current_user.email else '' }}</div>
                         </div>
                     </button>
 
@@ -211,7 +249,7 @@
             </aside>
 
             <!-- MAIN CONTENT -->
-            <div class="app-main" style="margin-left:220px; flex:1; min-height:100vh; min-width:0;">
+            <div class="app-main" style="margin-left:240px; flex:1; min-height:100vh; min-width:0;">
 
                 <!-- TOP BAR -->
                 <!-- A 3-column grid with two equal-width (1fr) outer tracks
@@ -270,7 +308,7 @@
                             <span style="font-size:19px;">Artha</span>
                         </a>
                         </div>
-                        <div style="font-size:13px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" id="top-date" class="hidden sm:block"></div>
+
                     </div>
 
                     <!-- Below sm (640px), this column shows the mobile
@@ -290,18 +328,21 @@
                         <button
                             type="button"
                             id="global-search-trigger"
-                            style="width:100%; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:8px; padding:7px 14px; display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:13px; cursor:pointer; text-align:left; font-family:inherit;"
+                            style="width:100%; min-height:38px; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:12px; padding:0 12px 0 14px; display:flex; align-items:center; gap:10px; color:var(--text-secondary); font-size:14px; cursor:pointer; text-align:left; font-family:inherit;"
                         >
-                            <i data-lucide="search" aria-hidden="true" style="width:14px; height:14px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Ask Artha or search...
-                            <span style="margin-left:auto; font-size:11px; background:var(--bg-card); padding:2px 6px; border-radius:4px; color:var(--text-secondary);">⌘K</span>
+                            <i data-lucide="search" aria-hidden="true" style="width:15px; height:15px; stroke-width:2; color:inherit; flex-shrink:0;"></i> Search or ask Artha
+                            <kbd class="keycap" style="margin-left:auto;" data-mod-key>Ctrl K</kbd>
                         </button>
                     </div>
-                    <div class="sm:hidden" style="text-align:center;">
-                        <span id="top-date-mobile" style="font-size:13px; color:var(--text-secondary); white-space:nowrap;"></span>
-                    </div>
+
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px; justify-self:end; grid-column:3;">
+                        <div class="md:hidden">
+                            <button type="button" class="icon-btn mobile-add-btn" data-add-open aria-label="Add a transaction">
+                                <i data-lucide="plus" aria-hidden="true" style="width:18px; height:18px; stroke-width:2.2;"></i>
+                            </button>
+                        </div>
                         <div class="sm:hidden">
                             <button
                                 type="button"
@@ -496,14 +537,12 @@
                     </div>
                     <div style="margin:0 0 10px; height:1px; background:var(--border-subtle);"></div>
 
-                    <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'nav-active' if is_dashboard_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="layout-dashboard" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Dashboard</a>
-                    <a href="{{ url_for('finance.finance_page') }}" class="nav-link {{ 'nav-active' if is_finance_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="bar-chart-2" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Finance</a>
-                    <a href="{{ url_for('accounts.index') }}" class="nav-link {{ 'nav-active' if is_accounts_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="landmark" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Accounts</a>
-                    <a href="{{ url_for('ai.page') }}" class="nav-link {{ 'nav-active' if is_ai_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="sparkles" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> AI Assistant</a>
-                    <a href="{{ url_for('scenarios.index') }}" class="nav-link {{ 'nav-active' if is_scenarios_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="git-branch" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Scenarios</a>
-                    <a href="{{ url_for('notes.notes_page') }}" class="nav-link {{ 'nav-active' if is_notes_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="file-text" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Notes</a>
-                    <a href="{{ url_for('dashboard.calendar_page') }}" class="nav-link {{ 'nav-active' if is_calendar_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calendar" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calendar</a>
-                    <a href="{{ url_for('dashboard.calculator_page') }}" class="nav-link {{ 'nav-active' if is_calculator_active }}" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="calculator" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Calculator</a>
+                    {{ more_link(url_for('ai.page'), 'sparkles', 'AI Assistant', is_ai_active) }}
+                    {{ more_link(url_for('scenarios.index'), 'git-branch', 'Scenarios', is_scenarios_active) }}
+                    {{ more_link(url_for('finance.finance_page'), 'pie-chart', 'Reports', is_finance_active) }}
+                    {{ more_link(url_for('notes.notes_page'), 'file-text', 'Notes', is_notes_active) }}
+                    {{ more_link(url_for('dashboard.calendar_page'), 'calendar', 'Calendar', is_calendar_active) }}
+                    {{ more_link(url_for('dashboard.calculator_page'), 'calculator', 'Calculator', is_calculator_active) }}
                     {% if current_user.is_authenticated %}
                         <a href="{{ url_for('dashboard.whats_new') }}" class="nav-link" style="display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; text-decoration:none; font-size:14px;"><i data-lucide="megaphone" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> What's new{% if has_new_changelog %}<span aria-hidden="true" style="width:7px; height:7px; border-radius:50%; background:var(--gold); flex-shrink:0;"></span>{% endif %}</a>
                     {% endif %}
@@ -633,14 +672,13 @@
                      is a persistent bottom tab bar (Apple's HIG caps it at
                      5 destinations, same as UIKit's own tab bar
                      auto-generating a "More" tab past 5 view controllers,
-                     which is exactly what this does with Artha's other
-                     7 sections). Dashboard/Finance/Notes/Calendar made
-                     the cut as the ones worth a one-tap reach; AI
-                     Assistant, Scenarios, and Calculator sit behind More
-                     since they're more considered, occasional visits
-                     rather than a quick glance (and the Dashboard already
-                     surfaces AI inline). The drawer this opens is the
-                     same #mobile-menu built earlier, unchanged.
+                     which is exactly what this does). Since the 2026-10
+                     redesign the four tabs are the iPhone app's own:
+                     Today, Activity, Plan and Wealth; everything else
+                     (AI Assistant, Scenarios, Reports, Notes, Calendar,
+                     Calculator) sits behind More, the same
+                     #mobile-menu drawer as before. Adding a transaction
+                     is the + in the top bar, not a tab.
 
                      md:hidden lives on this wrapper, not the <nav> —
                      the nav needs its own inline display:flex for the
@@ -650,31 +688,31 @@
                      wrapper above and the CLAUDE.md entry it's
                      documented under. -->
                 <div class="md:hidden">
-                <nav id="mobile-tabbar" aria-label="Primary navigation" style="position:fixed; left:0; right:0; bottom:0; z-index:41; display:flex; background:var(--bg-page); border-top:1px solid var(--border-subtle); padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));">
-                    <a href="{{ url_for('dashboard.index') }}" class="tab-item {{ 'tab-active' if is_dashboard_active }}">
-                        <i data-lucide="layout-dashboard" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
-                        <span>Dashboard</span>
+                <nav id="mobile-tabbar" aria-label="Primary navigation" style="position:fixed; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); z-index:41; display:flex; height:62px; border-radius:31px; background:var(--tabbar-bg); border:1px solid var(--hairline); padding:0 6px; -webkit-backdrop-filter:blur(18px) saturate(1.6); backdrop-filter:blur(18px) saturate(1.6); box-shadow:0 8px 30px rgba(0,0,0,0.12);">
+                    <a href="{{ url_for('dashboard.index') }}" class="tab-item {{ 'tab-active' if is_dashboard_active }}"{% if is_dashboard_active %} aria-current="page"{% endif %}>
+                        <i data-lucide="gauge" aria-hidden="true"></i>
+                        <span>Today</span>
                     </a>
-                    <a href="{{ url_for('finance.finance_page') }}" class="tab-item {{ 'tab-active' if is_finance_active }}">
-                        <i data-lucide="bar-chart-2" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
-                        <span>Finance</span>
+                    <a href="{{ url_for('finance.activity_page') }}" class="tab-item {{ 'tab-active' if is_activity_active }}"{% if is_activity_active %} aria-current="page"{% endif %}>
+                        <i data-lucide="list" aria-hidden="true"></i>
+                        <span>Activity</span>
                     </a>
-                    <a href="{{ url_for('notes.notes_page') }}" class="tab-item {{ 'tab-active' if is_notes_active }}">
-                        <i data-lucide="file-text" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
-                        <span>Notes</span>
+                    <a href="{{ url_for('finance.plan_page') }}" class="tab-item {{ 'tab-active' if is_plan_active }}"{% if is_plan_active %} aria-current="page"{% endif %}>
+                        <i data-lucide="target" aria-hidden="true"></i>
+                        <span>Plan</span>
                     </a>
-                    <a href="{{ url_for('dashboard.calendar_page') }}" class="tab-item {{ 'tab-active' if is_calendar_active }}">
-                        <i data-lucide="calendar" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
-                        <span>Calendar</span>
+                    <a href="{{ url_for('accounts.index') }}" class="tab-item {{ 'tab-active' if is_accounts_active }}"{% if is_accounts_active %} aria-current="page"{% endif %}>
+                        <i data-lucide="bar-chart-3" aria-hidden="true"></i>
+                        <span>Wealth</span>
                     </a>
                     <button
                         type="button"
                         id="tabbar-more-btn"
-                        class="tab-item {{ 'tab-active' if (is_ai_active or is_scenarios_active or is_calculator_active or is_admin_active) }}"
+                        class="tab-item {{ 'tab-active' if (is_ai_active or is_scenarios_active or is_finance_active or is_notes_active or is_calendar_active or is_calculator_active or is_admin_active) }}"
                         aria-expanded="false"
                         aria-controls="mobile-menu"
                     >
-                        <i data-lucide="more-horizontal" aria-hidden="true" style="width:21px; height:21px; stroke-width:1.5;"></i>
+                        <i data-lucide="more-horizontal" aria-hidden="true"></i>
                         <span>More</span>
                     </button>
                 </nav>
@@ -688,7 +726,7 @@
                      Archive/Delete row, for instance) gets stuck directly
                      under the button once you've scrolled as far as the
                      page allows, with no way to scroll it clear. -->
-                <main style="padding:32px 32px 96px; padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));">
+                <main class="app-content">
                     {{ self.content() }}
                 </main>
             </div>
@@ -740,28 +778,21 @@
             </div>
         </div>
 
+        {% if current_user.is_authenticated %}
+            {% include "partials/add_sheet.html" %}
+            <script type="module" src="{{ url_for('static', filename='js/shell.js') }}"></script>
+        {% endif %}
+
         <script>
-            // The full weekday+month spelling ("Thursday, August 27, 2026")
-            // has nowhere near enough room next to the mobile search icon
-            // on a phone-width top bar — abbreviate there. Two elements
-            // toggled by the same hidden/sm:block CSS classes used
-            // everywhere else in this top bar, rather than a
-            // window.innerWidth check made once at load time: a real phone
-            // rotates and a real browser window resizes, and CSS media
-            // queries track that continuously where a one-shot JS read
-            // would just go stale (min-width:0 + ellipsis above is still a
-            // safety net for whatever doesn't fit either format).
-            //
-            // Mobile drops the weekday too ("Aug 30", not "Sun, Aug 30")
-            // now that it's sharing the row with the Artha wordmark —
-            // with both, "Sun, Aug 30" truncated to "Sun, Aug ..." on a
-            // real phone, a real user found that worse than just losing
-            // the weekday outright.
-            const d = new Date();
-            document.getElementById('top-date').textContent =
-                d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
-            document.getElementById('top-date-mobile').textContent =
-                d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+            // Keyboard hints name the key this computer actually has:
+            // Command on a Mac, Ctrl everywhere else (Windows, ChromeOS).
+            (function () {
+                const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+                if (!mac) return;
+                document.querySelectorAll("[data-mod-key]").forEach(function (el) {
+                    el.textContent = el.textContent.replace("Ctrl ", "\u2318");
+                });
+            })();
         </script>
 
         <script type="module">

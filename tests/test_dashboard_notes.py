@@ -18,13 +18,15 @@ def _make_note(user, title="Note", archived=False, due_date=None, position=0):
     return note
 
 
-def test_dashboard_recent_notes_widget_excludes_archived(app, auth_client, user):
-    _make_note(user, title="Active note", archived=False)
-    _make_note(user, title="Archived note", archived=True)
+def test_today_shows_only_notes_that_are_due(app, auth_client, user):
+    # Today is about money now (the 2026-10 redesign); a note only shows
+    # up there when it's due, under "Also today".
+    _make_note(user, title="Someday note", archived=False)
+    _make_note(user, title="Due note", archived=False, due_date=date.today())
 
     body = auth_client.get("/").get_data(as_text=True)
-    assert "Active note" in body
-    assert "Archived note" not in body
+    assert "Someday note" not in body
+    assert "Due note" in body
 
 
 def test_dashboard_overdue_and_due_today_exclude_archived(app, auth_client, user):
