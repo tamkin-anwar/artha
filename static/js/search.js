@@ -12,24 +12,26 @@ const GROUPS = [
     { key: "events", label: "Events" },
 ];
 
-// Fixed, client-known navigation destinations — every top-level page plus
-// Finance's own tabs (which finance.html reads back from ?tab=, see
+// Fixed, client-known navigation destinations: the four main places,
+// Reports' own tabs (which finance.html reads back from ?tab=, see
 // fpActivateTab's auto-activation below and active_tab in
-// finance/routes.py). Matched entirely client-side against title+keywords
-// with no debounce, so "Pages" results appear instantly on every
-// keystroke rather than waiting on the /search round trip the other
-// groups need. The Admin entry is spliced in separately (see
-// buildPagesList) since whether it belongs depends on the signed-in user.
+// finance/routes.py), and everything under More. Matched entirely
+// client-side against title+keywords with no debounce, so "Pages"
+// results appear instantly on every keystroke rather than waiting on the
+// /search round trip the other groups need. The Admin entry is spliced
+// in separately (see buildPagesList) since whether it belongs depends on
+// the signed-in user.
 const BASE_PAGES = [
-    { title: "Dashboard", keywords: "home", url: "/" },
-    { title: "Finance", keywords: "money", url: "/finance" },
-    { title: "Accounts", keywords: "net worth assets liabilities balance", url: "/accounts/" },
-    { title: "Finance · Overview", keywords: "savings rate budget trend biggest category", url: "/finance?tab=overview" },
-    { title: "Finance · Transactions", keywords: "list add transaction search filter", url: "/finance?tab=transactions" },
-    { title: "Finance · Spending", keywords: "breakdown category expenses", url: "/finance?tab=spending" },
-    { title: "Finance · Income", keywords: "earnings", url: "/finance?tab=income" },
-    { title: "Finance · Cash Flow", keywords: "net income expense trend", url: "/finance?tab=cashflow" },
-    { title: "Finance · Recurring", keywords: "bills subscriptions renewals", url: "/finance?tab=recurring" },
+    { title: "Today", keywords: "home dashboard safe to spend", url: "/" },
+    { title: "Activity", keywords: "transactions list search edit", url: "/activity" },
+    { title: "Plan", keywords: "budget bills limits month by month", url: "/plan" },
+    { title: "Wealth", keywords: "net worth accounts assets liabilities balance", url: "/accounts/" },
+    { title: "Reports", keywords: "finance charts money", url: "/finance" },
+    { title: "Reports · Spending", keywords: "breakdown category expenses", url: "/finance?tab=spending" },
+    { title: "Reports · Income", keywords: "earnings", url: "/finance?tab=income" },
+    { title: "Reports · Cash Flow", keywords: "net income expense trend", url: "/finance?tab=cashflow" },
+    { title: "Reports · Recurring", keywords: "bills subscriptions renewals", url: "/finance?tab=recurring" },
+    { title: "Import a statement", keywords: "csv pdf bank upload", url: "/activity#import" },
     { title: "AI Assistant", keywords: "chat ask artha", url: "/ai" },
     { title: "Scenarios", keywords: "what if plan projection", url: "/scenarios/" },
     { title: "Notes", keywords: "", url: "/notes" },

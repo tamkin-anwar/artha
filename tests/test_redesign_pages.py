@@ -189,4 +189,5 @@ def test_redesigned_pages_have_no_em_dashes(auth_client, user):
         import re
         visible = re.sub(r"<!--.*?-->", "", visible, flags=re.S)
         visible = re.sub(r"<script.*?</script>", "", visible, flags=re.S)
+        visible = re.sub(r"<style.*?</style>", "", visible, flags=re.S)
         assert "—" not in visible, path

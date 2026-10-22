@@ -29,7 +29,7 @@ from functools import wraps
 from flask import g, jsonify, request
 
 from ...extensions import db, limiter
-from ...models import ApiToken, Transaction, User
+from ...models import ApiToken, Goal, Transaction, User
 from ...models.account import Account
 from ...cli import DEFAULT_REMINDER_HOUR
 from ...services.exchange_rate_service import get_rates
@@ -44,7 +44,9 @@ from ...services.screens import (
     transactions_screen,
     wealth_screen,
 )
-from ...utils import CURRENCY_CODES
+from ...services.goals import GoalError, add_to_goal, delete_goal, describe_goal, save_goal
+from ...services.recurring_detect import SuggestionError, dismiss_suggestion, track_suggestion
+from ...utils import CURRENCY_CODES, user_today
 from ..accounts.routes import (
     ValidationError as AccountValidationError,
     delete_account_record,
@@ -578,12 +580,13 @@ def put_budget():
 @api_bp.put("/category-budgets/<category>")
 @api_auth_required
 def put_category_budget(category):
-    """Body: {"monthly_cap": "400.00"}, in the person's display currency."""
+    """Body: {"monthly_cap": "400.00", "rollover"?: true}, in the person's
+    display currency. Leaving out rollover keeps what it was."""
     data = _json_body()
     if data is None:
         return api_error(400, "invalid_request", "Send the limit as a JSON object.")
     try:
-        save_category_budget(g.api_user, category, data.get("monthly_cap"))
+        save_category_budget(g.api_user, category, data.get("monthly_cap"), data.get("rollover"))
     except ValidationError as exc:
         return api_error(400, "invalid_budget", str(exc))
     except Exception:
@@ -602,6 +605,103 @@ def delete_category_budget(category):
         return api_error(500, "server_error", "Artha couldn't remove that limit. Try again in a moment.")
     if not removed:
         return api_error(404, "not_found", "There's no limit on that category.")
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Goals and spotted bills (Plan), through the same services/goals.py and
+# services/recurring_detect.py functions as the website's Plan page.
+# ---------------------------------------------------------------------------
+
+def _own_goal(goal_id: int):
+    goal = db.session.get(Goal, goal_id)
+    if goal is None or goal.user_id != g.api_user.id:
+        return None
+    return goal
+
+
+@api_bp.post("/goals")
+@api_auth_required
+def create_goal():
+    """Body: {"name", "target_amount", "saved_amount"?, "target_date"?
+    (YYYY-MM-DD)}, amounts in the person's display currency."""
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the goal as a JSON object.")
+    try:
+        goal = save_goal(g.api_user, None, data)
+    except GoalError as exc:
+        return api_error(400, "invalid_goal", str(exc))
+    return jsonify({"goal": describe_goal(goal, user_today(g.api_user))}), 201
+
+
+@api_bp.patch("/goals/<int:goal_id>")
+@api_auth_required
+def edit_goal(goal_id):
+    """Any of the create fields; only those sent change."""
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return api_error(404, "not_found", "That goal is gone.")
+    data = _json_body()
+    if data is None:
+        return api_error(400, "invalid_request", "Send the changes as a JSON object.")
+    try:
+        save_goal(g.api_user, goal, data, partial=True)
+    except GoalError as exc:
+        return api_error(400, "invalid_goal", str(exc))
+    return jsonify({"goal": describe_goal(goal, user_today(g.api_user))})
+
+
+@api_bp.post("/goals/<int:goal_id>/add")
+@api_auth_required
+def add_money_to_goal(goal_id):
+    """Body: {"amount": "50.00"}, in the goal's own currency; negative
+    takes money back out (never below zero)."""
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return api_error(404, "not_found", "That goal is gone.")
+    data = _json_body() or {}
+    try:
+        add_to_goal(goal, data.get("amount"))
+    except GoalError as exc:
+        return api_error(400, "invalid_amount", str(exc))
+    return jsonify({"goal": describe_goal(goal, user_today(g.api_user))})
+
+
+@api_bp.delete("/goals/<int:goal_id>")
+@api_auth_required
+def remove_goal(goal_id):
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return api_error(404, "not_found", "That goal is gone.")
+    delete_goal(goal)
+    return "", 204
+
+
+@api_bp.post("/bill-suggestions/track")
+@api_auth_required
+def track_bill_suggestion():
+    """Body: {"key"} from /plan's bill_suggestions. Starts tracking that
+    charge as a repeating bill."""
+    data = _json_body() or {}
+    try:
+        tx = track_suggestion(g.api_user, str(data.get("key") or ""), user_today(g.api_user))
+    except SuggestionError as exc:
+        return api_error(404, "not_found", str(exc))
+    currency = g.api_user.preferred_currency or "USD"
+    rates = get_rates() if currency != tx.native_currency else None
+    return jsonify({"transaction": serialize_transaction(tx, currency, rates)})
+
+
+@api_bp.post("/bill-suggestions/dismiss")
+@api_auth_required
+def dismiss_bill_suggestion():
+    """Body: {"key"}. Stops suggesting that merchant."""
+    data = _json_body() or {}
+    try:
+        dismiss_suggestion(g.api_user, str(data.get("key") or ""))
+    except SuggestionError as exc:
+        return api_error(400, "invalid_request", str(exc))
     return "", 204
 
 

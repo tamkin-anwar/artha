@@ -11,9 +11,9 @@
                 <h1 class="page-title">Activity</h1>
             </div>
             <div class="page-actions">
-                <a class="chip" href="{{ url_for('finance.finance_page') }}#import">
+                <button type="button" class="chip" id="csv-import-btn">
                     <i data-lucide="upload" aria-hidden="true" style="width:15px; height:15px;"></i>Import
-                </a>
+                </button>
                 <a class="chip" href="{{ url_for('finance.export_csv') }}">
                     <i data-lucide="download" aria-hidden="true" style="width:15px; height:15px;"></i>Export
                 </a>
@@ -39,6 +39,15 @@
             {% if to_review and not filters.review %}
                 <a class="chip" href="{{ url_for('finance.activity_page', review=1) }}"><span class="review-dot" aria-hidden="true"></span>To review ({{ to_review }})</a>
             {% endif %}
+            <label class="chip month-chip{{ ' is-on' if filters.month }}">
+                <span class="visually-hidden">Month</span>
+                <select data-month-filter aria-label="Month">
+                    <option value="">Every month</option>
+                    {% for m in months %}
+                        <option value="{{ m.value }}"{{ ' selected' if m.value == filters.month }}>{{ m.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
         </div>
 
         {% if filters.month or filters.category or filters.review or filters.q %}
@@ -50,6 +59,16 @@
                 {%- if month_label %}{{ ' in ' if category_labels else (', ' if filters.review or filters.q) }}{{ month_label }}{% endif -%}
             </span>
             <a class="link-accent" href="{{ url_for('finance.activity_page') }}">Clear</a>
+        </div>
+        {% endif %}
+
+        {% if uncategorized and not filters.review %}
+        <div class="card notice" id="categorize-card">
+            <div class="notice-text">
+                <span class="notice-title">{{ uncategorized }} {{ 'transaction has' if uncategorized == 1 else 'transactions have' }} no category</span>
+                <span>Artha can file them by name, and ask the AI only about the ones it can't place. Nothing that already has a category changes.</span>
+                <button type="button" class="link-accent" data-categorize>Categorize them</button>
+            </div>
         </div>
         {% endif %}
 
@@ -75,7 +94,7 @@
                         <span>Add a purchase, or bring in months at once from a bank statement.</span>
                         <span style="display:flex; gap:16px; flex-wrap:wrap;">
                             <button type="button" class="link-accent" data-add-open>Add a purchase</button>
-                            <a class="link-accent" href="{{ url_for('finance.finance_page') }}#import">Import a statement</a>
+                            <button type="button" class="link-accent" data-import-open>Import a statement</button>
                         </span>
                     </div>
                 </div>
@@ -127,10 +146,14 @@
                 <label class="field-row"><span>Date</span><input type="date" id="detail-date" name="date"></label>
                 <label class="field-row" id="detail-repeat-row"><span>Repeats</span>
                     <select id="detail-interval" name="recurrence_interval">
+                        <option value="">Never</option>
                         <option value="weekly">Every week</option>
                         <option value="biweekly">Every 2 weeks</option>
-                        <option value="">Every month</option>
+                        <option value="monthly">Every month</option>
                     </select>
+                </label>
+                <label class="field-row" id="detail-ends-row"><span>Ends</span>
+                    <input type="date" id="detail-ends" name="recurring_end_date">
                 </label>
             </div>
 
@@ -153,6 +176,8 @@
         </form>
     </section>
 </div>
+
+{% include "partials/import_sheet.html" %}
 
 <script type="module" src="{{ url_for('static', filename='js/activity.js') }}"></script>
 {% endblock %}

@@ -105,7 +105,7 @@ def search():
                 "snippet": f"{'+' if t.type == 'income' else '-'}${t.amount:.2f} · {_fmt_date(t.timestamp)}",
                 # No per-transaction deep link exists — the closest useful
                 # target is the month it's actually in.
-                "url": url_for("finance.finance_page", month=(t.timestamp.strftime("%Y-%m") if t.timestamp else None)),
+                "url": url_for("finance.activity_page", month=(t.timestamp.strftime("%Y-%m") if t.timestamp else None), selected=t.id),
             }
             for t in transactions
         ],

@@ -17,7 +17,6 @@
 document.addEventListener("touchstart", () => {}, { passive: true });
 
 import "./flash.js";
-import "./transactions.js";
 import "./theme.js";
 import "./settings.js";
 import "./ai.js";
@@ -26,7 +25,6 @@ import "./scenarios.js";
 import "./search.js";
 import "./csv_import.js";
 
-import { updateChartData } from "./chart.js";
 
 async function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
@@ -41,22 +39,6 @@ async function registerServiceWorker() {
     }
 }
 
-function createLoadingIndicator() {
-    const el = document.createElement("div");
-    el.textContent = "Loading dashboard...";
-    el.className = "text-center text-gray-500 my-4 animate-pulse";
-    el.setAttribute("role", "status");
-    el.setAttribute("aria-live", "polite");
-    return el;
-}
-
-function createErrorBanner() {
-    const el = document.createElement("div");
-    el.textContent = "Failed to load dashboard data. Refresh and try again.";
-    el.className = "flash-message text-red-500 text-center my-2";
-    el.setAttribute("role", "alert");
-    return el;
-}
 
 function initSettingsMenu() {
     const btn = document.getElementById("settings-btn");
@@ -202,42 +184,13 @@ function initSettingsMenu() {
     }
 }
 
-async function initDashboardDataWithRetry({ maxRetries = 3, retryDelayMs = 1500 } = {}) {
-    let retryCount = 0;
-
-    while (retryCount <= maxRetries) {
-        try {
-            await updateChartData();
-            return { ok: true, retries: retryCount };
-        } catch (err) {
-            retryCount += 1;
-            if (retryCount > maxRetries) {
-                return { ok: false, retries: retryCount, error: err };
-            }
-            await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
-        }
-    }
-
-    return { ok: false, retries: maxRetries + 1 };
-}
-
-async function initDashboard() {
+// The old dashboard's chart used to load here on every page, behind a
+// "Loading dashboard..." line that flashed on all of them; that chart
+// went away with the 2026-10 redesign, so only the shell setup is left.
+async function initShell() {
     initSettingsMenu();
     await registerServiceWorker();
-
-    const loadingIndicator = createLoadingIndicator();
-    document.body.prepend(loadingIndicator);
-
-    const result = await initDashboardDataWithRetry({ maxRetries: 3, retryDelayMs: 1500 });
-
-    loadingIndicator.remove();
-
-    if (result.ok) {
-        document.dispatchEvent(new CustomEvent("dashboard-ready", { detail: { retries: result.retries } }));
-        return;
-    }
-
-    document.body.prepend(createErrorBanner());
 }
 
-window.addEventListener("DOMContentLoaded", initDashboard);
+window.addEventListener("DOMContentLoaded", initShell);
+

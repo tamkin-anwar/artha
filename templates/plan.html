@@ -75,6 +75,29 @@
                 </form>
             </section>
 
+            {% if plan.bill_suggestions %}
+            <section class="section" aria-labelledby="suggest-label">
+                <div class="section-head">
+                    <h2 class="section-label" id="suggest-label">Looks like a bill</h2>
+                </div>
+                <div class="card-list">
+                    {% for b in plan.bill_suggestions %}
+                    <div class="suggest-row" data-suggestion="{{ b.key }}">
+                        <span class="tx-text">
+                            <span class="tx-name">{{ b.description }}</span>
+                            <span class="tx-detail">{{ b.amount|money(b.currency) }} {{ {'weekly': 'every week', 'biweekly': 'every 2 weeks'}.get(b.interval, 'every month') }} &middot; {{ b.count }} so far</span>
+                        </span>
+                        <span class="suggest-actions">
+                            <button type="button" class="btn-quiet btn-small" data-dismiss-bill>Not a bill</button>
+                            <button type="button" class="btn-inverse btn-small" data-track-bill>Track it</button>
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="settings-hint">Tracked bills count in Safe to spend before they're charged, and Artha adds each one when it's due.</p>
+            </section>
+            {% endif %}
+
             <section class="section" id="bills" aria-labelledby="bills-label">
                 <div class="section-head">
                     <h2 class="section-label" id="bills-label">Bills this month</h2>
@@ -139,7 +162,7 @@
                         <div class="limit-top">
                             <a class="tx-text limit-name" href="{{ url_for('finance.activity_page', month=month_param, category=c.key) }}">
                                 <span class="tx-name">{{ c.label }}</span>
-                                <span class="tx-detail">{{ c.spent|money(cur, true) }} of {{ c.cap|money(cur, true) }}</span>
+                                <span class="tx-detail">{{ c.spent|money(cur, true) }} of {{ c.cap|money(cur, true) }}{% if c.carried and c.carried|float != 0 %}, {{ ('with ' ~ (c.carried|money(cur, true)) ~ ' carried over') if c.carried|float > 0 else ((-(c.carried|float))|money(cur, true) ~ ' less after last month') }}{% endif %}</span>
                             </a>
                             <b class="limit-left{{ ' is-bad' if over }}">{{ (c.over_by|money(cur, true) ~ ' over') if over else (c.left|money(cur, true) ~ ' left') }}</b>
                             <button type="button" class="icon-plain" data-edit-limit="{{ c.key }}" data-cap="{{ c.cap }}" aria-label="Change the {{ c.label }} limit">
@@ -156,6 +179,7 @@
                                 <input name="monthly_cap" inputmode="decimal" autocomplete="off" value="{{ c.cap }}">
                             </label>
                             <button type="submit" class="btn-inverse btn-small">Save</button>
+                            <label class="rollover-check"><input type="checkbox" class="settings-switch" name="rollover" {{ 'checked' if c.rollover }}><span>Carry over what's left</span></label>
                             <button type="button" class="btn-destructive btn-small" data-remove-limit="{{ c.key }}">Remove</button>
                             <p class="sheet-error" role="alert" hidden></p>
                         </form>
@@ -164,6 +188,81 @@
                 </div>
                 {% else %}
                 <p class="empty-note" style="padding:0 4px;">A limit on one category, like dining or shopping, warns you before it runs over.</p>
+                {% endif %}
+            </section>
+
+            <section class="section" id="goals" aria-labelledby="goals-label">
+                <div class="section-head">
+                    <h2 class="section-label" id="goals-label">Goals</h2>
+                    <button type="button" class="link-accent" data-add-goal aria-expanded="false" aria-controls="goal-form">Add</button>
+                </div>
+
+                <form class="card inline-form goal-form" id="goal-form" hidden novalidate>
+                    <label class="money-field goal-name-field">
+                        <span class="visually-hidden">What it's for</span>
+                        <input name="name" maxlength="80" autocomplete="off" placeholder="Emergency fund, a trip, a laptop">
+                    </label>
+                    <label class="money-field">
+                        <span class="visually-hidden">Goal amount in {{ cur }}</span>
+                        <span class="money-field-code">{{ cur }}</span>
+                        <input name="target_amount" inputmode="decimal" autocomplete="off" placeholder="Amount">
+                    </label>
+                    <label class="money-field">
+                        <span class="money-field-code">By</span>
+                        <input type="date" name="target_date" aria-label="By when (optional)">
+                    </label>
+                    <button type="submit" class="btn-inverse btn-small">Add goal</button>
+                    <p class="limit-hint">The date is optional. With one, Artha works out how much to set aside each month.</p>
+                    <p class="sheet-error" role="alert" hidden></p>
+                </form>
+
+                {% if plan.goals %}
+                <div class="card-list">
+                    {% for goal in plan.goals %}
+                    <div class="goal-row" data-goal="{{ goal.id }}">
+                        <div class="limit-top">
+                            <span class="tx-text">
+                                <span class="tx-name">{{ goal.name }}</span>
+                                <span class="tx-detail">
+                                    {% if goal.status == 'done' %}<span class="is-good">Reached</span> &middot; {{ goal.saved|money(goal.currency, true) }} saved
+                                    {% elif goal.status == 'overdue' %}{{ goal.left|money(goal.currency, true) }} to go, past the date you set
+                                    {% elif goal.per_month %}{{ goal.per_month|money(goal.currency, true) }} a month to reach it by {{ goal.target_label }}
+                                    {% else %}{{ goal.saved|money(goal.currency, true) }} of {{ goal.target|money(goal.currency, true) }}{% endif %}
+                                </span>
+                            </span>
+                            <b class="limit-left">{{ goal.percent }}%</b>
+                            <button type="button" class="icon-plain" data-edit-goal aria-label="Change {{ goal.name }}"><i data-lucide="pencil" aria-hidden="true"></i></button>
+                        </div>
+                        <div class="meter" role="meter" aria-label="{{ goal.name }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ goal.percent }}">
+                            <span style="width:{{ goal.percent }}%; background:{{ 'var(--good)' if goal.status == 'done' else 'var(--accent)' }};"></span>
+                        </div>
+                        <div class="goal-meta">
+                            <span>{{ goal.saved|money(goal.currency) }} of {{ goal.target|money(goal.currency) }}</span>
+                            {% if goal.status != 'done' %}<button type="button" class="link-accent" data-add-money>Add money</button>{% endif %}
+                        </div>
+                        <form class="inline-form goal-money" hidden novalidate>
+                            <label class="money-field">
+                                <span class="visually-hidden">Amount to add, in {{ goal.currency }}</span>
+                                <span class="money-field-code">{{ goal.currency }}</span>
+                                <input name="amount" inputmode="decimal" autocomplete="off" placeholder="{{ goal.per_month or '0' }}">
+                            </label>
+                            <button type="submit" class="btn-inverse btn-small">Add</button>
+                            <button type="button" class="btn-quiet btn-small" data-take-out>Take out</button>
+                            <p class="sheet-error" role="alert" hidden></p>
+                        </form>
+                        <form class="inline-form goal-edit" hidden novalidate>
+                            <label class="money-field goal-name-field"><span class="visually-hidden">Name</span><input name="name" maxlength="80" value="{{ goal.name }}"></label>
+                            <label class="money-field"><span class="money-field-code">{{ goal.currency }}</span><input name="target_amount" inputmode="decimal" value="{{ goal.target }}" aria-label="Goal amount"></label>
+                            <label class="money-field"><span class="money-field-code">By</span><input type="date" name="target_date" value="{{ goal.target_date or '' }}" aria-label="By when (optional)"></label>
+                            <button type="submit" class="btn-inverse btn-small">Save</button>
+                            <button type="button" class="btn-destructive btn-small" data-delete-goal>Delete</button>
+                            <p class="sheet-error" role="alert" hidden></p>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-note" style="padding:0 4px;">Saving for something? Add a goal and Artha shows how much to set aside each month to get there.</p>
                 {% endif %}
             </section>
 
@@ -181,6 +280,10 @@
                         <p class="mbm-sub">Your usual month shows up here after your first full month.</p>
                     {% endif %}
                 </div>
+                {% if current_month and current_month.income|float > 0 %}
+                    {% set kept = ((current_month.income|float - current_month.spent|float) / current_month.income|float * 100)|round|int %}
+                    <p class="mbm-sub mbm-kept">{% if kept >= 0 %}You've kept {{ kept }}% of what came in this month.{% else %}You've spent {{ -kept }}% more than came in this month.{% endif %}</p>
+                {% endif %}
                 {% if months %}
                 {% set top = ([history.average_spent|float if history.average_spent else 0] + months|map(attribute='spent')|map('float')|list + months|map(attribute='income')|map('float')|list)|max %}
                 {% set top = top if top > 0 else 1 %}

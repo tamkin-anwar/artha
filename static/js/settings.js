@@ -43,7 +43,6 @@ function setSelectValueIfPresent(selectEl, value) {
 
 function syncCurrencySelects(code) {
     setSelectValueIfPresent(document.getElementById("currency-select"), code);
-    setSelectValueIfPresent(document.getElementById("currency-select-mobile"), code);
 }
 
 function applyCurrencyEverywhere() {
@@ -100,14 +99,13 @@ function initCurrency() {
     syncCurrencySelects(saved);
 
     bindCurrencySelect(document.getElementById("currency-select"));
-    bindCurrencySelect(document.getElementById("currency-select-mobile"));
 
     applyCurrencyEverywhere();
 
-    // Only present in the settings dropdown for a logged-in user — piggybacks
-    // on that as the "are we authenticated" check, same as everything else
-    // in this function already implicitly does.
-    if (document.getElementById("currency-select")) syncTimezoneToAccount();
+    // On every signed-in page (base.html stamps data-display-currency on
+    // <body> only for one), not just where a currency control happens to
+    // be: the person's own "today" depends on it.
+    if (document.body.dataset.displayCurrency) syncTimezoneToAccount();
 }
 
 if (document.readyState === "loading") {

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <script type="module">
+            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
+            document.addEventListener('DOMContentLoaded', function () {
+                {% for category, message in messages %}
+                    showToast({{ message|tojson }}, {{ category|tojson }});
+                {% endfor %}
+            });
+        </script>
+    {% endif %}
+{% endwith %}
+
+{% set currency_names = {'USD': 'US dollar', 'GBP': 'British pound', 'EUR': 'Euro', 'BDT': 'Bangladeshi taka', 'CAD': 'Canadian dollar', 'AUD': 'Australian dollar'} %}
+{% macro chevron() -%}
+    <svg class="settings-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+{%- endmacro %}
+
+<div class="page settings-page">
+    <header class="page-head">
+        <div class="page-head-text">
+            <h1 class="page-title">Settings</h1>
+        </div>
+    </header>
+
+    <a class="card settings-profile" href="{{ url_for('auth.edit_profile') }}">
+        <span class="settings-avatar" aria-hidden="true">{{ (current_user.first_name or current_user.username or '?')[0]|upper }}</span>
+        <span class="tx-text">
+            <span class="tx-name">{{ ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or ''))|trim or current_user.username }}</span>
+            <span class="tx-detail">{{ current_user.email or current_user.username }}</span>
+        </span>
+        {{ chevron() }}
+    </a>
+
+    <div class="cols">
+        <div class="col">
+            <section class="section" aria-labelledby="s-account">
+                <h2 class="section-label settings-label" id="s-account">Account</h2>
+                <div class="card-list">
+                    <a class="settings-row" href="{{ url_for('auth.edit_profile') }}"><span>Name and email</span>{{ chevron() }}</a>
+                    <a class="settings-row" href="{{ url_for('auth.change_password') }}"><span>Password</span>{{ chevron() }}</a>
+                    <a class="settings-row" href="{{ url_for('auth.edit_profile') }}#two-factor">
+                        <span>Two-factor authentication</span>
+                        <span class="settings-value">{{ 'On' if current_user.otp_enabled else 'Off' }}</span>{{ chevron() }}
+                    </a>
+                    <a class="settings-row" href="{{ url_for('auth.privacy') }}"><span>Privacy and security</span>{{ chevron() }}</a>
+                </div>
+            </section>
+
+            <section class="section" aria-labelledby="s-display">
+                <h2 class="section-label settings-label" id="s-display">Display</h2>
+                <div class="card-list">
+                    <label class="settings-row">
+                        <span>Currency</span>
+                        <select id="currency-select" class="settings-select" aria-describedby="currency-hint">
+                            {% for code in currencies %}
+                                <option value="{{ code }}"{{ ' selected' if code == (current_user.preferred_currency or 'USD') }}>{{ currency_names.get(code, code) }} ({{ code }})</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <div class="settings-row">
+                        <span id="appearance-label">Appearance</span>
+                        <div class="segmented segmented-inline" role="radiogroup" aria-labelledby="appearance-label" id="appearance">
+                            <label><input type="radio" name="appearance" value="system"><span>Automatic</span></label>
+                            <label><input type="radio" name="appearance" value="light"><span>Light</span></label>
+                            <label><input type="radio" name="appearance" value="dark"><span>Dark</span></label>
+                        </div>
+                    </div>
+                </div>
+                <p class="settings-hint" id="currency-hint">Totals, budgets and charts show in this currency. Each purchase keeps the currency you paid in. Automatic follows this device's light or dark setting.</p>
+            </section>
+        </div>
+
+        <div class="col">
+            <section class="section" aria-labelledby="s-reminders">
+                <h2 class="section-label settings-label" id="s-reminders">Reminders</h2>
+                <div class="card-list">
+                    <div class="settings-row">
+                        <span class="tx-text">
+                            <span>Notifications</span>
+                            <span class="tx-detail" id="push-status">Not available in this browser.</span>
+                        </span>
+                        <button type="button" class="btn-quiet btn-small" id="toggle-push" hidden>Turn on</button>
+                    </div>
+                    <div id="push-preferences" hidden>
+                        <label class="settings-row"><span>Bills due</span><input type="checkbox" class="settings-switch" data-pref="notify_bills_due" {{ 'checked' if current_user.notify_bills_due }}></label>
+                        <label class="settings-row"><span>Going over a budget</span><input type="checkbox" class="settings-switch" data-pref="notify_budget_alerts" {{ 'checked' if current_user.notify_budget_alerts }}></label>
+                        <label class="settings-row"><span>Notes due</span><input type="checkbox" class="settings-switch" data-pref="notify_notes_due" {{ 'checked' if current_user.notify_notes_due }}></label>
+                        <label class="settings-row"><span>Calendar events</span><input type="checkbox" class="settings-switch" data-pref="notify_events_due" {{ 'checked' if current_user.notify_events_due }}></label>
+                        <label class="settings-row">
+                            <span>Remind me at</span>
+                            <select id="reminder-hour-select" class="settings-select">
+                                {% for h in range(24) %}
+                                    <option value="{{ h }}"{{ ' selected' if reminder_hour == h }}>{{ (h % 12 or 12) }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <p class="settings-hint">Bills and budget choices are shared with the iPhone app. Turning notifications on or off only affects this browser.</p>
+            </section>
+
+            <section class="section" aria-labelledby="s-calendar">
+                <h2 class="section-label settings-label" id="s-calendar">Calendar</h2>
+                <div class="card-list">
+                    <div class="settings-row">
+                        <span class="tx-text">
+                            <span>Bills and events in your calendar</span>
+                            <span class="tx-detail">Subscribe in Apple Calendar, Google Calendar or Outlook.</span>
+                        </span>
+                        <button type="button" class="btn-quiet btn-small" id="copy-calendar-link-btn"
+                                data-calendar-feed-url="{{ url_for('dashboard.calendar_feed', token=current_user.calendar_feed_token, _external=True) if current_user.calendar_feed_token else '' }}">Copy link</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" aria-labelledby="s-more">
+                <h2 class="section-label settings-label" id="s-more">Artha</h2>
+                <div class="card-list">
+                    <a class="settings-row" href="{{ url_for('dashboard.whats_new') }}">
+                        <span>What's new</span>
+                        {% if has_new_changelog %}<span class="settings-dot" aria-label="New"></span>{% endif %}
+                        {{ chevron() }}
+                    </a>
+                    <button type="button" class="settings-row" data-feedback-open><span>Send feedback</span>{{ chevron() }}</button>
+                    <a class="settings-row settings-signout" href="{{ url_for('auth.logout') }}"><span>Sign out</span></a>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getThemeChoice, setThemeChoice } from "{{ url_for('static', filename='js/theme.js') }}";
+    const group = document.getElementById("appearance");
+    const current = getThemeChoice();
+    group.querySelectorAll("input").forEach((input) => {
+        input.checked = input.value === current;
+        input.addEventListener("change", () => setThemeChoice(input.value));
+    });
+    document.querySelector("[data-feedback-open]")?.addEventListener("click", () => {
+        document.getElementById("feedback-fab")?.click();
+    });
+</script>
+{% endblock %}

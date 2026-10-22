@@ -222,13 +222,14 @@ and Artha shouldn't repeat that.
   `lock_usd_value()`. USD is purely an internal pivot, never shown to a
   user. Two completely different operations read this data, and mixing
   them up is the bug to avoid:
-  - **A single transaction's own display** (`transaction_row.html`'s
-    `.tx-amount`, a recurring bill's own row) always shows the *exact
-    native* `amount`/`currency` — never converted, never the display
-    currency's symbol slapped on a foreign number. Client-side, that's
-    `currency.js`'s `formatMoneyIn()`/`formatMoneyFromElement()`
-    reading a `data-money-currency` attribute, not `formatMoney()`
-    (which uses whatever's globally selected).
+  - **A single transaction's own display** (an Activity row, the
+    Activity editor's amount, a recurring bill's own row) always shows
+    the *exact native* `amount`/`currency` — never converted, never the
+    display currency's symbol slapped on a foreign number. Server-side
+    that's the `money` filter with the transaction's own currency
+    (`partials/money_macros.html`'s `tx_amount`); client-side,
+    `currency.js`'s `formatMoneyIn()` with that currency, not
+    `formatMoney()` (which uses the display currency).
   - **Any aggregate across more than one transaction** (finance totals,
     budgets, chart data, the AI's financial-context snapshot) sums
     `Transaction.value_in_usd` (Python) / `coalesce(usd_value, amount)`
@@ -253,14 +254,13 @@ and Artha shouldn't repeat that.
     before comparing it against anything already in a different
     currency — never assume a bare number is safely comparable against
     a converted one just because both look like plain numbers.
-  - The one field that must **never** show a converted number:
-    `transaction_row.html`'s `.tx-amount` is also the literal editable
-    input `saveTransaction()` (`static/js/transactions.js`) parses and
-    posts back on an inline edit — if it ever displayed a converted
-    figure, editing an unrelated field (the description) and saving
+  - The one field that must **never** show a converted number: the
+    Activity editor's amount (`#detail-amount`, `static/js/activity.js`)
+    is the literal value posted back on save, so if it ever displayed a
+    converted figure, editing an unrelated field (the name) and saving
     would silently overwrite the real native amount with a converted
-    one. Any converted-equivalent for a single transaction belongs in a
-    separate, non-editable element, never inside that span.
+    one. A foreign transaction's converted equivalent goes in a separate,
+    non-editable element (`detail-sub`, `tx_amount`'s "about" line).
 - Per-user reminder delivery (added 2026-09-02): `flask
   send-renewal-reminders` (`artha/cli.py`) runs hourly now, not once
   daily — it computes each user's own local "now" via

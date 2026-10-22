@@ -97,13 +97,13 @@ def test_set_category_budget_ajax_returns_json_error_for_invalid_category(auth_c
     assert CategoryBudget.query.filter_by(user_id=user.id).count() == 0
 
 
-def test_finance_page_shows_over_tier_for_category(auth_client, user):
+def test_plan_shows_over_tier_for_category(auth_client, user):
     _add_expense(user, "80", category="dining")
     auth_client.post("/finance/category-budget", data={"category": "dining", "monthly_cap": "50"})
 
-    resp = auth_client.get("/finance")
-    assert b"Dining" in resp.data
-    assert 'data-money-value="80.0"' in resp.get_data(as_text=True)
+    body = auth_client.get("/plan").get_data(as_text=True)
+    assert "$80 of $50" in body
+    assert "$30 over" in body
 
 
 def test_category_budget_only_counts_its_own_category(auth_client, user):
@@ -111,10 +111,9 @@ def test_category_budget_only_counts_its_own_category(auth_client, user):
     _add_expense(user, "10", category="dining")
     auth_client.post("/finance/category-budget", data={"category": "dining", "monthly_cap": "50"})
 
-    resp = auth_client.get("/finance")
-    body = resp.get_data(as_text=True)
-    assert 'data-money-value="10.0"' in body
-    assert 'data-money-value="500.0"' not in body
+    body = auth_client.get("/plan").get_data(as_text=True)
+    assert "$10 of $50" in body
+    assert "$500 of $50" not in body
 
 
 def test_category_budgets_scoped_to_current_user_only(auth_client, user):
@@ -122,11 +121,9 @@ def test_category_budgets_scoped_to_current_user_only(auth_client, user):
     db.session.add(CategoryBudget(user_id=other.id, category="dining", monthly_cap=Decimal("100")))
     db.session.commit()
 
-    resp = auth_client.get("/finance")
+    resp = auth_client.get("/plan")
     # "Dining" itself still legitimately appears as an option in the "add
-    # a category budget" dropdown (the current user hasn't budgeted it) —
-    # the real leak to guard against is the *other* user's budget row
-    # rendering as an existing entry, which only happens via this delete
-    # route's URL.
-    assert b"/finance/category-budget/dining/delete" not in resp.data
+    # a limit" picker (the current user hasn't budgeted it); the real leak
+    # to guard against is the *other* user's limit rendering as a row.
+    assert b'class="limit-row" data-category="dining"' not in resp.data
     assert CategoryBudget.query.filter_by(user_id=other.id).count() == 1

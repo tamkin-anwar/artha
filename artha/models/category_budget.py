@@ -23,6 +23,11 @@ class CategoryBudget(db.Model):
     # Same currency-capture as Budget.currency -- see that column's own
     # comment for why this exists and what breaks without it.
     currency = db.Column(db.String(3), nullable=True)
+    # When on, last month's unspent amount carries into this month (or
+    # last month's overspending comes off it). One month only, never a
+    # running balance, so a single big month can't snowball; see
+    # finance.routes.category_rollover_carry.
+    rollover = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # Same alert-dedup convention as Budget.alerted_month — see that
     # column's own comment.
     alerted_month = db.Column(db.Date, nullable=True)

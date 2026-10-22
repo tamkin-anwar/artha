@@ -1,5 +1,6 @@
-// static/js/csv_import.js — bank statement CSV import modal on /finance.
-// No-ops entirely on any other page (the trigger button doesn't exist).
+// static/js/csv_import.js — bank statement import (CSV or PDF) on Activity
+// (templates/partials/import_sheet.html). No-ops on any other page (the
+// trigger button doesn't exist).
 import { showToast } from "./toast.js";
 
 function getCsrfToken() {
@@ -19,7 +20,7 @@ function escapeHtml(str) {
 
 function initCsvImport() {
     const openBtn = document.getElementById("csv-import-btn");
-    if (!openBtn) return; // not on /finance
+    if (!openBtn) return; // not on Activity
 
     const backdrop = document.getElementById("csv-import-backdrop");
     const closeBtn = document.getElementById("csv-import-close");
@@ -79,7 +80,7 @@ function initCsvImport() {
     }
 
     openBtn.addEventListener("click", openModal);
-    // Activity's and Today's "Import" links land here as /finance#import.
+    // Today's and search's "Import a statement" links land here as /activity#import.
     if (window.location.hash === "#import") {
         history.replaceState(null, "", window.location.pathname + window.location.search);
         openModal();

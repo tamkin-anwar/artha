@@ -113,6 +113,7 @@ def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict
         "date": tx.timestamp.date().isoformat() if tx.timestamp else None,
         "is_recurring": bool(tx.is_recurring),
         "recurrence_interval": (tx.recurrence_interval or "monthly") if tx.is_recurring else None,
+        "recurring_end_date": tx.recurring_end_date.isoformat() if tx.is_recurring and tx.recurring_end_date else None,
         # "manual", "csv" (statement import), "apple_pay", or null (older rows).
         "source": tx.import_source,
         "needs_review": bool(tx.needs_review),
@@ -174,6 +175,7 @@ def today_screen(user, today=None) -> dict:
     this month does. `today` defaults to the person's own date
     (utils.user_today)."""
     from ..blueprints.accounts.routes import net_worth_summary
+    from .recurring_detect import suggest_bills
 
     snap = build_month_snapshot(user, today)
     currency = snap.display_currency
@@ -286,6 +288,8 @@ def today_screen(user, today=None) -> dict:
         # month (Transaction.needs_review).
         "to_review": Transaction.query.filter_by(user_id=user.id, needs_review=True).count(),
         "apple_pay": apple_pay_status(user),
+        # How many charges look like bills nobody marked; Plan lists them.
+        "bill_suggestions": len(suggest_bills(user, today_date)),
     }
 
 
@@ -440,7 +444,9 @@ def plan_screen(user) -> dict:
     category limits, and what this person usually spends, to suggest
     amounts instead of making them guess. Callers run the recurring
     catch-up first."""
-    from ..blueprints.finance.routes import category_budget_statuses
+    from ..blueprints.finance.routes import category_budget_statuses, category_rollover_carry
+    from .goals import goals_for
+    from .recurring_detect import suggest_bills
 
     categories_meta = _transaction_categories()
     snap = build_month_snapshot(user)
@@ -487,8 +493,9 @@ def plan_screen(user) -> dict:
         }
 
     rows = CategoryBudget.query.filter_by(user_id=user.id).all()
+    carry = category_rollover_carry(user.id, rows, snap.today, currency, rates)
     category_budgets = []
-    for item in category_budget_statuses(rows, snap.transactions, currency, rates):
+    for item in category_budget_statuses(rows, snap.transactions, currency, rates, carry):
         status = item["status"]
         if not status.get("has_budget"):
             continue
@@ -503,6 +510,11 @@ def plan_screen(user) -> dict:
             "over_by": money(max(spent - cap, Decimal("0"))),
             "percent_used": round(status["pct"], 1),
             "tier": status["tier"],
+            # Rollover (CategoryBudget.rollover): the limit as set, and
+            # what last month added (positive) or took off (negative).
+            "rollover": item["rollover"],
+            "base_cap": money(item["base_cap"]),
+            "carried": money(item["carry"]) if item["carry"] is not None else None,
         })
     category_budgets.sort(key=lambda c: -c["percent_used"])
     budgeted = {c["key"] for c in category_budgets}
@@ -527,6 +539,10 @@ def plan_screen(user) -> dict:
             for key, meta in categories_meta.items()
             if key != "income" and key not in budgeted
         ],
+        "goals": goals_for(user, snap.today),
+        # Charges that look like bills nobody marked (services/
+        # recurring_detect.py), each in its own currency.
+        "bill_suggestions": suggest_bills(user, snap.today),
         "typical": None if typical is None else {
             "months": typical["months"],
             "overall": money(typical["overall"]),

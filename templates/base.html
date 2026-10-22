@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>{% block title %}Artha{% endblock %}</title>
 
-    <!-- CSRF for AJAX (read by transactions.js) -->
+    <!-- CSRF for AJAX (read by shell.js and the page scripts) -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     {% if not hide_app_shell %}
@@ -207,43 +207,15 @@
                      those two actions buried in the unrelated top-right
                      "Preferences" gear instead. -->
                 <div style="padding:8px 8px 16px; position:relative;">
-                    <button
-                        id="account-btn"
-                        type="button"
-                        class="nav-link"
-                        style="width:100%; display:flex; align-items:center; gap:10px; background:none; border:none; border-radius:10px; padding:8px; cursor:pointer; text-align:left; font-family:inherit;"
-                        aria-haspopup="menu"
-                        aria-expanded="false"
-                    >
+                    <a href="{{ url_for('auth.settings_page') }}" id="account-btn" class="side-account{{ ' is-active' if request.endpoint == 'auth.settings_page' }}"{% if request.endpoint == 'auth.settings_page' %} aria-current="page"{% endif %}>
                         <div style="width:32px; height:32px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--text-primary); flex-shrink:0;">
                             {{ current_user.first_name[0] if current_user.is_authenticated and current_user.first_name else '?' }}
                         </div>
                         <div style="min-width:0; overflow:hidden; flex:1;">
-                            <div style="font-size:13px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
-                            <div style="font-size:11px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.email if current_user.is_authenticated and current_user.email else '' }}</div>
+                            <div style="font-size:13.5px; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ current_user.first_name if current_user.is_authenticated else 'Guest' }}</div>
+                            <div style="font-size:12px; color:var(--text-secondary);">Settings</div>
                         </div>
-                    </button>
-
-                    <div
-                        id="account-dropdown"
-                        class="hidden glass-card"
-                        style="position:absolute; left:8px; right:8px; bottom:100%; margin-bottom:8px; padding:8px; z-index:50;"
-                        role="menu"
-                        aria-label="Account menu"
-                    >
-                        <a href="{{ url_for('auth.edit_profile') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
-                            Edit profile
-                        </a>
-                        <a href="{{ url_for('auth.change_password') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
-                            Change password
-                        </a>
-                        <a href="{{ url_for('auth.privacy') }}" class="nav-link" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none;" role="menuitem">
-                            Privacy &amp; security
-                        </a>
-                        <a href="{{ url_for('auth.logout') }}" style="display:block; padding:8px 12px; border-radius:8px; font-size:14px; text-decoration:none; color:var(--red);" role="menuitem">
-                            Logout
-                        </a>
-                    </div>
+                    </a>
                 </div>
 
             </aside>
@@ -373,116 +345,13 @@
                             </div>
                         {% endif %}
 
-                        <div style="position:relative;" class="hidden md:block">
-                            <button
-                                id="settings-btn"
-                                type="button"
-                                class="icon-btn"
-                                style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center;"
-                                aria-haspopup="menu"
-                                aria-expanded="false"
-                                title="Settings"
-                            >
-                                <i data-lucide="settings" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
-                            </button>
-
-                            <div
-                                id="settings-dropdown"
-                                class="hidden glass-card"
-                                style="position:absolute; right:0; margin-top:8px; width:260px; padding:8px; z-index:50;"
-                                role="menu"
-                                aria-label="Settings menu"
-                            >
-                                <div class="eyebrow" style="padding:8px 12px 4px;">Preferences</div>
-
-                                <button
-                                    id="toggle-theme"
-                                    type="button"
-                                    class="nav-link"
-                                    style="width:100%; text-align:left; padding:8px 12px; border-radius:8px; font-size:14px; background:none; border:none;"
-                                    role="menuitem"
-                                >
-                                    Toggle theme
-                                </button>
-
-                                <button
-                                    id="toggle-push"
-                                    type="button"
-                                    class="nav-link"
-                                    style="width:100%; text-align:left; padding:8px 12px; border-radius:8px; font-size:14px; background:none; border:none; display:none;"
-                                    role="menuitem"
-                                >
-                                    Enable renewal reminders
-                                </button>
-
-                                {% if current_user.is_authenticated %}
-                                <div id="push-preferences" style="display:none; flex-direction:column; gap:2px; padding:2px 12px 6px;">
-                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
-                                        <input type="checkbox" id="notify-bills-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_bills_due }}>
-                                        Bills due today
-                                    </label>
-                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
-                                        <input type="checkbox" id="notify-notes-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
-                                        Notes due today
-                                    </label>
-                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
-                                        <input type="checkbox" id="notify-events-due" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
-                                        Events today
-                                    </label>
-                                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 0; cursor:pointer;">
-                                        <input type="checkbox" id="notify-budget-alerts" class="push-pref-checkbox" {{ 'checked' if current_user.notify_budget_alerts }}>
-                                        Over-budget alerts
-                                    </label>
-                                    <label for="reminder-hour-select" style="display:block; font-size:13px; color:var(--text-secondary); padding:6px 0 3px;">
-                                        Remind me at
-                                    </label>
-                                    <select
-                                        id="reminder-hour-select"
-                                        class="field-input"
-                                        style="width:100%; font-size:13px;"
-                                        aria-label="Reminder time"
-                                    >
-                                        {% for h in range(24) %}
-                                        <option value="{{ h }}" {{ 'selected' if (current_user.reminder_hour if current_user.reminder_hour is not none else 8) == h }}>{{ (h % 12 or 12) }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                {% endif %}
-
-                                <div class="eyebrow" style="padding:10px 12px 4px;">Currency</div>
-
-                                <select
-                                    id="currency-select"
-                                    class="field-input"
-                                    style="width:100%; font-size:13px;"
-                                    role="menuitem"
-                                    aria-label="Currency"
-                                >
-                                    <option value="USD">$ USD</option>
-                                    <option value="GBP">£ GBP</option>
-                                    <option value="BDT">৳ BDT</option>
-                                    <option value="EUR">€ EUR</option>
-                                    <option value="CAD">$ CAD</option>
-                                    <option value="AUD">$ AUD</option>
-                                </select>
-
-                                {% if current_user.is_authenticated %}
-                                <div class="eyebrow" style="padding:10px 12px 4px;">Calendar sync</div>
-                                <p style="font-size:12px; color:var(--text-muted); padding:0 12px 6px; line-height:1.4;">
-                                    Subscribe to this link in Apple Calendar, Google Calendar, or Outlook to see your due dates and events there.
-                                </p>
-                                <button
-                                    id="copy-calendar-link-btn"
-                                    type="button"
-                                    class="btn-secondary"
-                                    style="width:calc(100% - 24px); padding:8px 12px; font-size:13px; margin:0 12px 8px;"
-                                    data-calendar-feed-url="{{ url_for('dashboard.calendar_feed', token=current_user.calendar_feed_token, _external=True) if current_user.calendar_feed_token else '' }}"
-                                >
-                                    Copy calendar link
-                                </button>
-                                {% endif %}
+                        {% if current_user.is_authenticated %}
+                            <div class="hidden md:block">
+                                <a href="{{ url_for('auth.settings_page') }}" class="icon-btn" title="Settings" aria-label="Settings" style="background:var(--bg-card); border:1px solid var(--border-subtle); color:var(--text-primary); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; text-decoration:none;">
+                                    <i data-lucide="settings" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5;"></i>
+                                </a>
                             </div>
-                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -557,110 +426,7 @@
                          the real button rather than duplicating its logic. -->
                     <button type="button" id="mobile-feedback-btn" class="nav-link" style="width:100%; display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:14px; background:none; border:none; text-align:left; font-family:inherit;"><i data-lucide="message-circle" aria-hidden="true" style="width:16px; height:16px; stroke-width:1.5; color:inherit; flex-shrink:0;"></i> Send feedback</button>
 
-                    <div style="margin:10px 0; height:1px; background:var(--border-subtle);"></div>
-
-                    <button
-                        id="mobile-settings-btn"
-                        type="button"
-                        class="btn-secondary"
-                        style="width:100%; text-align:left; padding:9px 12px; font-size:14px;"
-                        aria-expanded="false"
-                        aria-controls="mobile-settings-panel"
-                    >
-                        Settings
-                    </button>
-
-                    <div id="mobile-settings-panel" class="hidden" style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
-                        <button id="toggle-theme-mobile" type="button" class="btn-secondary" style="width:100%; padding:9px 12px; font-size:14px;">
-                            Toggle theme
-                        </button>
-
-                        <button id="toggle-push-mobile" type="button" class="btn-secondary" style="width:100%; padding:9px 12px; font-size:14px; display:none;">
-                            Enable renewal reminders
-                        </button>
-
-                        {% if current_user.is_authenticated %}
-                        <div id="push-preferences-mobile" style="display:none; flex-direction:column; gap:2px; padding:0 4px;">
-                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
-                                <input type="checkbox" id="notify-bills-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_bills_due }}>
-                                Bills due today
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
-                                <input type="checkbox" id="notify-notes-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_notes_due }}>
-                                Notes due today
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
-                                <input type="checkbox" id="notify-events-due-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_events_due }}>
-                                Events today
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text-secondary); padding:6px 0; cursor:pointer;">
-                                <input type="checkbox" id="notify-budget-alerts-mobile" class="push-pref-checkbox" {{ 'checked' if current_user.notify_budget_alerts }}>
-                                Over-budget alerts
-                            </label>
-                            <label for="reminder-hour-select-mobile" style="display:block; font-size:14px; color:var(--text-secondary); padding:8px 0 3px;">
-                                Remind me at
-                            </label>
-                            <select
-                                id="reminder-hour-select-mobile"
-                                class="field-input"
-                                style="width:100%;"
-                                aria-label="Reminder time"
-                            >
-                                {% for h in range(24) %}
-                                <option value="{{ h }}" {{ 'selected' if (current_user.reminder_hour if current_user.reminder_hour is not none else 8) == h }}>{{ (h % 12 or 12) }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endif %}
-
-                        <select
-                            id="currency-select-mobile"
-                            class="field-input"
-                            style="width:100%;"
-                            aria-label="Currency"
-                        >
-                            <option value="USD">$ USD</option>
-                            <option value="GBP">£ GBP</option>
-                            <option value="BDT">৳ BDT</option>
-                            <option value="EUR">€ EUR</option>
-                            <option value="CAD">$ CAD</option>
-                            <option value="AUD">$ AUD</option>
-                        </select>
-
-                        {% if current_user.is_authenticated %}
-                        <p style="font-size:13px; color:var(--text-muted); padding:6px 4px 0; line-height:1.4;">
-                            Subscribe to this link in Apple Calendar, Google Calendar, or Outlook to see your due dates and events there.
-                        </p>
-                        <button
-                            id="copy-calendar-link-btn-mobile"
-                            type="button"
-                            class="btn-secondary"
-                            style="width:100%; padding:9px 12px; font-size:14px;"
-                            data-calendar-feed-url="{{ url_for('dashboard.calendar_feed', token=current_user.calendar_feed_token, _external=True) if current_user.calendar_feed_token else '' }}"
-                        >
-                            Copy calendar link
-                        </button>
-                        {% endif %}
-
-                        <div style="margin:2px 0; height:1px; background:var(--border-subtle);"></div>
-                        <div class="eyebrow" style="padding:0 12px;">Account</div>
-
-                        <a href="{{ url_for('auth.edit_profile') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
-                            Edit profile
-                        </a>
-
-                        <a href="{{ url_for('auth.change_password') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
-                            Change password
-                        </a>
-
-                        <a href="{{ url_for('auth.privacy') }}" class="btn-secondary" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none;">
-                            Privacy &amp; security
-                        </a>
-
-                        <a href="{{ url_for('auth.logout') }}" style="display:block; text-align:center; padding:9px 12px; font-size:14px; text-decoration:none; color:var(--red); border:1px solid var(--border-subtle); border-radius:8px;">
-                            Logout
-                        </a>
-                    </div>
+                    {{ more_link(url_for('auth.settings_page'), 'settings', 'Settings', request.endpoint == 'auth.settings_page') }}
                 </div>
                 </div>
 
@@ -913,236 +679,7 @@
             })();
         </script>
 
-        <script type="module">
-            import { showToast } from "{{ url_for('static', filename='js/toast.js') }}";
-            (function () {
-                var toggles = [document.getElementById("toggle-push"), document.getElementById("toggle-push-mobile")].filter(Boolean);
-                if (!toggles.length) return;
-                if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-
-                var vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
-                var vapidPublicKey = vapidMeta ? vapidMeta.content : "";
-
-                function getCsrfToken() {
-                    var meta = document.querySelector('meta[name="csrf-token"]');
-                    return meta ? meta.content : "";
-                }
-
-                // Web Push wants the VAPID key as a raw Uint8Array, but the
-                // server hands it over base64url-encoded (the same string
-                // browsers themselves use for applicationServerKey).
-                function urlBase64ToUint8Array(base64String) {
-                    var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-                    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-                    var rawData = window.atob(base64);
-                    var outputArray = new Uint8Array(rawData.length);
-                    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-                    return outputArray;
-                }
-
-                var prefBlocks = [document.getElementById("push-preferences"), document.getElementById("push-preferences-mobile")].filter(Boolean);
-
-                function setLabel(subscribed) {
-                    toggles.forEach(function (btn) {
-                        btn.textContent = subscribed ? "Disable renewal reminders" : "Enable renewal reminders";
-                        btn.style.display = "";
-                    });
-                    // A preference is meaningless with no active
-                    // subscription to apply it to.
-                    prefBlocks.forEach(function (el) { el.style.display = subscribed ? "flex" : "none"; });
-                }
-
-                function subscribe() {
-                    return navigator.serviceWorker.ready
-                        .then(function (reg) {
-                            return reg.pushManager.subscribe({
-                                userVisibleOnly: true,
-                                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-                            });
-                        })
-                        .then(function (sub) {
-                            return fetch("{{ url_for('push.subscribe') }}", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                                body: JSON.stringify(sub.toJSON()),
-                            }).then(function (res) {
-                                if (res.ok) return;
-                                // The browser-side subscription succeeded
-                                // but the server never saved it — without
-                                // this, the label below would still flip
-                                // to "Disable renewal reminders" even
-                                // though no reminder will ever actually
-                                // arrive. Undo the browser-side half too,
-                                // so retrying starts from a clean state
-                                // instead of a subscribed-on-device/
-                                // unknown-to-server split.
-                                return sub.unsubscribe().then(function () {
-                                    throw new Error("server_save_failed");
-                                });
-                            });
-                        })
-                        .then(function () { setLabel(true); });
-                }
-
-                function unsubscribe() {
-                    return navigator.serviceWorker.ready
-                        .then(function (reg) { return reg.pushManager.getSubscription(); })
-                        .then(function (sub) {
-                            if (!sub) return;
-                            var endpoint = sub.endpoint;
-                            return sub.unsubscribe().then(function () {
-                                return fetch("{{ url_for('push.unsubscribe') }}", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                                    body: JSON.stringify({ endpoint: endpoint }),
-                                }).then(function (res) {
-                                    if (!res.ok) throw new Error("server_remove_failed");
-                                });
-                            });
-                        })
-                        .then(function () { setLabel(false); });
-                }
-
-                navigator.serviceWorker.ready
-                    .then(function (reg) { return reg.pushManager.getSubscription(); })
-                    .then(function (sub) {
-                        setLabel(!!sub);
-                        if (!sub) return;
-                        // Re-POSTing on every page load (not just at
-                        // subscribe time) is a second safety net for the
-                        // same drift the service worker's own
-                        // pushsubscriptionchange handler covers — cheap
-                        // (one upsert-by-endpoint) and catches it sooner,
-                        // any time the person's actually using the app,
-                        // rather than only when a rotation happens to
-                        // fire while a tab is open to receive the event.
-                        fetch("{{ url_for('push.subscribe') }}", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                            body: JSON.stringify(sub.toJSON()),
-                        });
-                    })
-                    .catch(function () {});
-
-                toggles.forEach(function (btn) {
-                    btn.addEventListener("click", function () {
-                        btn.disabled = true;
-                        var isEnabling = btn.textContent.indexOf("Enable") === 0;
-                        var action = isEnabling
-                            ? (Notification.permission === "granted"
-                                ? subscribe()
-                                : Notification.requestPermission().then(function (perm) {
-                                    if (perm !== "granted") throw new Error("denied");
-                                    return subscribe();
-                                }))
-                            : unsubscribe();
-
-                        action
-                            .catch(function (err) {
-                                // "denied" (declined the permission prompt) is
-                                // an intentional, silent no-op — anything
-                                // else means the subscribe/unsubscribe call
-                                // itself failed, which the label must not be
-                                // allowed to silently claim succeeded.
-                                if (err && err.message !== "denied") {
-                                    showToast("Couldn't update renewal reminders. Please try again.", "error");
-                                }
-                            })
-                            .finally(function () { btn.disabled = false; });
-                    });
-                });
-
-                // Bills/Notes/Events checkboxes: desktop and mobile are
-                // separate DOM elements for the same preferences (same
-                // pattern as currency-select/currency-select-mobile in
-                // settings.js) — keep each pair in sync and persist on
-                // every change.
-                var billsBoxes = [document.getElementById("notify-bills-due"), document.getElementById("notify-bills-due-mobile")].filter(Boolean);
-                var notesBoxes = [document.getElementById("notify-notes-due"), document.getElementById("notify-notes-due-mobile")].filter(Boolean);
-                var eventsBoxes = [document.getElementById("notify-events-due"), document.getElementById("notify-events-due-mobile")].filter(Boolean);
-                var budgetBoxes = [document.getElementById("notify-budget-alerts"), document.getElementById("notify-budget-alerts-mobile")].filter(Boolean);
-
-                function savePreferences(payload) {
-                    return fetch("{{ url_for('push.set_preferences') }}", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                        body: JSON.stringify(payload),
-                    }).then(function (res) {
-                        if (!res.ok) throw new Error("save_failed");
-                    });
-                }
-
-                function bindPrefGroup(boxes, otherBoxes, payloadKey) {
-                    boxes.forEach(function (box) {
-                        box.addEventListener("change", function () {
-                            var checked = box.checked;
-                            otherBoxes.forEach(function (other) { other.checked = checked; });
-                            var payload = {};
-                            payload[payloadKey] = checked;
-                            savePreferences(payload).catch(function () {
-                                box.checked = !checked;
-                                otherBoxes.forEach(function (other) { other.checked = !checked; });
-                                showToast("Couldn't update reminder preferences. Please try again.", "error");
-                            });
-                        });
-                    });
-                }
-                bindPrefGroup(billsBoxes, billsBoxes, "notify_bills_due");
-                bindPrefGroup(notesBoxes, notesBoxes, "notify_notes_due");
-                bindPrefGroup(eventsBoxes, eventsBoxes, "notify_events_due");
-                bindPrefGroup(budgetBoxes, budgetBoxes, "notify_budget_alerts");
-
-                // Reminder-hour <select>: same desktop/mobile sync-and-persist
-                // shape as the checkboxes above, just reading .value as an
-                // int instead of .checked.
-                var reminderHourSelects = [document.getElementById("reminder-hour-select"), document.getElementById("reminder-hour-select-mobile")].filter(Boolean);
-                reminderHourSelects.forEach(function (sel) {
-                    sel.addEventListener("change", function () {
-                        var hour = parseInt(sel.value, 10);
-                        var previous = reminderHourSelects.map(function (s) { return s.value; });
-                        reminderHourSelects.forEach(function (other) { other.value = String(hour); });
-                        savePreferences({ reminder_hour: hour }).catch(function () {
-                            reminderHourSelects.forEach(function (other, i) { other.value = previous[i]; });
-                            showToast("Couldn't update reminder preferences. Please try again.", "error");
-                        });
-                    });
-                });
-
-                // "Copy calendar link": lazily issues a feed token on first
-                // use (data-calendar-feed-url starts empty for an account
-                // that's never generated one), otherwise just copies the
-                // URL already rendered into the button's own data attribute.
-                var calendarLinkBtns = [document.getElementById("copy-calendar-link-btn"), document.getElementById("copy-calendar-link-btn-mobile")].filter(Boolean);
-                calendarLinkBtns.forEach(function (btn) {
-                    btn.addEventListener("click", function () {
-                        var existingUrl = btn.getAttribute("data-calendar-feed-url");
-                        var copyAndConfirm = function (url) {
-                            calendarLinkBtns.forEach(function (b) { b.setAttribute("data-calendar-feed-url", url); });
-                            navigator.clipboard.writeText(url).then(function () {
-                                showToast("Calendar link copied.", "success");
-                            }).catch(function () {
-                                showToast(url, "success");
-                            });
-                        };
-                        if (existingUrl) {
-                            copyAndConfirm(existingUrl);
-                            return;
-                        }
-                        btn.disabled = true;
-                        fetch("{{ url_for('dashboard.regenerate_calendar_feed_token') }}", {
-                            method: "POST",
-                            headers: { "X-CSRFToken": getCsrfToken() },
-                        })
-                            .then(function (res) { if (!res.ok) throw new Error("failed"); return res.json(); })
-                            .then(function (data) { copyAndConfirm(data.url); })
-                            .catch(function () {
-                                showToast("Couldn't set up your calendar link. Please try again.", "error");
-                            })
-                            .finally(function () { btn.disabled = false; });
-                    });
-                });
-            })();
-        </script>
+        <script type="module" src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     {% endif %}
 
     <!-- SINGLE entrypoint (modules) -->

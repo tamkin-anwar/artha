@@ -93,13 +93,13 @@
             </form>
 
             <p class="text-center text-sm mt-5 text-secondary">
-                <a href="{{ url_for('dashboard.index') }}" class="auth-link">
-                    Back to Today
+                <a href="{{ url_for('auth.settings_page') }}" class="auth-link">
+                    Back to Settings
                 </a>
             </p>
         </section>
 
-        <section class="rounded-2xl p-8 shadow-xl settings-card mt-6" aria-label="Security">
+        <section class="rounded-2xl p-8 shadow-xl settings-card mt-6" aria-label="Security" id="two-factor">
             <h2 style="font-family:var(--font-display);" class="text-xl font-semibold mb-4">
                 Security
             </h2>

@@ -120,6 +120,21 @@ def _purge_expired_deleted_accounts() -> None:
         db.session.commit()
 
 
+@auth_bp.route("/settings")
+@login_required
+def settings_page():
+    """One page for everything about the account and how Artha behaves,
+    laid out like the native app's Settings screen. Profile, password,
+    two-factor and account deletion keep their own pages (linked from
+    here); currency, appearance, reminders and the calendar link are set
+    right on this page (static/js/settings.js, theme.js and
+    notifications.js)."""
+    from ...cli import DEFAULT_REMINDER_HOUR
+
+    hour = current_user.reminder_hour if current_user.reminder_hour is not None else DEFAULT_REMINDER_HOUR
+    return render_template("settings.html", reminder_hour=hour, currencies=sorted(CURRENCY_CODES))
+
+
 @auth_bp.route("/privacy")
 def privacy():
     """A plain-language explainer of how Artha handles a user's data,

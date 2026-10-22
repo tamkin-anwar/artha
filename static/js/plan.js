@@ -4,8 +4,9 @@
 // remove_category_budget), then reloads, since every figure on the page
 // is computed server-side.
 
-import { csrfToken, toastAfterReload } from "./shell.js";
+import { csrfToken, postJSON, toastAfterReload } from "./shell.js";
 import { formatMoneyIn } from "./currency.js";
+import { showToast } from "./toast.js";
 
 const plan = document.getElementById("plan");
 const currency = plan?.dataset.currency || "USD";
@@ -133,7 +134,11 @@ document.querySelectorAll(".limit-row").forEach((row) => {
             return;
         }
         submitting(form, async () => {
-            const res = await postForm("/finance/category-budget", { category: row.dataset.category, monthly_cap: amount });
+            const res = await postForm("/finance/category-budget", {
+                category: row.dataset.category,
+                monthly_cap: amount,
+                rollover: form.elements.rollover.checked ? "1" : "0",
+            });
             if (!res.ok) return showError(form, res.message || "Artha couldn't save that limit.");
             toastAfterReload("Limit saved");
             window.location.reload();
@@ -146,5 +151,76 @@ document.querySelectorAll(".limit-row").forEach((row) => {
             toastAfterReload("Limit removed");
             window.location.reload();
         });
+    });
+});
+
+// Charges that look like bills (services/recurring_detect.py).
+document.querySelectorAll("[data-suggestion]").forEach((row) => {
+    const key = row.dataset.suggestion;
+    const act = async (url, message) => {
+        row.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+        try {
+            const res = await postJSON(url, { key });
+            if (!res.ok) throw new Error(res.data.message || "failed");
+            toastAfterReload(message || res.data.message);
+            window.location.reload();
+        } catch (err) {
+            row.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+            showToast("Artha couldn't save that. Try again in a moment.", "error");
+        }
+    };
+    row.querySelector("[data-track-bill]").addEventListener("click", () => act("/plan/bills/track"));
+    row.querySelector("[data-dismiss-bill]").addEventListener("click", () => act("/plan/bills/dismiss", "Won't suggest it again"));
+});
+
+// Savings goals (services/goals.py).
+async function goalRequest(form, url, body, message) {
+    await submitting(form, async () => {
+        const res = await postJSON(url, body);
+        if (!res.ok) return showError(form, res.data.message || "Artha couldn't save that.");
+        toastAfterReload(message);
+        window.location.reload();
+    });
+}
+
+const goalForm = document.getElementById("goal-form");
+const addGoal = document.querySelector("[data-add-goal]");
+addGoal?.addEventListener("click", () => toggle(addGoal, goalForm));
+goalForm?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = goalForm.elements;
+    if (!f.name.value.trim()) return showError(goalForm, "Give the goal a name.");
+    const target = cleanAmount(f.target_amount.value);
+    if (!target || Number(target) <= 0) return showError(goalForm, "Enter how much the goal is.");
+    goalRequest(goalForm, "/plan/goals", { name: f.name.value.trim(), target_amount: target, target_date: f.target_date.value }, "Goal added");
+});
+
+document.querySelectorAll("[data-goal]").forEach((row) => {
+    const id = row.dataset.goal;
+    const money = row.querySelector(".goal-money");
+    const edit = row.querySelector(".goal-edit");
+    const addMoney = row.querySelector("[data-add-money]");
+    addMoney?.addEventListener("click", () => { edit.hidden = true; toggle(addMoney, money); });
+    row.querySelector("[data-edit-goal]").addEventListener("click", (e) => { money.hidden = true; toggle(e.currentTarget, edit); });
+
+    const move = (sign) => {
+        const raw = cleanAmount(money.elements.amount.value) || cleanAmount(money.elements.amount.placeholder);
+        if (!raw || Number(raw) <= 0) return showError(money, "Enter an amount.");
+        goalRequest(money, `/plan/goals/${id}/add`, { amount: sign * Number(raw) }, sign > 0 ? "Added" : "Taken out");
+    };
+    money.addEventListener("submit", (e) => { e.preventDefault(); move(1); });
+    money.querySelector("[data-take-out]").addEventListener("click", () => move(-1));
+
+    edit.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const f = edit.elements;
+        const target = cleanAmount(f.target_amount.value);
+        if (!f.name.value.trim()) return showError(edit, "Give the goal a name.");
+        if (!target || Number(target) <= 0) return showError(edit, "Enter how much the goal is.");
+        goalRequest(edit, `/plan/goals/${id}`, { name: f.name.value.trim(), target_amount: target, target_date: f.target_date.value }, "Goal saved");
+    });
+    edit.querySelector("[data-delete-goal]").addEventListener("click", () => {
+        if (!window.confirm("Delete this goal? What you've saved toward it is only a note here, so no money moves.")) return;
+        goalRequest(edit, `/plan/goals/${id}/delete`, {}, "Goal deleted");
     });
 });

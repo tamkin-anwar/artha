@@ -21,7 +21,8 @@ const amountInput = field("detail-amount");
 const descriptionInput = field("detail-description");
 const dateInput = field("detail-date");
 const intervalSelect = field("detail-interval");
-const repeatRow = field("detail-repeat-row");
+const endsRow = field("detail-ends-row");
+const endsInput = field("detail-ends");
 const categoriesBox = field("detail-categories");
 const chips = [...categoriesBox.querySelectorAll("[data-category]")];
 const errorEl = field("detail-error");
@@ -54,6 +55,7 @@ function fitAmount() {
     amountInput.style.width = `${Math.max(2, amountInput.value.length) + 0.4}ch`;
 }
 amountInput.addEventListener("input", fitAmount);
+intervalSelect.addEventListener("change", () => { endsRow.hidden = !intervalSelect.value; });
 
 function setCategory(value) {
     category = value;
@@ -86,8 +88,9 @@ function select(row, { push = true } = {}) {
     descriptionInput.value = tx.description;
     editor.elements.type.value = tx.type;
     dateInput.value = tx.date || "";
-    repeatRow.hidden = !tx.is_recurring;
-    intervalSelect.value = tx.recurrence_interval === "monthly" ? "" : (tx.recurrence_interval || "");
+    intervalSelect.value = tx.is_recurring ? (tx.recurrence_interval || "monthly") : "";
+    endsRow.hidden = !tx.is_recurring;
+    endsInput.value = tx.recurring_end_date || "";
     setCategory(tx.category);
     syncType();
     field("detail-review").hidden = !tx.needs_review;
@@ -167,7 +170,15 @@ editor.addEventListener("submit", async (e) => {
     // whatever is there (update_transaction_fields' own rule).
     if (body.type === "expense" && category) body.category = category;
     if (body.type === "income") body.category = "income";
-    if (current.is_recurring) body.recurrence_interval = intervalSelect.value;
+    // Repeats: "" is Never. Turning it on or off, or changing how often,
+    // goes through update_transaction_fields like every other field.
+    const repeating = Boolean(intervalSelect.value);
+    if (repeating !== Boolean(current.is_recurring)) body.is_recurring = repeating;
+    if (repeating) {
+        body.recurrence_interval = intervalSelect.value === "monthly" ? "" : intervalSelect.value;
+        // An empty string clears the end date.
+        body.recurring_end_date = endsInput.value;
+    }
 
     const save = field("detail-save");
     save.disabled = true;
@@ -283,6 +294,50 @@ days.addEventListener("click", async (e) => {
         showToast("You're offline. Check your connection and try again.", "error");
     }
 });
+
+// The month filter: every other filter stays as it is.
+document.querySelector("[data-month-filter]")?.addEventListener("change", (e) => {
+    const url = new URL(window.location.href);
+    ["selected", "offset", "partial"].forEach((k) => url.searchParams.delete(k));
+    if (e.target.value) url.searchParams.set("month", e.target.value);
+    else url.searchParams.delete("month");
+    window.location.href = url;
+});
+
+// Filing uncategorized transactions: keywords and remembered corrections
+// first, the AI only for what's left (finance.routes'
+// categorize_uncategorized, rate-limited there). It only ever fills an
+// empty category, so it doesn't ask first.
+document.querySelector("[data-categorize]")?.addEventListener("click", async (e) => {
+    const button = e.currentTarget;
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = "Categorizing…";
+    try {
+        const res = await fetch("/finance/categorize_uncategorized", {
+            method: "POST",
+            headers: { "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": csrfToken() },
+        });
+        let data = {};
+        try { data = await res.json(); } catch (err) {}
+        if (!res.ok) {
+            showToast(data.message || "Artha couldn't categorize them right now. Try again in a moment.", "error");
+        } else if (data.categorized > 0) {
+            toastAfterReload(data.message || "Categorized");
+            window.location.reload();
+            return;
+        } else {
+            showToast(data.message || "Nothing to categorize.", "info");
+        }
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+    }
+    button.disabled = false;
+    button.textContent = label;
+});
+
+document.querySelectorAll("[data-import-open]").forEach((b) =>
+    b.addEventListener("click", () => document.getElementById("csv-import-btn")?.click()));
 
 // Opening on a picked transaction (from Today's Recent, or a reload
 // after saving): select it, without stealing focus on a wide screen.

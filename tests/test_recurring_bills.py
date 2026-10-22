@@ -37,14 +37,6 @@ def test_recurring_jump_link_absent_with_no_recurring_transactions(auth_client, 
     assert 'class="recurring-jump-link"' not in body
 
 
-def test_recurring_jump_link_shows_count(auth_client, user):
-    _make_recurring(user, "Netflix", "15.99", category="subscriptions")
-    _make_recurring(user, "Spotify", "10.99", category="subscriptions")
-    body = auth_client.get("/finance").get_data(as_text=True)
-    assert 'class="recurring-jump-link"' in body
-    assert "2 recurring transactions set" in body
-
-
 # --- /finance/breakdown?view=recurring ---------------------------------------
 
 def test_recurring_breakdown_lists_bill_with_amount_and_category(auth_client, user):

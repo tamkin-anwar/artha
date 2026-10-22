@@ -111,6 +111,12 @@ class User(UserMixin, db.Model):
     net_worth_snapshots = db.relationship(
         "NetWorthSnapshot", backref="user", lazy="dynamic", cascade="all, delete-orphan"
     )
+    goals = db.relationship(
+        "Goal", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    dismissed_bill_suggestions = db.relationship(
+        "DismissedBillSuggestion", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+    )
     # One per device signed in to the native app (models/api_token.py).
     api_tokens = db.relationship(
         "ApiToken", backref="user", lazy="dynamic", cascade="all, delete-orphan"

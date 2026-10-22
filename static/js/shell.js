@@ -73,6 +73,12 @@ function setupAddSheet() {
         chips.forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.category === value)));
     }
 
+    const endsRow = document.getElementById("add-ends-row");
+    function syncRepeat() {
+        endsRow.hidden = !form.elements.repeat.value;
+    }
+    form.elements.repeat.addEventListener("change", syncRepeat);
+
     function syncType() {
         // Income files itself; the categories are for spending.
         categories.hidden = form.elements.type.value === "income";
@@ -83,6 +89,7 @@ function setupAddSheet() {
         form.reset();
         setCategory("");
         syncType();
+        syncRepeat();
         date.value = localISODate();
         errorEl.hidden = true;
         sheet.hidden = false;
@@ -169,6 +176,7 @@ function setupAddSheet() {
         if (repeat) {
             data.append("is_recurring", "1");
             if (repeat !== "monthly") data.append("recurrence_interval", repeat);
+            if (form.elements.recurring_end_date.value) data.append("recurring_end_date", form.elements.recurring_end_date.value);
         }
 
         submit.disabled = true;

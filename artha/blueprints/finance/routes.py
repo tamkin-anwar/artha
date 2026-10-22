@@ -1,7 +1,6 @@
 import calendar
 import csv
 import io
-import math
 import re
 import time
 import logging
@@ -365,7 +364,11 @@ def _check_budget_overage_alerts(user_id: int) -> None:
             if cb.alerted_month == month_start:
                 continue
             spent = convert_usd_to(category_usd.get(cb.category, Decimal("0")), cb.currency or "USD", rates)
-            if spent >= cb.monthly_cap:
+            cap = cb.monthly_cap
+            if cb.rollover:
+                carry = category_rollover_carry(user_id, [cb], today, cb.currency or "USD", rates)
+                cap = max(Decimal(cb.monthly_cap) + carry.get(cb.category, Decimal("0")), Decimal("0"))
+            if cap > 0 and spent >= cap:
                 label = TRANSACTION_CATEGORIES.get(cb.category, {}).get("label", cb.category)
                 newly_over.append(f"You're over your {label} budget.")
                 cb.alerted_month = month_start
@@ -376,7 +379,7 @@ def _check_budget_overage_alerts(user_id: int) -> None:
         body = newly_over[0] if len(newly_over) == 1 else f"{len(newly_over)} budgets just went over: " + " ".join(newly_over)
 
         for sub in subs:
-            result = send_push(sub, title="Budget alert", body=body, url="/finance")
+            result = send_push(sub, title="Budget alert", body=body, url="/plan")
             if result == "gone":
                 db.session.delete(sub)
 
@@ -524,14 +527,27 @@ def add_transaction():
         return redirect(url_for("dashboard.index"))
 
     if is_ajax_request():
-        return render_template(
-            "partials/transaction_row.html",
-            tx=new_tx,
-            today_date=user_today(current_user).strftime("%Y-%m-%d"),
-            categories=TRANSACTION_CATEGORIES,
-        )
+        # Every page that adds over AJAX (the Add sheet, the AI Assistant's
+        # confirm card) reloads or moves on rather than inserting a row.
+        return jsonify({"message": "Transaction added!", "id": new_tx.id})
     flash("Transaction added!", "success")
     return redirect(url_for("dashboard.index"))
+
+
+def set_recurring(tx: Transaction, on: bool) -> None:
+    """Starts or stops `tx`'s series (not committed). Stopping clears the
+    flag on every row sharing its (description, type) too, for the same
+    reason as delete_transaction(): generate_due_recurring() picks its
+    template from the most recent is_recurring=True row, so an older
+    sibling still flagged would quietly restart the series."""
+    tx.is_recurring = bool(on)
+    if not on:
+        Transaction.query.filter(
+            Transaction.user_id == tx.user_id,
+            Transaction.description == tx.description,
+            Transaction.type == tx.type,
+            Transaction.id != tx.id,
+        ).update({"is_recurring": False})
 
 
 def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
@@ -566,20 +582,19 @@ def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
     if "category" in data:
         category = data.get("category") or None
         new_category = category if isinstance(category, str) and category in TRANSACTION_CATEGORIES else None
-        # transactions.js's saveTransaction() always includes the row's
-        # current category in the payload on every autosave, not just
-        # ones where the user actually touched the category select --
-        # only remember when the value genuinely changed, so editing an
-        # unrelated field (amount, description) doesn't "re-teach" a
-        # merchant its own already-stored category on every save.
+        # An editor may send the current category along with every save,
+        # not only when it was touched -- only remember when the value
+        # genuinely changed, so editing an unrelated field (amount,
+        # description) doesn't "re-teach" a merchant its own
+        # already-stored category on every save.
         if new_category is not None and new_category != tx.category:
             _remember_merchant_category(tx.user_id, desc, new_category)
         tx.category = new_category
 
     # currency itself only changes if explicitly sent (no UI does this
-    # today — .tx-amount always edits the native amount in its existing
-    # currency, see transaction_row.html's own comment on why that field
-    # must never show/accept a converted number). usd_value, though,
+    # today — Activity's amount field always edits the native amount in
+    # its existing currency, never a converted number; see CLAUDE.md's
+    # multi-currency notes). usd_value, though,
     # always gets relocked against whatever amount/currency this row ends
     # up with: `amount` above is unconditionally reassigned even when
     # unchanged, so a stale usd_value left over from the pre-edit amount
@@ -589,13 +604,20 @@ def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
         if new_currency in CURRENCY_CODES:
             tx.currency = new_currency
 
-    # Same "only touch what was sent" rule again -- these two only ever
-    # come from the recurring-settings control on an already-recurring
-    # row (see transaction_row.html), never from a plain description/
-    # amount/category edit, so their absence must never reset an
-    # existing series back to plain monthly or clear its end date.
-    # Sending an empty string for either is how the UI *explicitly*
-    # clears it (switch back to monthly, or remove the end date).
+    # Starting or stopping the series: sent by Activity's Repeats field
+    # and the app's editor, absent from everything else, which leaves the
+    # series alone.
+    if "is_recurring" in data:
+        on = _truthy(data.get("is_recurring"))
+        if on != bool(tx.is_recurring):
+            set_recurring(tx, on)
+
+    # Same "only touch what was sent" rule again -- how often and until
+    # when only come from a repeating transaction's own settings, so
+    # their absence must never reset an existing series back to plain
+    # monthly or clear its end date. Sending an empty string for either
+    # is how an editor *explicitly* clears it (back to monthly, or no
+    # end date).
     if "recurrence_interval" in data or "recurring_end_date" in data:
         interval, end_date = _parse_recurrence_fields(data)
         if "recurrence_interval" in data:
@@ -780,13 +802,7 @@ def undo_delete_transaction():
         db.session.commit()
         session.pop("last_deleted_tx", None)
 
-        row_html = render_template(
-            "partials/transaction_row.html",
-            tx=restored,
-            today_date=user_today(current_user).strftime("%Y-%m-%d"),
-            categories=TRANSACTION_CATEGORIES,
-        )
-        return jsonify({"message": "Transaction restored.", "row_html": row_html})
+        return jsonify({"message": "Transaction restored.", "id": restored.id})
     except Exception as e:
         db.session.rollback()
         log.error("Error undoing delete: %s", e, exc_info=True)
@@ -802,21 +818,7 @@ def toggle_recurring(transaction_id):
     if tx.user_id != current_user.id:
         return jsonify({"message": "Unauthorized"}), 403
 
-    turning_off = tx.is_recurring
-    tx.is_recurring = not tx.is_recurring
-
-    # Same reasoning as delete_transaction(): generate_recurring() picks
-    # its template from the most recent is_recurring=True row for this
-    # (description, type). If an older sibling row is still flagged
-    # recurring, turning this one off wouldn't actually stop the series —
-    # the next /finance load would just regenerate off that older row.
-    if turning_off:
-        Transaction.query.filter(
-            Transaction.user_id == tx.user_id,
-            Transaction.description == tx.description,
-            Transaction.type == tx.type,
-            Transaction.id != tx.id,
-        ).update({"is_recurring": False})
+    set_recurring(tx, not tx.is_recurring)
 
     try:
         db.session.commit()
@@ -1113,19 +1115,6 @@ def _month_start(year: int, month: int) -> date:
     return date(year, month, 1)
 
 
-def _prev_month_start(d: date) -> date:
-    last_day_of_prev = _month_start(d.year, d.month) - timedelta(days=1)
-    return _month_start(last_day_of_prev.year, last_day_of_prev.month)
-
-
-def _ordinal(n: int) -> str:
-    if 10 <= n % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
-
-
 def _recurring_bills(uid: int, today: date) -> list[dict]:
     """Every distinct recurring "rule" (by description + type), soonest due
     first — shared by finance_page()'s panel and the Recurring tab's
@@ -1182,284 +1171,44 @@ def _recurring_bills(uid: int, today: date) -> list[dict]:
     return bills
 
 
+def months_with_transactions(uid: int, today: date) -> list[dict]:
+    """Every calendar month with at least one of `uid`'s transactions,
+    newest first, as {"value": "2026-10", "label": "Oct 2026"}, for month
+    pickers (Reports' periods, Activity's filter). This month is always
+    offered, even before anything is in it."""
+    year_col = func.extract("year", Transaction.timestamp)
+    month_col = func.extract("month", Transaction.timestamp)
+    rows = (
+        db.session.query(year_col, month_col)
+        .filter(Transaction.user_id == uid, Transaction.timestamp.isnot(None))
+        .distinct()
+        .all()
+    )
+    keys = sorted({(int(y), int(m)) for y, m in rows} | {(today.year, today.month)}, reverse=True)
+    return [{"value": f"{y:04d}-{m:02d}", "label": f"{calendar.month_abbr[m]} {y}"} for y, m in keys]
+
+
 @finance_bp.route("/finance")
 @login_required
 def finance_page():
-    """
-    Full finance page with month-by-month filtering.
-
-    Query param:
-        ?month=YYYY-MM  — show that month only
-        ?month=all      — show all-time (unfiltered), like the old view
-        (none)          — defaults to the current month
-    """
+    """Reports: Spending, Income, Cash Flow and Recurring, each fetched on
+    demand from /finance/breakdown for any month, quarter-ish window or
+    year. The page used to carry an Overview (budget, savings rate) and a
+    full Transactions list too; since the 2026-10 redesign those live on
+    Plan and Activity, so this only needs the period pickers' options.
+    ?tab=spending|income|cashflow|recurring opens that tab."""
     uid = current_user.id
-    all_tx = (
-        Transaction.query.filter_by(user_id=uid)
-        .order_by(Transaction.timestamp.asc(), Transaction.id.asc())
-        .all()
-    )
-
-    # Every total/comparison/breakdown built below is converted to this
-    # once, right where each is finalized, rather than left as raw
-    # USD-pivot figures — this page's own currency-less Budget/
-    # CategoryBudget caps are implicitly in this same currency (see
-    # budget_status()'s call sites further down), so spending has to be
-    # converted to match before comparing, not just before displaying.
-    display_currency = current_user.preferred_currency or "USD"
-    rates = get_rates() if any(t.native_currency != display_currency for t in all_tx) else None
-
     today = user_today(current_user)
-    month_param = (request.args.get("month") or "").strip()
-    all_time = month_param == "all"
 
-    # Which top-level tab renders active/visible server-side -- only
-    # Overview and Transactions are server-rendered (every other tab
-    # starts hidden and is filled in by AJAX once clicked, see
-    # fpLoadBreakdown in finance.html), so those are the only two values
-    # that matter here. Defaults to Overview on a fresh visit, but the
-    # Transactions pane's own month links (and the "Categorize with AI"
-    # reload) carry ?tab=transactions specifically so clicking a month
-    # while already on Transactions doesn't silently bounce back to
-    # Overview on the resulting full-page reload.
-    active_tab = request.args.get("tab") or "overview"
-    if active_tab not in ("overview", "transactions"):
-        active_tab = "overview"
-
-    if not all_time and month_param:
-        try:
-            sel_year, sel_month = (int(part) for part in month_param.split("-", 1))
-            selected_date = _month_start(sel_year, sel_month)
-        except (ValueError, TypeError):
-            selected_date = _month_start(today.year, today.month)
-    else:
-        selected_date = _month_start(today.year, today.month)
-
-    # Bucket every transaction by "YYYY-MM" once, rather than re-scanning
-    # the full list for every month we need totals for.
-    buckets = defaultdict(lambda: {"income": Decimal("0"), "expense": Decimal("0"), "txs": []})
-    for tx in all_tx:
-        if not tx.timestamp:
-            continue
-        key = tx.timestamp.strftime("%Y-%m")
-        bucket = buckets[key]
-        bucket["txs"].append(tx)
-        # value_in_usd, not amount -- transactions can carry different
-        # currencies now; every downstream total/comparison/savings-rate
-        # figure on this page is built from these buckets, so this one
-        # spot is what makes all of them currency-correct.
-        if tx.type == "income":
-            bucket["income"] += tx.value_in_usd
-        elif tx.type == "expense":
-            bucket["expense"] += tx.value_in_usd
-
-    # One conversion per bucket (not per transaction) now that every
-    # bucket's running total is final — every figure derived from
-    # `buckets` from here on (month_tabs, the selected month/all-time
-    # totals, the previous-month comparison, the trend chart) inherits
-    # this, so this is the one spot that makes all of them correct.
-    for bucket in buckets.values():
-        bucket["income"] = convert_usd_to(bucket["income"], display_currency, rates)
-        bucket["expense"] = convert_usd_to(bucket["expense"], display_currency, rates)
-
-    def bucket_for(d: date) -> dict:
-        return buckets.get(d.strftime("%Y-%m"), {"income": Decimal("0"), "expense": Decimal("0"), "txs": []})
-
-    # Last 12 months (oldest -> newest, ending at the current month) for the tab row.
-    last_12 = []
-    cursor_year, cursor_month = today.year, today.month
-    for _ in range(12):
-        last_12.append(_month_start(cursor_year, cursor_month))
-        cursor_month -= 1
-        if cursor_month == 0:
-            cursor_month = 12
-            cursor_year -= 1
-    last_12.reverse()
-
-    month_tabs = []
-    for d in last_12:
-        b = bucket_for(d)
-        month_tabs.append({
-            "value": d.strftime("%Y-%m"),
-            "label": f"{calendar.month_abbr[d.month]} {d.year}",
-            "net": float(b["income"] - b["expense"]),
-            "is_current": (d.year == today.year and d.month == today.month),
-        })
-
-    if all_time:
-        transactions = all_tx
-        income_usd = sum((t.value_in_usd for t in all_tx if t.type == "income"), Decimal("0"))
-        expense_usd = sum((t.value_in_usd for t in all_tx if t.type == "expense"), Decimal("0"))
-        income = convert_usd_to(income_usd, display_currency, rates)
-        expense = convert_usd_to(expense_usd, display_currency, rates)
-        selected_month_value = "all"
-        selected_month_label = "All time"
-    else:
-        b = bucket_for(selected_date)
-        transactions = b["txs"]
-        income = b["income"]
-        expense = b["expense"]
-        selected_month_value = selected_date.strftime("%Y-%m")
-        selected_month_label = f"{calendar.month_name[selected_date.month]} {selected_date.year}"
-
-    balance = income - expense
-
-    # Comparison vs. the previous month — meaningless for "all time".
-    comparison = None
-    if not all_time:
-        prev_bucket = bucket_for(_prev_month_start(selected_date))
-        prev_income = prev_bucket["income"]
-        prev_expense = prev_bucket["expense"]
-        prev_balance = prev_income - prev_expense
-
-        def _cmp(curr: Decimal, prev: Decimal, higher_is_better: bool) -> dict:
-            delta = curr - prev
-            up = delta >= 0
-            favorable = up if higher_is_better else not up
-            return {"delta": float(abs(delta)), "up": up, "favorable": favorable}
-
-        comparison = {
-            "income": _cmp(income, prev_income, True),
-            "expense": _cmp(expense, prev_expense, False),
-            "net": _cmp(balance, prev_balance, True),
-        }
-
-    savings_rate = float((balance / income) * 100) if income > 0 else 0.0
-    # Ring geometry for the Savings Rate gauge — radius matches the SVG in
-    # finance.html (viewBox 88x88, r=38). Clamp to [0, 100] for the visual
-    # fill; the raw (possibly negative or >100) figure is still what's shown
-    # as text next to it.
-    _ring_circumference = 2 * math.pi * 38
-    savings_ring_offset = _ring_circumference * (1 - max(0.0, min(100.0, savings_rate)) / 100)
-
-    # Biggest expense "category" and the single day of the month with the
-    # most spending. Prefers the real category field where a transaction
-    # has one (labeled via TRANSACTION_CATEGORIES); falls back to the old
-    # first-word-of-description heuristic only for the uncategorized
-    # remainder, so pre-existing data (and anything a user never bothers
-    # to categorize) still produces a sensible stat instead of nothing.
-    expense_txs = [t for t in transactions if t.type == "expense"] if not all_time else [
-        t for t in all_tx if t.type == "expense"
-    ]
-
-    category_totals: dict[str, Decimal] = defaultdict(Decimal)
-    day_totals: dict[int, Decimal] = defaultdict(Decimal)
-    for t in expense_txs:
-        if t.category and t.category in TRANSACTION_CATEGORIES:
-            label = TRANSACTION_CATEGORIES[t.category]["label"]
-        else:
-            first_word = (t.description or "").strip().split(" ")[0] if (t.description or "").strip() else "Other"
-            label = first_word.capitalize()
-        category_totals[label] += t.value_in_usd
-        if t.timestamp:
-            day_totals[t.timestamp.day] += t.value_in_usd
-
-    biggest_category = max(category_totals.items(), key=lambda kv: kv[1])[0] if category_totals else None
-    biggest_day = max(day_totals.items(), key=lambda kv: kv[1])[0] if day_totals else None
-    biggest_day_label = f"The {_ordinal(biggest_day)}" if biggest_day else None
-
-    # 6-month trend for the bar chart (oldest -> newest). Trim any leading
-    # months with no transactions so a new user with 1-2 months of history
-    # doesn't see 4-5 empty bars — but still cap the window at 6 months.
-    last_6 = last_12[-6:]
-    months_with_data = [i for i, d in enumerate(last_6) if bucket_for(d)["txs"]]
-    trend_start = months_with_data[0] if months_with_data else len(last_6) - 1
-    trend_months = last_6[trend_start:]
-
-    trend_data = []
-    for d in trend_months:
-        b = bucket_for(d)
-        trend_data.append({
-            "value": d.strftime("%Y-%m"),
-            "label": f"{calendar.month_abbr[d.month]} {d.year}",
-            "net": float(b["income"] - b["expense"]),
-        })
-
-    recurring_bills = _recurring_bills(uid, today)
-    recurring_count = len(recurring_bills)
-
-    # Always the real current month's spend, independent of whatever month
-    # is being browsed above — "my budget" means this calendar month, not
-    # whichever one the filter tabs happen to be showing.
-    budget_row = Budget.query.filter_by(user_id=uid).first()
-    current_month_txs = bucket_for(_month_start(today.year, today.month))["txs"]
-    current_month_expense = bucket_for(_month_start(today.year, today.month))["expense"]
-    # The cap's own currency converted to display_currency before
-    # comparing -- current_month_expense is already in display_currency.
-    # See Budget.currency's own docstring for the bug this avoids.
-    budget_cap = (
-        convert_amount(budget_row.monthly_cap, budget_row.currency or "USD", display_currency, rates)
-        if budget_row else None
-    )
-    budget = budget_status(budget_cap, current_month_expense)
-
-    category_budget_rows = CategoryBudget.query.filter_by(user_id=uid).all()
-    category_budgets = category_budget_statuses(category_budget_rows, current_month_txs, display_currency, rates)
-    budgeted_categories = {row.category for row in category_budget_rows}
-    budgetable_categories = {
-        key: val for key, val in TRANSACTION_CATEGORIES.items()
-        if key != "income" and key not in budgeted_categories
-    }
-
-    # Every calendar year that has at least one transaction, newest first —
-    # populates the year picker on the Cash Flow/Spending/Income tabs so
-    # users can look back at last year's (or any past year's) totals, not
-    # just rolling trailing windows anchored to today.
-    available_years = sorted({t.timestamp.year for t in all_tx if t.timestamp}, reverse=True)
-    if today.year not in available_years:
-        available_years.insert(0, today.year)
-
-    # Every calendar month that has at least one transaction, newest first —
-    # the month picker shown when "Month" is the selected period on the
-    # Cash Flow/Spending/Income tabs, so a user can drill into e.g. March
-    # 2026 specifically rather than only ever seeing whichever month is
-    # "current". Reuses `buckets` (already keyed by "YYYY-MM" from the loop
-    # above) instead of re-scanning all_tx a second time.
-    current_month_key = today.strftime("%Y-%m")
-    available_months = [
-        {"value": key, "label": f"{calendar.month_abbr[int(key[5:7])]} {key[:4]}"}
-        for key in sorted(buckets.keys(), reverse=True)
-    ]
-    if not available_months or available_months[0]["value"] != current_month_key:
-        available_months.insert(0, {"value": current_month_key, "label": f"{calendar.month_abbr[today.month]} {today.year}"})
+    available_months = months_with_transactions(uid, today)
+    available_years = sorted({int(m["value"][:4]) for m in available_months}, reverse=True)
 
     return render_template(
         "finance.html",
-        transactions=transactions,
-        active_tab=active_tab,
-        income=float(income),
-        expense=float(expense),
-        balance=float(balance),
-        month_tabs=month_tabs,
-        selected_month_value=selected_month_value,
-        selected_month_label=selected_month_label,
-        all_time=all_time,
-        comparison=comparison,
-        savings_rate=savings_rate,
-        savings_ring_offset=savings_ring_offset,
-        biggest_category=biggest_category,
-        biggest_day_label=biggest_day_label,
-        trend_data=trend_data,
-        recurring_count=recurring_count,
-        recurring_bills=recurring_bills,
-        budget=budget,
-        # Converted to display_currency, same as `budget` above -- the
-        # Edit field re-saves whatever's shown here stamped with today's
-        # preferred_currency (set_budget()), so showing the raw
-        # (possibly different-currency) number here would let an
-        # untouched Save silently re-denominate the cap.
-        budget_cap_raw=budget_cap,
-        category_budgets=category_budgets,
-        budgetable_categories=budgetable_categories,
         today_date=today.strftime("%Y-%m-%d"),
         categories=TRANSACTION_CATEGORIES,
         available_years=available_years,
         available_months=available_months,
-        # All-time, not scoped to the selected month -- the "Categorize
-        # with AI" action (same row as Import statement/Export CSV)
-        # catches up a user's whole history in one click, not just what
-        # happens to be showing right now.
-        uncategorized_count=sum(1 for t in all_tx if t.category is None),
     )
 
 
@@ -2714,10 +2463,50 @@ def import_commit():
     })
 
 
-def category_budget_statuses(rows, month_transactions, display_currency: str, rates) -> list[dict]:
+def _category_spending_usd(user_id: int, start, end) -> dict[str, Decimal]:
+    usd_amount = func.coalesce(Transaction.usd_value, Transaction.amount)
+    rows = (
+        db.session.query(Transaction.category, func.sum(usd_amount))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.category.isnot(None),
+            Transaction.timestamp >= start,
+            Transaction.timestamp < end,
+        )
+        .group_by(Transaction.category)
+        .all()
+    )
+    return {category: Decimal(str(total or 0)) for category, total in rows}
+
+
+def category_rollover_carry(user_id: int, rows, today: date, currency: str, rates) -> dict[str, Decimal]:
+    """For each limit with rollover on: last month's cap minus last
+    month's spending in that category, in `currency` (positive when money
+    was left over, negative when it went over). Carried one month only,
+    never a running balance, so one unusual month can't snowball. Last
+    month's cap is the limit as it is now (caps keep no history)."""
+    rolling = [row for row in rows if getattr(row, "rollover", False)]
+    if not rolling:
+        return {}
+    this_start = date(today.year, today.month, 1)
+    last_start, last_end = current_month_bounds(this_start - timedelta(days=1))
+    spent_usd = _category_spending_usd(user_id, last_start, last_end)
+    carry = {}
+    for row in rolling:
+        cap = convert_amount(row.monthly_cap, row.currency or "USD", currency, rates)
+        spent = convert_usd_to(spent_usd.get(row.category, Decimal("0")), currency, rates)
+        carry[row.category] = (Decimal(cap) - Decimal(spent)).quantize(Decimal("0.01"))
+    return carry
+
+
+def category_budget_statuses(rows, month_transactions, display_currency: str, rates, carry=None) -> list[dict]:
     """budget_status() for each CategoryBudget row against this month's
-    spending in that category, in display_currency. Shared by the Finance
-    page and the native app's Plan tab (api/routes.py) so both agree."""
+    spending in that category, in display_currency. Shared by Plan on the
+    web and the native app's Plan tab (services/screens.py) so both agree.
+    `carry` (category_rollover_carry) adjusts each rolling limit's cap for
+    this month; the cap itself never goes below zero."""
+    carry = carry or {}
     # Same current-month scope as the overall budget, just grouped by the
     # raw category slug instead of summed.
     category_expense_totals: dict[str, Decimal] = defaultdict(Decimal)
@@ -2734,13 +2523,26 @@ def category_budget_statuses(rows, month_transactions, display_currency: str, ra
             "category": row.category,
             "label": TRANSACTION_CATEGORIES.get(row.category, {}).get("label", row.category),
             "icon": TRANSACTION_CATEGORIES.get(row.category, {}).get("icon"),
-            "status": budget_status(
-                convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates),
+            "rollover": bool(getattr(row, "rollover", False)),
+            "base_cap": convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates),
+            "carry": carry.get(row.category),
+            "status": _limit_status(
+                Decimal(convert_amount(row.monthly_cap, row.currency or "USD", display_currency, rates))
+                + carry.get(row.category, Decimal("0")),
                 category_expense_totals.get(row.category, Decimal("0")),
             ),
         }
         for row in rows
     ]
+
+
+def _limit_status(cap: Decimal, spent: Decimal) -> dict:
+    """budget_status() for a category limit, except that a limit whose
+    rollover wiped it out this month (cap at or below zero) still shows,
+    as already over, instead of vanishing like an unset budget."""
+    if cap > 0:
+        return budget_status(cap, spent)
+    return {"has_budget": True, "cap": 0.0, "spent": float(spent), "pct": 100.0, "tier": "over"}
 
 
 def save_budget(user, raw_cap) -> Decimal:
@@ -2774,7 +2576,7 @@ def save_budget(user, raw_cap) -> Decimal:
     return cap
 
 
-def save_category_budget(user, category, raw_cap) -> Decimal:
+def save_category_budget(user, category, raw_cap, rollover=None) -> Decimal:
     """Upserts one category's monthly cap for `user` and commits. Shared
     by the web form below and the native app's API. Raises ValidationError
     for an unknown category or an amount that isn't above zero."""
@@ -2797,6 +2599,10 @@ def save_category_budget(user, category, raw_cap) -> Decimal:
     else:
         row.monthly_cap = cap
         row.currency = currency
+    # Only changed when sent, so saving a new amount from an older client
+    # (or the web form without the switch) never turns rollover off.
+    if rollover is not None:
+        row.rollover = _truthy(rollover)
 
     try:
         db.session.commit()
@@ -2853,7 +2659,7 @@ def set_category_budget():
     not replacing it."""
     category = (request.form.get("category") or "").strip()
     try:
-        save_category_budget(current_user, category, request.form.get("monthly_cap"))
+        save_category_budget(current_user, category, request.form.get("monthly_cap"), request.form.get("rollover"))
         msg = f"{TRANSACTION_CATEGORIES[category]['label']} budget saved."
         if is_ajax_request():
             return jsonify({"message": msg}), 200
@@ -3013,6 +2819,8 @@ def activity_page():
         month_label=month_label,
         category_labels=category_labels,
         to_review=Transaction.query.filter_by(user_id=current_user.id, needs_review=True).count(),
+        uncategorized=Transaction.query.filter_by(user_id=current_user.id, category=None).count(),
+        months=months_with_transactions(current_user.id, today),
         categories=TRANSACTION_CATEGORIES,
         selected=request.args.get("selected", type=int),
     )
@@ -3046,9 +2854,110 @@ def plan_page():
         bill["weekday"] = due.strftime("%a").upper()
         bill["day"] = due.day
         bill["days_away"] = (due - today).days
+    for goal in plan["goals"]:
+        if goal["target_date"]:
+            goal["target_label"] = date.fromisoformat(goal["target_date"]).strftime("%b %Y")
     return render_template(
         "plan.html",
         plan=plan,
         history=history,
         categories=TRANSACTION_CATEGORIES,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan: savings goals and spotted bills (services/goals.py and
+# services/recurring_detect.py, shared with the native app's API). JSON in
+# and out; the page reloads after each, like the rest of Plan.
+# ---------------------------------------------------------------------------
+
+def _own_goal(goal_id: int):
+    from ...models import Goal
+
+    goal = db.session.get(Goal, goal_id)
+    if goal is None or goal.user_id != current_user.id:
+        return None
+    return goal
+
+
+def _payload():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else request.form
+
+
+@finance_bp.route("/plan/goals", methods=["POST"])
+@login_required
+def create_goal():
+    from ...services.goals import GoalError, describe_goal, save_goal
+
+    try:
+        goal = save_goal(current_user, None, _payload())
+    except GoalError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({"goal": describe_goal(goal, user_today(current_user))}), 201
+
+
+@finance_bp.route("/plan/goals/<int:goal_id>", methods=["POST"])
+@login_required
+def update_goal(goal_id):
+    from ...services.goals import GoalError, describe_goal, save_goal
+
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return jsonify({"message": "That goal is gone."}), 404
+    try:
+        save_goal(current_user, goal, _payload(), partial=True)
+    except GoalError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({"goal": describe_goal(goal, user_today(current_user))})
+
+
+@finance_bp.route("/plan/goals/<int:goal_id>/add", methods=["POST"])
+@login_required
+def add_money_to_goal(goal_id):
+    from ...services.goals import GoalError, add_to_goal, describe_goal
+
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return jsonify({"message": "That goal is gone."}), 404
+    try:
+        add_to_goal(goal, _payload().get("amount"))
+    except GoalError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({"goal": describe_goal(goal, user_today(current_user))})
+
+
+@finance_bp.route("/plan/goals/<int:goal_id>/delete", methods=["POST"])
+@login_required
+def remove_goal(goal_id):
+    from ...services.goals import delete_goal
+
+    goal = _own_goal(goal_id)
+    if goal is None:
+        return jsonify({"message": "That goal is gone."}), 404
+    delete_goal(goal)
+    return jsonify({"message": "Goal deleted."})
+
+
+@finance_bp.route("/plan/bills/track", methods=["POST"])
+@login_required
+def track_bill_suggestion():
+    from ...services.recurring_detect import SuggestionError, track_suggestion
+
+    try:
+        tx = track_suggestion(current_user, str(_payload().get("key") or ""), user_today(current_user))
+    except SuggestionError as exc:
+        return jsonify({"message": str(exc)}), 404
+    return jsonify({"message": f"{tx.description} is a bill now.", "id": tx.id})
+
+
+@finance_bp.route("/plan/bills/dismiss", methods=["POST"])
+@login_required
+def dismiss_bill_suggestion():
+    from ...services.recurring_detect import SuggestionError, dismiss_suggestion
+
+    try:
+        dismiss_suggestion(current_user, str(_payload().get("key") or ""))
+    except SuggestionError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({"message": "Got it."})

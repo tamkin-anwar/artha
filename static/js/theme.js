@@ -81,6 +81,20 @@ function syncThemeColor(theme) {
     });
 }
 
+// Settings' Appearance control: "system" follows the device, "light" or
+// "dark" pins one.
+export function getThemeChoice() {
+    return storedChoice() || "system";
+}
+
+export function setThemeChoice(choice) {
+    try {
+        if (choice === "light" || choice === "dark") localStorage.setItem(CHOICE_KEY, choice);
+        else localStorage.removeItem(CHOICE_KEY);
+    } catch (e) {}
+    applyTheme(storedChoice() || systemTheme());
+}
+
 function loadStoredTheme() {
     setTheme(storedChoice() || systemTheme());
 }

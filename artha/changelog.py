@@ -26,6 +26,30 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-10-22",
+        "category": "new",
+        "title": "Savings goals",
+        "body": "Saving for a trip, a laptop or a rainy day? Add a goal in Plan, and Artha shows how much to set aside each month to get there by your date.",
+    },
+    {
+        "date": "2026-10-22",
+        "category": "new",
+        "title": "Artha spots bills you forgot to track",
+        "body": "Charges that repeat like clockwork, like a streaming service or a gym, show up in Plan as \"Looks like a bill\". Track one with a tap so Safe to spend counts it before it hits, or tell Artha it isn't a bill.",
+    },
+    {
+        "date": "2026-10-22",
+        "category": "new",
+        "title": "Carry over what's left in a category",
+        "body": "Turn on carry over for a category limit, and what you didn't spend last month moves into this one. Going over takes it off instead.",
+    },
+    {
+        "date": "2026-10-22",
+        "category": "improved",
+        "title": "Settings in one place, and a simpler Reports",
+        "body": "Currency, appearance, reminders and your calendar link now live on one Settings page. Reports keeps its charts, statement import moved to Activity, and Activity can now set when a repeating bill ends.",
+    },
+    {
         "date": "2026-10-21",
         "category": "new",
         "title": "A new look, built around four places",

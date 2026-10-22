@@ -75,20 +75,21 @@ def test_set_budget_ajax_returns_json_error_on_invalid_amount(auth_client, user)
     assert Budget.query.filter_by(user_id=user.id).first() is None
 
 
-def test_finance_page_shows_warning_tier_at_90_percent(auth_client, user):
+def test_today_shows_the_share_of_the_budget_used(auth_client, user):
     _add_expense(user, "1800")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
-    resp = auth_client.get("/finance")
-    assert b"getting close" in resp.data
+    resp = auth_client.get("/")
+    assert b"90% of your $2,000 budget" in resp.data
 
 
-def test_finance_page_shows_over_tier_past_cap(auth_client, user):
+def test_plan_shows_over_budget_past_cap(auth_client, user):
     _add_expense(user, "2500")
     auth_client.post("/finance/budget", data={"monthly_cap": "2000"})
 
-    resp = auth_client.get("/finance")
-    assert b"over budget" in resp.data
+    resp = auth_client.get("/plan")
+    assert b"Over budget" in resp.data
+    assert b"Over by" in resp.data
 
 
 def test_dashboard_shows_on_pace_when_under_threshold(auth_client, user):
@@ -115,15 +116,16 @@ def test_dashboard_matches_finance_tier_at_exact_boundary(auth_client, user):
     """Regression guard: the dashboard used to cast expense through float()
     before re-wrapping it in Decimal() for the budget-tier check, so an
     exact 90.00% boundary could round down to 89.99999999999999 and show
-    tier "ok" while /finance (which never leaves Decimal) correctly showed
+    tier "ok" while Plan (which never leaves Decimal) correctly showed
     "warning" for the identical numbers."""
     _add_expense(user, "642.06")
     auth_client.post("/finance/budget", data={"monthly_cap": "713.40"})
 
-    finance_resp = auth_client.get("/finance")
+    from artha.services.screens import plan_screen
+
     dashboard_resp = auth_client.get("/")
 
-    assert b"getting close" in finance_resp.data
+    assert plan_screen(user)["budget"]["tier"] == "warning"
     assert b"90% of your" in dashboard_resp.data
 
 

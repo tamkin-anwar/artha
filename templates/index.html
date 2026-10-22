@@ -119,6 +119,17 @@
             </div>
             {% endif %}
 
+            {% if screen.bill_suggestions %}
+            <div class="card notice">
+                <div class="notice-icon" aria-hidden="true"><i data-lucide="repeat"></i></div>
+                <div class="notice-text">
+                    <span class="notice-title">{{ screen.bill_suggestions }} {{ 'charge looks' if screen.bill_suggestions == 1 else 'charges look' }} like a bill</span>
+                    <span>They repeat like clockwork. Track them so Safe to spend counts them before they hit.</span>
+                    <a class="link-accent" href="{{ url_for('finance.plan_page') }}">Take a look</a>
+                </div>
+            </div>
+            {% endif %}
+
             {% if screen.coming_up %}
             <div class="section">
                 <div class="section-head">
@@ -233,7 +244,7 @@
                         <span>Type what you spent and Artha files it for you. Or bring in months at once from a bank statement.</span>
                         <span style="display:flex; gap:16px; flex-wrap:wrap;">
                             <button type="button" class="link-accent" data-add-open>Add a purchase</button>
-                            <a class="link-accent" href="{{ url_for('finance.finance_page') }}#import">Import a statement</a>
+                            <a class="link-accent" href="{{ url_for('finance.activity_page') }}#import">Import a statement</a>
                         </span>
                     </div>
                 </div>

@@ -16,8 +16,11 @@ from .recovery_code import RecoveryCode
 from .merchant_category_rule import MerchantCategoryRule
 from .account import Account, NetWorthSnapshot
 from .api_token import ApiToken
+from .goal import Goal
+from .dismissed_bill_suggestion import DismissedBillSuggestion
 
 __all__ = [
     "User", "Note", "Transaction", "ExchangeRate", "Event", "EventException", "Feedback", "Budget", "CategoryBudget", "PushSubscription",
     "Conversation", "Message", "RecoveryCode", "MerchantCategoryRule", "Account", "NetWorthSnapshot", "ApiToken",
+    "Goal", "DismissedBillSuggestion",
 ]

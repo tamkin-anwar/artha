@@ -534,6 +534,7 @@ def test_category_limits_can_be_set_shown_and_removed(client, user):
     assert plan["category_budgets"] == [{
         "key": "dining", "label": "Dining", "cap": "100.00", "spent": "120.00",
         "left": "0.00", "over_by": "20.00", "percent_used": 120.0, "tier": "over",
+        "rollover": False, "base_cap": "100.00", "carried": None,
     }]
     assert all(c["key"] != "dining" for c in plan["unbudgeted_categories"])
 
