@@ -242,6 +242,14 @@ and Artha shouldn't repeat that.
     (`partials/money_macros.html`'s `tx_amount`); client-side,
     `currency.js`'s `formatMoneyIn()` with that currency, not
     `formatMoney()` (which uses the display currency).
+  - **Which currencies exist** (widened 2026-10-22 from a fixed six to
+    every one the rate provider covers, 157): `artha/currency_table.py`,
+    generated from open.er-api.com's code list plus the browser's own
+    Intl data (names and symbols), so `utils.format_money` and
+    `currency.js` write each currency the same way. The app has a copy,
+    `Shared/Currencies.swift` in artha-apple; regenerate both together.
+    Every picker uses `partials/currency_options.html` (the six common
+    ones first). The original six keep their old symbols ($ for CAD/AUD).
   - **Any aggregate across more than one transaction** (finance totals,
     budgets, chart data, the AI's financial-context snapshot) sums
     `Transaction.value_in_usd` (Python) / `coalesce(usd_value, amount)`

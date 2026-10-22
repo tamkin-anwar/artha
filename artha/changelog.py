@@ -28,6 +28,12 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-22",
         "category": "new",
+        "title": "Any currency you use",
+        "body": "Artha now works in about 160 currencies, from the Hong Kong dollar to the Japanese yen, not just six. Pick yours in Settings and it follows you to every device, the iPhone app included.",
+    },
+    {
+        "date": "2026-10-22",
+        "category": "new",
         "title": "Savings goals",
         "body": "Saving for a trip, a laptop or a rainy day? Add a goal in Plan, and Artha shows how much to set aside each month to get there by your date.",
     },

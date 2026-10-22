@@ -25,7 +25,7 @@
                         <span class="eyebrow" style="font-size:0.625rem;">{{ s.category }}</span>
                         <span
                             class="scenario-money"
-                            style="font-size:0.75rem; font-weight:600; color:{% if s.net_monthly_impact > 0 %}var(--emerald){% elif s.net_monthly_impact < 0 %}var(--red){% else %}var(--text-secondary){% endif %};"
+                            style="font-size:0.75rem; font-weight:600; color:{% if s.net_monthly_impact > 0 %}var(--emerald){% elif s.net_monthly_impact < 0 %}var(--caution){% else %}var(--text-secondary){% endif %};"
                             data-money-value="{{ s.net_monthly_impact }}" data-money-currency="{{ s.currency or 'USD' }}"
                             data-money-signed="true"
                             data-money-suffix="/mo"

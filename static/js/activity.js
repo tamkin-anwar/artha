@@ -7,7 +7,7 @@
 
 import { showToast } from "./toast.js";
 import { csrfToken, postJSON, toastAfterReload } from "./shell.js";
-import { formatMoneyIn } from "./currency.js";
+import { currencySymbol, formatMoneyIn } from "./currency.js";
 
 const page = document.getElementById("activity");
 const days = document.getElementById("activity-days");
@@ -27,7 +27,6 @@ const categoriesBox = field("detail-categories");
 const chips = [...categoriesBox.querySelectorAll("[data-category]")];
 const errorEl = field("detail-error");
 
-const SYMBOLS = { USD: "$", GBP: "£", EUR: "€", BDT: "৳", CAD: "$", AUD: "$" };
 const SOURCES = {
     apple_pay: "Logged on its own with Apple Pay.",
     csv: "Imported from a bank statement.",
@@ -80,7 +79,7 @@ function select(row, { push = true } = {}) {
     row.setAttribute("aria-current", "true");
 
     field("detail-mark").textContent = initials(tx.description);
-    field("detail-symbol").textContent = SYMBOLS[tx.currency] || "";
+    field("detail-symbol").textContent = currencySymbol(tx.currency);
     amountInput.value = tx.amount;
     fitAmount();
     amountInput.setAttribute("aria-label", `Amount in ${tx.currency}`);

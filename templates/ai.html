@@ -3,39 +3,28 @@
 {% block content %}
 
 <style>
+    /* The Artha orb, the same gradients as the app's OrbMark
+       (Palette.swift's orb and sun colors): a blue planet with the sun
+       rising on its upper left. It used to be a gold-on-navy blur that
+       turned plain blue once --gold became the accent. It holds still
+       until Artha is thinking; Daybreak has no ambient loops. */
     .ai-orb {
         width: 120px;
         height: 120px;
         border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%,
-            color-mix(in srgb, var(--gold) 60%, transparent),
-            rgba(30, 58, 95, 0.8),
-            rgba(10, 14, 23, 0.95));
-        box-shadow:
-            0 0 40px color-mix(in srgb, var(--gold) 20%, transparent),
-            0 0 80px rgba(30, 58, 95, 0.3),
-            inset 0 0 40px color-mix(in srgb, var(--gold) 10%, transparent);
-        animation: orb-breathe 4s ease-in-out infinite;
-        filter: blur(0.5px);
-    }
-
-    @keyframes orb-breathe {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 40px color-mix(in srgb, var(--gold) 20%, transparent), 0 0 80px rgba(30,58,95,0.3); }
-        50% { transform: scale(1.08); box-shadow: 0 0 60px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 120px rgba(30,58,95,0.4); }
+        background:
+            radial-gradient(52% 52% at 34% 31%, #fff4d8 0%, #ffd27a 22%, rgba(245,165,36,0.75) 50%, rgba(245,165,36,0.12) 78%, rgba(245,165,36,0) 100%),
+            radial-gradient(78% 78% at 64% 70%, #5c90de 0%, #3466c0 50%, #1d3b8c 82%, #142b68 100%);
+        box-shadow: 0 0 60px rgba(245,165,36,0.18), 0 0 120px rgba(52,102,192,0.25);
     }
 
     .ai-orb.thinking {
         animation: orb-think 1.2s ease-in-out infinite;
-        background: radial-gradient(circle at 40% 40%,
-            rgba(34, 197, 94, 0.5),
-            color-mix(in srgb, var(--gold) 60%, transparent),
-            rgba(30, 58, 95, 0.9));
     }
 
     @keyframes orb-think {
-        0%, 100% { transform: scale(1) rotate(0deg); }
-        25% { transform: scale(1.12) rotate(2deg); }
-        75% { transform: scale(1.06) rotate(-2deg); }
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.08); }
     }
 
     .ai-orb.speaking {
@@ -46,6 +35,11 @@
         0% { transform: scale(1.15); }
         60% { transform: scale(0.95); }
         100% { transform: scale(1); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ai-orb.thinking { animation: none; opacity: 0.7; }
+        .ai-orb.speaking { animation: none; }
     }
 
     /* Smaller orb used as the inline "thinking" loading indicator once
@@ -93,7 +87,9 @@
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%, #f0d78a, var(--gold));
+        background:
+            radial-gradient(52% 52% at 34% 31%, #fff4d8 0%, #ffd27a 22%, rgba(245,165,36,0.75) 50%, rgba(245,165,36,0) 100%),
+            radial-gradient(78% 78% at 64% 70%, #5c90de 0%, #3466c0 50%, #1d3b8c 100%);
         flex-shrink: 0;
         margin-top: 4px;
     }
@@ -105,7 +101,7 @@
         line-height: 1.7;
         animation: ai-fade-in 0.3s ease-out;
     }
-    .ai-bubble-assistant strong { color: var(--gold); }
+    .ai-bubble-assistant strong { color: var(--text-primary); font-weight: 650; }
 
     @keyframes ai-fade-in {
         from { opacity: 0; }
@@ -137,12 +133,12 @@
     }
 
     /* Input bar */
+    /* Opaque surface, not glass: it sits in the card, not above content,
+       and the old fixed dark tint read as a gray slab in Day. */
     .ai-input-bar {
-        background: rgba(14,17,24,0.8);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        background: var(--bg-surface);
         border-top: 1px solid var(--border-subtle);
-        border-radius: 0 0 16px 16px;
+        border-radius: 0 0 var(--radius-card) var(--radius-card);
         display: flex;
         align-items: flex-end;
         gap: 10px;
@@ -156,9 +152,10 @@
         background: transparent;
         color: var(--text-primary);
         font-size: 0.9375rem;
-        padding: 16px 20px;
+        padding: 10px 8px;
         resize: none;
         max-height: 130px;
+        overflow-y: hidden;
         line-height: 1.4;
         font-family:var(--font-body);
     }
@@ -264,7 +261,7 @@
         <textarea
             id="ai-input"
             rows="1"
-            placeholder="Ask Artha anything..."
+            placeholder="Ask Artha anything"
             maxlength="4000"
             autocomplete="off"
             aria-label="Message to Artha AI"

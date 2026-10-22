@@ -1,0 +1,14 @@
+{# A back button pinned to the top left of the account pages that sit
+   outside the app shell (Privacy, Edit Profile, Change Password, two-factor
+   setup, recovery codes). Their only way back used to be a link under the
+   last card, so on a long page like Privacy you had to scroll to the
+   bottom to leave. Fixed, so it stays put while the page scrolls. #}
+{% if current_user.is_authenticated %}
+    {% set back_href, back_label = url_for('auth.settings_page'), 'Settings' %}
+{% else %}
+    {% set back_href, back_label = url_for('auth.login'), 'Log in' %}
+{% endif %}
+<a href="{{ back_href }}" class="page-back">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    {{ back_label }}
+</a>

@@ -170,8 +170,11 @@
                     {{ primary_link(url_for('finance.plan_page'), 'target', 'Plan', is_plan_active) }}
                     {{ primary_link(url_for('accounts.index'), 'bar-chart-3', 'Wealth', is_accounts_active) }}
 
-                    <button type="button" class="side-add" data-add-open aria-keyshortcuts="N">
-                        <i data-lucide="plus" aria-hidden="true"></i>Add<kbd>N</kbd>
+                    <!-- N opens Add from anywhere (shell.js); the shortcut lives in
+                         the tooltip, not on the button, the way Apple's apps keep
+                         shortcuts in menus rather than printed on controls. -->
+                    <button type="button" class="side-add" data-add-open aria-keyshortcuts="N" title="Add a transaction (N)">
+                        <i data-lucide="plus" aria-hidden="true"></i>Add
                     </button>
 
                     <div class="side-heading" id="side-more-heading">More</div>

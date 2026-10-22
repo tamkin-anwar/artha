@@ -3,6 +3,7 @@
 {% block title %}Privacy & Security{% endblock %}
 
 {% block content %}
+{% include 'partials/settings_back.html' %}
 <main class="min-h-screen flex items-center justify-center px-4 py-14 settings-bg" role="main">
     <div class="w-full max-w-2xl">
 
@@ -128,7 +129,7 @@
 
             <p class="text-center text-sm mt-5">
                 {% if current_user.is_authenticated %}
-                    <a href="{{ url_for('dashboard.index') }}" class="auth-link">Back to Today</a>
+                    <a href="{{ url_for('auth.settings_page') }}" class="auth-link">Back to Settings</a>
                 {% else %}
                     <a href="{{ url_for('auth.login') }}" class="auth-link">Back to login</a>
                 {% endif %}

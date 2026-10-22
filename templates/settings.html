@@ -15,7 +15,7 @@
     {% endif %}
 {% endwith %}
 
-{% set currency_names = {'USD': 'US dollar', 'GBP': 'British pound', 'EUR': 'Euro', 'BDT': 'Bangladeshi taka', 'CAD': 'Canadian dollar', 'AUD': 'Australian dollar'} %}
+{% from 'partials/currency_options.html' import currency_options %}
 {% macro chevron() -%}
     <svg class="settings-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
 {%- endmacro %}
@@ -57,9 +57,7 @@
                     <label class="settings-row">
                         <span>Currency</span>
                         <select id="currency-select" class="settings-select" aria-describedby="currency-hint">
-                            {% for code in currencies %}
-                                <option value="{{ code }}"{{ ' selected' if code == (current_user.preferred_currency or 'USD') }}>{{ currency_names.get(code, code) }} ({{ code }})</option>
-                            {% endfor %}
+                            {{ currency_options(current_user.preferred_currency or 'USD') }}
                         </select>
                     </label>
                     <div class="settings-row">

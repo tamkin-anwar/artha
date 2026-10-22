@@ -1,6 +1,6 @@
 // static/service-worker.js
 
-const CACHE_NAME = "artha-cache-v31";
+const CACHE_NAME = "artha-cache-v32";
 const OFFLINE_URL = "/static/offline.html";
 
 const ASSETS_TO_CACHE = [
@@ -17,6 +17,8 @@ const ASSETS_TO_CACHE = [
     "/static/icons/apple-touch-icon-180.png",
     "/static/icons/icon-192.png",
     "/static/icons/icon-512.png",
+    "/static/icons/icon-maskable-192.png",
+    "/static/icons/icon-maskable-512.png",
 
     // CSS
     "/static/css/style.css",

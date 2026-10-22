@@ -20,8 +20,37 @@ const CURRENCY_PRESETS = {
     AUD: { code: "AUD", locale: "en-AU", symbol: "$" },
 };
 
+// Any other currency (Artha accepts every one in artha/currency_table.py,
+// about 160) formats with the browser's own en-US data and its standard
+// symbol ("HK$1,234.50", "CHF 1,234.50", "¥1,235"), the same data that
+// table was generated from, so the server's format_money agrees. Only a
+// code the browser doesn't know at all falls back to USD.
+const generatedPresets = {};
+
+function intlSymbol(code) {
+    try {
+        const parts = new Intl.NumberFormat("en-US", { style: "currency", currency: code }).formatToParts(1);
+        return parts.filter((p) => p.type === "currency").map((p) => p.value).join("") || code;
+    } catch {
+        return null;
+    }
+}
+
 function safeGetPreset(code) {
-    return CURRENCY_PRESETS[code] || CURRENCY_PRESETS[FALLBACK.code];
+    if (CURRENCY_PRESETS[code]) return CURRENCY_PRESETS[code];
+    if (typeof code === "string" && /^[A-Z]{3}$/.test(code)) {
+        if (!(code in generatedPresets)) {
+            const symbol = intlSymbol(code);
+            generatedPresets[code] = symbol ? { code, locale: "en-US", symbol, display: "symbol" } : null;
+        }
+        if (generatedPresets[code]) return generatedPresets[code];
+    }
+    return CURRENCY_PRESETS[FALLBACK.code];
+}
+
+// The symbol for a currency code, for a field's prefix ("$", "HK$").
+export function currencySymbol(code) {
+    return safeGetPreset(code).symbol;
 }
 
 // The signed-in account's effective display currency, rendered by
@@ -99,6 +128,14 @@ export function setCurrencyCode(code) {
     return preset.code;
 }
 
+function defaultDigits(code) {
+    try {
+        return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).resolvedOptions().maximumFractionDigits;
+    } catch {
+        return 2;
+    }
+}
+
 function _format(preset, value, { wholeUnits = false } = {}) {
     const num = Number(value);
     const safeNumber = Number.isFinite(num) ? num : 0;
@@ -109,11 +146,13 @@ function _format(preset, value, { wholeUnits = false } = {}) {
         const formatted = new Intl.NumberFormat(preset.locale, {
             style: "currency",
             currency: preset.code,
-            currencyDisplay: "narrowSymbol",
+            currencyDisplay: preset.display || "narrowSymbol",
             // wholeUnits: for tight spots (a calendar day cell's net chip)
-            // where "$1,234" fits and "$1,234.56" doesn't.
+            // where "$1,234" fits and "$1,234.56" doesn't. A generated
+            // preset otherwise keeps its currency's own decimals (none for
+            // JPY), capped at 2 like the server.
             minimumFractionDigits: wholeUnits ? 0 : undefined,
-            maximumFractionDigits: wholeUnits ? 0 : 2,
+            maximumFractionDigits: wholeUnits ? 0 : (preset.display ? Math.min(2, defaultDigits(preset.code)) : 2),
             numberingSystem: "latn",
         }).format(wholeUnits ? Math.round(safeNumber) : safeNumber);
 

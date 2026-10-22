@@ -2,6 +2,7 @@
    + button, or N on the keyboard (static/js/shell.js). Posts to the same
    /add_transaction route as every other add form, so it's validated,
    currency-locked and categorized exactly the same way. #}
+{% from 'partials/currency_options.html' import currency_options %}
 {% set user_currency = current_user.preferred_currency or 'USD' %}
 <div class="sheet-backdrop" id="add-sheet" hidden>
     <form class="sheet" id="add-form" role="dialog" aria-modal="true" aria-labelledby="add-title" novalidate>
@@ -22,9 +23,7 @@
             <input id="add-amount" name="amount" class="figure" inputmode="decimal" autocomplete="off" placeholder="0" required>
             <label for="add-currency" class="visually-hidden">Currency</label>
             <select id="add-currency" name="currency" class="add-currency">
-                {% for code in ['USD', 'GBP', 'EUR', 'BDT', 'CAD', 'AUD'] %}
-                    <option value="{{ code }}"{{ ' selected' if code == user_currency }}>{{ code }}</option>
-                {% endfor %}
+                {{ currency_options(user_currency, compact=True) }}
             </select>
         </div>
 

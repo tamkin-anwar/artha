@@ -165,19 +165,19 @@
 
     .notes-new-btn {
         box-sizing: border-box;
-        background: var(--gold);
-        color: var(--on-accent);
+        background: var(--inverse);
+        color: var(--on-inverse);
         font-weight: 600;
         font-size: 0.8125rem;
         line-height: 1;
-        border: 1px solid var(--gold);
-        border-radius: 8px;
+        border: 1px solid var(--inverse);
+        border-radius: 999px;
         padding: 9px 16px;
         cursor: pointer;
         transition: filter 0.12s ease, transform 0.12s ease;
         white-space: nowrap;
     }
-    .notes-new-btn:hover { filter: brightness(1.08); }
+    .notes-new-btn:hover { opacity: 0.92; }
     .notes-new-btn:active { transform: scale(0.97); }
 
     .notes-section { margin-bottom: 26px; }
@@ -343,7 +343,7 @@
     }
     .dark .note-due-pill { background: rgba(255, 255, 255, 0.07); }
     .note-due-pill svg, .note-due-pill i { width: 11px; height: 11px; }
-    .note-due-pill.overdue { color: var(--red); background: var(--red-dim); }
+    .note-due-pill.overdue { color: var(--caution); background: var(--caution-soft); }
     .note-due-pill[hidden] { display: none; }
 
     .note-purge-pill {
@@ -395,11 +395,11 @@
     .notes-empty-cta, .notes-clear-filters-btn {
         margin-top: 6px;
         display: inline-block;
-        background: var(--gold); color: var(--on-accent); font-weight: 600; font-size: 0.8125rem;
-        border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+        background: var(--inverse); color: var(--on-inverse); font-weight: 600; font-size: 0.8125rem;
+        border: none; border-radius: 999px; padding: 9px 16px; cursor: pointer;
         text-decoration: none;
     }
-    .notes-clear-filters-btn { background: none; color: var(--gold); border: 1px solid var(--gold); }
+    .notes-clear-filters-btn { background: var(--raised); color: var(--text-primary); }
 
     /* ---------------------------------------------------------------
        Modal

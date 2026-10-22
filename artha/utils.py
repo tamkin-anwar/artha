@@ -8,20 +8,38 @@ from zoneinfo import ZoneInfo
 import nh3
 from flask import request
 
-# The closed set of currencies Artha supports display/entry in — matches
-# static/js/currency.js's CURRENCY_PRESETS exactly (that's the client
-# side's own closed set; keep both in sync if this ever changes). Lives
-# here, not in auth/routes.py (where /set_currency validates against it)
-# or finance/routes.py (where a Transaction's own currency does too), so
-# neither blueprint has to import from the other.
-CURRENCY_CODES = {"USD", "GBP", "EUR", "BDT", "CAD", "AUD"}
+from .currency_table import COMMON_CURRENCIES, CURRENCY_TABLE
 
-# Same set, for the handful of places server-rendered text needs a symbol
-# rather than a full Intl.NumberFormat-style client-side format (e.g. a
-# plain-text dashboard summary line, or the AI Assistant's system prompt)
-# — also matches currency.js's CURRENCY_PRESETS.
-CURRENCY_SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€", "BDT": "৳", "CAD": "$", "AUD": "$"}
+# Every currency Artha supports for display and entry: the full table in
+# currency_table.py (about 160, every one the exchange-rate provider
+# covers). Lives here, not in auth/routes.py (where /set_currency
+# validates against it) or finance/routes.py (where a Transaction's own
+# currency does too), so neither blueprint has to import from the other.
+# static/js/currency.js formats any of these with the browser's own Intl
+# data, which this table was generated from.
+CURRENCY_CODES = set(CURRENCY_TABLE)
 
+# A symbol per currency, for the places server-rendered text needs one
+# rather than a fully formatted amount (a budget alert, the AI
+# Assistant's system prompt). Codes without a symbol of their own use
+# the code itself ("CHF").
+CURRENCY_SYMBOLS = {code: prefix.strip() for code, (_, prefix, _) in CURRENCY_TABLE.items()}
+
+
+def currency_name(code: str) -> str:
+    entry = CURRENCY_TABLE.get(code)
+    return entry[0] if entry else code
+
+
+def currency_choices() -> list[tuple[str, str]]:
+    """(code, name) pairs for a currency picker: the six most people use
+    first, then every other currency alphabetically by name."""
+    common = [(c, currency_name(c)) for c in COMMON_CURRENCIES]
+    rest = sorted(
+        ((c, entry[0]) for c, entry in CURRENCY_TABLE.items() if c not in COMMON_CURRENCIES),
+        key=lambda pair: pair[1].lower(),
+    )
+    return common + rest
 
 
 def _group_digits(whole: str, currency: str) -> str:
@@ -49,10 +67,13 @@ def format_money(value, currency: str = "USD", whole: bool = False) -> str:
     if value is None or value == "":
         return ""
     amount = value if isinstance(value, Decimal) else Decimal(str(value))
-    places = Decimal("1") if whole else Decimal("0.01")
+    _, prefix, digits = CURRENCY_TABLE.get(currency, ("", currency + " ", 2))
+    if whole:
+        digits = 0
+    places = Decimal(1).scaleb(-digits)
     amount = amount.quantize(places, rounding=ROUND_HALF_UP)
     sign = "-" if amount < 0 else ""
-    text = f"{abs(amount):.{0 if whole else 2}f}"
+    text = f"{abs(amount):.{digits}f}"
     whole_part, _, cents = text.partition(".")
     grouped = _group_digits(whole_part, currency)
     symbol = CURRENCY_SYMBOLS.get(currency, "")
@@ -61,7 +82,7 @@ def format_money(value, currency: str = "USD", whole: bool = False) -> str:
         # (its de-DE locale): 1.234,56 €.
         grouped = grouped.replace(",", ".")
         return f"{sign}{grouped}" + (f",{cents}" if cents else "") + f" {symbol}"
-    return f"{sign}{symbol}{grouped}" + (f".{cents}" if cents else "")
+    return f"{sign}{prefix}{grouped}" + (f".{cents}" if cents else "")
 
 def is_ajax_request() -> bool:
     """True when the request expects a JSON response rather than a full page."""

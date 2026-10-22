@@ -1,0 +1,23 @@
+{# The <option>s for every currency picker, so they all offer the same
+   list (utils.currency_choices: the six most people use, then the rest).
+   compact=True is for a small pill (the Add sheet): it shows codes
+   ("HKD"), sorted by code so typing the letters finds one. Otherwise
+   each reads "Hong Kong dollar (HKD)", sorted by name. #}
+{% macro currency_options(selected, compact=False) -%}
+    {%- set choices = currency_choices() -%}
+    {%- set common = choices[:6] -%}
+    {%- set rest = choices[6:]|sort(attribute='0') if compact else choices[6:] -%}
+    {%- if selected and selected not in (choices|map(attribute='0')|list) -%}
+        <option value="{{ selected }}" selected>{{ selected }}</option>
+    {%- endif -%}
+    <optgroup label="Common">
+        {%- for code, name in common %}
+        <option value="{{ code }}"{{ ' selected' if code == selected }}>{{ code if compact else name ~ ' (' ~ code ~ ')' }}</option>
+        {%- endfor %}
+    </optgroup>
+    <optgroup label="All currencies">
+        {%- for code, name in rest %}
+        <option value="{{ code }}"{{ ' selected' if code == selected }}>{{ code if compact else name ~ ' (' ~ code ~ ')' }}</option>
+        {%- endfor %}
+    </optgroup>
+{%- endmacro %}

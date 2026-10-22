@@ -630,7 +630,7 @@ def test_editing_an_account_changes_only_what_was_sent(client, user):
 @pytest.mark.parametrize("payload, message", [
     ({"name": "", "account_type": "checking", "current_balance": "1"}, "Account name is required."),
     ({"name": "X", "account_type": "boat", "current_balance": "1"}, "Unknown account type."),
-    ({"name": "X", "account_type": "checking", "currency": "JPY", "current_balance": "1"}, "Unsupported currency."),
+    ({"name": "X", "account_type": "checking", "currency": "XTS", "current_balance": "1"}, "Unsupported currency."),
     ({"name": "X", "account_type": "loan", "current_balance": "-5"},
      "Balance must be zero or positive. A liability's balance is what's owed, not a negative number."),
     ({"name": "X", "account_type": "checking", "current_balance": "NaN"}, "Balance must be a valid number."),
@@ -684,12 +684,12 @@ def test_apple_pay_purchase_is_marked_and_categorized_like_any_other(client, use
 def test_an_unsupported_currency_is_refused_instead_of_relabeled(client, user):
     token = _token(client, user)
     resp = client.post("/api/v1/transactions", headers=_auth(token), json={
-        "description": "Tokyo ramen", "amount": "1500", "type": "expense", "currency": "jpy", "source": "apple_pay",
+        "description": "Test purchase", "amount": "1500", "type": "expense", "currency": "xts", "source": "apple_pay",
     })
     assert resp.status_code == 400
     body = resp.get_json()
     assert body["error"] == "unsupported_currency"
-    assert "JPY" in body["message"]
+    assert "XTS" in body["message"]
     assert Transaction.query.count() == 0
 
 
@@ -721,7 +721,7 @@ def test_sign_up_creates_the_account_and_signs_this_device_in(client):
 
 
 def test_sign_up_ignores_an_unknown_currency_or_timezone(client):
-    body = _sign_up(client, currency="JPY", timezone="Mars/Olympus").get_json()
+    body = _sign_up(client, currency="XTS", timezone="Mars/Olympus").get_json()
     assert body["user"]["currency"] == "USD"
     assert body["user"]["timezone"] is None
 
@@ -921,7 +921,7 @@ def test_updating_the_profile_changes_only_what_was_sent(client, user):
     ({"email": ""}, "Email is required."),
     ({"email": "nope"}, "That doesn't look like a valid email address."),
     ({"email": "bob@example.com"}, "That email is already in use by another account."),
-    ({"currency": "JPY"}, "Artha doesn't support that currency yet."),
+    ({"currency": "XTS"}, "Artha doesn't support that currency yet."),
     ({"timezone": "Mars/Olympus"}, "That isn't a time zone Artha knows."),
 ])
 def test_profile_changes_follow_the_web_rules(client, user, change, message):

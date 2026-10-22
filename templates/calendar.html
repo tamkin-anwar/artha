@@ -76,7 +76,7 @@
     .cal-tx-row:last-child { border-bottom: none; }
     .cal-type-badge { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; }
     .cal-type-badge.income { background: var(--emerald-dim); color: var(--emerald); }
-    .cal-type-badge.expense { background: var(--red-dim); color: var(--red); }
+    .cal-type-badge.expense { background: var(--raised); color: var(--text-secondary); }
 
     .cal-note-marker { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; color: var(--text-muted); }
 
@@ -282,7 +282,7 @@
              mapping worth spelling out once. -->
         <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; font-size:0.6875rem; color:var(--text-muted); flex-wrap:wrap;">
             <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--emerald);"></span>Income</span>
-            <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--red);"></span>Expense</span>
+            <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--bills-bar);"></span>Expense</span>
             <span style="display:inline-flex; align-items:center; gap:5px;"><span class="cal-dot" style="background:var(--gold);"></span>Recurring bill due</span>
         </div>
         <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-bottom:4px;">
@@ -303,12 +303,12 @@
                     {% if d.note_dot %}<i data-lucide="file-text" class="cal-note-marker" aria-hidden="true"></i>{% endif %}
                     <div class="cal-dots">
                         {% if d.income_dot %}<span class="cal-dot" style="background:var(--emerald);"></span>{% endif %}
-                        {% if d.expense_dot %}<span class="cal-dot" style="background:var(--red);"></span>{% endif %}
+                        {% if d.expense_dot %}<span class="cal-dot" style="background:var(--bills-bar);"></span>{% endif %}
                         {% if d.recurring_dot %}<span class="cal-dot" style="background:var(--gold);"></span>{% endif %}
                         {% for c in d.event_colors %}<span class="cal-dot" data-event-dot style="background:var(--note-{{ c }}-text);"></span>{% endfor %}
                     </div>
                     {% if d.net != 0 %}
-                        <span class="cal-day-net" data-cal-net="{{ d.net }}" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--red)' }}; background:{{ 'var(--emerald-dim)' if d.net > 0 else 'var(--red-dim)' }};">{{ '+' if d.net > 0 else '-' }}{{ currency_symbol }}{{ '%.0f'|format(d.net|abs) }}</span>
+                        <span class="cal-day-net" data-cal-net="{{ d.net }}" style="color:{{ 'var(--emerald)' if d.net > 0 else 'var(--text-secondary)' }}; background:{{ 'var(--emerald-dim)' if d.net > 0 else 'var(--raised)' }};">{{ '+' if d.net > 0 else '-' }}{{ currency_symbol }}{{ '%.0f'|format(d.net|abs) }}</span>
                     {% endif %}
                 </button>
             {% endfor %}
@@ -521,7 +521,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                     // back to the native amount.
                     var displayAmount = (typeof t.display_amount === "number") ? t.display_amount : t.amount;
                     net += t.type === "income" ? displayAmount : -displayAmount;
-                    var color = t.type === "income" ? "var(--emerald)" : "var(--red)";
+                    var color = t.type === "income" ? "var(--emerald)" : "var(--text-primary)";
                     html += '<div class="cal-tx-row">';
                     html += '<div style="min-width:0;">';
                     html += '<div style="font-size:0.875rem; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:4px;">' + '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.description) + '</span>' + (t.is_recurring ? '<i data-lucide="repeat" aria-hidden="true" style="width:11px; height:11px; stroke-width:2; color:var(--gold); flex-shrink:0;"></i>' : '') + '</div>';
@@ -532,7 +532,7 @@ window.CALENDAR_MONTH_EXPLICIT = {{ month_was_explicit|tojson }};
                 });
                 html += '</div>';
 
-                var netColor = net >= 0 ? "var(--emerald)" : "var(--red)";
+                var netColor = net >= 0 ? "var(--emerald)" : "var(--caution)";
                 html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-subtle);">';
                 html += '<span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Net</span>';
                 html += '<span style="font-family:var(--font-figure); font-size:1rem; font-weight:600; color:' + netColor + ';">' + formatMoney(net) + '</span>';

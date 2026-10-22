@@ -126,9 +126,9 @@ function initCompareModal() {
                     </div>
                     <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 8px;">${escapeHtml(s.month_label)}${s.projected ? " (projected)" : ""}</p>
                     <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 2px;">Net, without this</p>
-                    <p class="scenario-money" style="font-size:1rem; font-weight:600; color:${s.net_before >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 8px;">${signedMoney(s.net_before)}</p>
+                    <p class="scenario-money" style="font-size:1rem; font-weight:600; color:${s.net_before >= 0 ? "var(--emerald)" : "var(--caution)"}; margin:0 0 8px;">${signedMoney(s.net_before)}</p>
                     <p style="font-size:0.6875rem; color:var(--text-muted); margin:0 0 2px;">Net, with this scenario</p>
-                    <p class="scenario-money" style="font-size:1rem; font-weight:700; color:${s.net_after >= 0 ? "var(--emerald)" : "var(--red)"}; margin:0 0 10px;">${signedMoney(s.net_after)}</p>
+                    <p class="scenario-money" style="font-size:1rem; font-weight:700; color:${s.net_after >= 0 ? "var(--emerald)" : "var(--caution)"}; margin:0 0 10px;">${signedMoney(s.net_after)}</p>
                     <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.5;">${escapeHtml(s.insight)}</p>
                 </div>`
             )

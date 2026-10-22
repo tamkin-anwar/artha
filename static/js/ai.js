@@ -202,7 +202,7 @@ function initAI() {
             title: description,
             tag: {
                 text: (type === "income" ? "+" : "−") + amountText,
-                color: type === "income" ? "var(--emerald)" : "var(--red)",
+                color: type === "income" ? "var(--emerald)" : "var(--text-primary)",
             },
             meta: metaParts.join(" · "),
             successText: "Added to your transactions",
@@ -604,6 +604,9 @@ function initAI() {
     function autoResizeInput() {
         inputEl.style.height = "auto";
         inputEl.style.height = inputEl.scrollHeight + "px";
+        // Scroll only once the text passes the CSS max-height; before
+        // that a one-line box would show a scrollbar for nothing.
+        inputEl.style.overflowY = inputEl.scrollHeight > inputEl.clientHeight + 1 ? "auto" : "hidden";
     }
     inputEl.addEventListener("input", autoResizeInput);
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/currency_options.html" import currency_options %}
 {% block title %}{{ "Edit Account" if mode == "edit" else "New Account" }}{% endblock %}
 {% block content %}
 
@@ -9,7 +10,7 @@
 
     <a
         href="{{ url_for('accounts.index') }}"
-        style="display:inline-block; font-size:0.75rem; color:var(--text-secondary); text-decoration:none; margin-bottom:16px;"
+        style="display:inline-flex; align-items:center; min-height:32px; font-size:0.875rem; color:var(--accent); font-weight:600; text-decoration:none; margin-bottom:8px;"
     >
         &larr; Wealth
     </a>
@@ -68,9 +69,7 @@
                 <div>
                     <label for="currency" style="display:block; font-size:0.8125rem; color:var(--text-secondary); margin-bottom:4px;">Currency</label>
                     <select id="currency" name="currency" class="field-input w-full">
-                        {% for code in currency_codes %}
-                            <option value="{{ code }}" {% if (account.currency if account else (current_user.preferred_currency or 'USD')) == code %}selected{% endif %}>{{ code }}</option>
-                        {% endfor %}
+                        {{ currency_options(account.currency if account else (current_user.preferred_currency or 'USD')) }}
                     </select>
                 </div>
             </div>
@@ -88,7 +87,7 @@
 
             <div class="flex space-x-2 pt-2">
                 <button type="submit" class="btn-primary flex-1" style="height:44px;">
-                    {{ "Save" if mode == "edit" else "Add Account" }}
+                    {{ "Save" if mode == "edit" else "Add account" }}
                 </button>
                 <a
                     href="{{ url_for('accounts.index') }}"
