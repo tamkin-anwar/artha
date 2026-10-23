@@ -208,8 +208,15 @@ function initCsvImport() {
     commitBtn.addEventListener("click", async () => {
         const rowEls = Array.from(tbody.querySelectorAll("tr"));
         const rows = [];
+        // Lines left out that name one of the person's accounts teach
+        // Artha that account (finance.routes.remember_transfer_accounts).
+        const leftOut = [];
         rowEls.forEach((tr) => {
             const check = tr.querySelector(".csv-import-row-check");
+            if (check && !check.checked) {
+                const row = parsedRows[Number(tr.dataset.index)];
+                if (row && row.account_ref && !row.duplicate) leftOut.push({ account_ref: row.account_ref });
+            }
             if (!check || !check.checked) return;
             const idx = Number(tr.dataset.index);
             const base = parsedRows[idx];
@@ -231,7 +238,7 @@ function initCsvImport() {
                 method: "POST",
                 credentials: "same-origin",
                 headers: { "Content-Type": "application/json", ...csrfHeaders() },
-                body: JSON.stringify({ rows }),
+                body: JSON.stringify({ rows, left_out: leftOut }),
             });
             const data = await res.json().catch(() => ({}));
 

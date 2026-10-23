@@ -308,6 +308,12 @@ and Artha shouldn't repeat that.
   by the time left. Rows already in Artha (exact, or the same amount within
   three days under a name sharing a real word, e.g. an Apple Pay entry) and
   transfers between the person's own accounts start unticked.
+  The person's own accounts (`models/transfer_account.py`) are learned
+  from lines left out of an import that name an account ("SAV 7837",
+  `statement_reader.account_reference`; never a bare card mask, which is
+  on every card purchase); later lines naming one start unticked as
+  transfers. Settings lists them with Forget (web `#s-transfers`, API
+  `/me/transfer-accounts`).
   A scan or a photo (no text layer) is read by AI from its page images
   (`_read_scanned_statement`, `AIService.extract_scanned_statement`): at
   most 12 pages, two per call, the calls in parallel inside the same time

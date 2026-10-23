@@ -27,6 +27,12 @@ render order too.
 CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
+        "category": "improved",
+        "title": "Artha remembers your own accounts",
+        "body": "Leave a transfer to your savings out of an import once, and next time money moving to or from that account starts unticked, so it never counts as spending. See and forget them under Your accounts in Settings.",
+    },
+    {
+        "date": "2026-10-23",
         "category": "new",
         "title": "Import a paper statement",
         "body": "Scan a paper statement with your iPhone's camera, or upload a photo or a scanned PDF, and Artha reads the transactions off the page. It checks them against the statement's own balances, and you review every row before anything is saved.",

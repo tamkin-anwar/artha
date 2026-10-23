@@ -648,6 +648,29 @@ _OWN_TRANSFER_RE = re.compile(
 )
 
 
+# An account named on a statement line: a word that says it's an account
+# (savings, checking, A/C) and its number. Never a bare card mask ("XXXX1234",
+# "*1234"): that's on every card purchase, so learning it would leave the
+# person's shopping out of every import.
+_ACCOUNT_REF_RE = re.compile(
+    r"\b(SAVINGS|SAV|CHECKING|CHK|CHQ|CHEQUING|ACCOUNT|ACCT|A/C|MONEY\s+MARKET|MMA|ISA|FD|RD)"
+    r"\s*(?:NO\.?|#|ENDING(?:\s+IN)?)?\s*[X*]*\s*(\d{3,})\b",
+    re.IGNORECASE,
+)
+
+
+def account_reference(text: str) -> tuple[str, str] | None:
+    """(key, label) for the account a statement line names, like
+    ("sav 7837", "SAV 7837"), or None. The last four digits are kept, so
+    "SAV XXXXXX7837" and "SAV 7837" are the same account."""
+    m = _ACCOUNT_REF_RE.search(text or "")
+    if not m:
+        return None
+    word = re.sub(r"\s+", " ", m.group(1)).upper()
+    label = f"{word} {m.group(2)[-4:]}"
+    return label.lower(), label
+
+
 def is_own_transfer(bank_text: str, name: str, first: str | None, last: str | None) -> bool:
     """Money moved between the person's own accounts (to savings, a Venmo
     or Apple Cash cash-out, a transfer in their own name) isn't spending

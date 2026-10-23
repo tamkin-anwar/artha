@@ -103,6 +103,27 @@
                 <p class="settings-hint">Bill, budget and pace choices are shared with the Artha app on iPhone, iPad and Mac. Turning notifications on or off only affects this browser.</p>
             </section>
 
+            {# Accounts Artha treats as the person's own, learned from lines
+               they left out of an import (models/transfer_account.py). #}
+            {% set own_accounts = current_user.transfer_accounts.order_by('label').all() %}
+            {% if own_accounts %}
+            <section class="section" aria-labelledby="s-transfers">
+                <h2 class="section-label settings-label" id="s-transfers">Your accounts</h2>
+                <div class="card-list">
+                    {% for account in own_accounts %}
+                    <div class="settings-row">
+                        <span>{{ account.label }}</span>
+                        <form method="post" action="{{ url_for('finance.settings_forget_transfer_account', account_id=account.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-quiet btn-small" aria-label="Forget {{ account.label }}">Forget</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="settings-hint">When you leave a transfer to one of your accounts out of an import, Artha remembers it, and next time money moving to or from it starts unticked. Forget one and its transfers count again.</p>
+            </section>
+            {% endif %}
+
             <section class="section" aria-labelledby="s-calendar">
                 <h2 class="section-label settings-label" id="s-calendar">Calendar</h2>
                 <div class="card-list">

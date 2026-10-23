@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from ...extensions import db, ai_limit, AI_BULK_CATEGORIZE_LIMIT, AI_IMPORT_LIMIT
-from ...models import Transaction, User, PushSubscription
+from ...models import Transaction, User, PushSubscription, TransferAccount
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
 from ...models.merchant_category_rule import MerchantCategoryRule
@@ -2707,8 +2707,13 @@ def preview_statement(user, file, password: str | None = None) -> dict:
         _fill_uncategorized_via_ai(rows, timeout=remaining - 1)
 
     _flag_already_in_artha(user, rows)
+    # Accounts the person has told Artha are theirs, by leaving lines to or
+    # from them out of an earlier import (remember_transfer_accounts).
+    own_accounts = {a.key for a in TransferAccount.query.filter_by(user_id=user.id)}
     for row in rows:
-        row["transfer"] = statement_reader.is_own_transfer(
+        ref = statement_reader.account_reference(row["bank_text"])
+        row["account_ref"] = ref[1] if ref else None
+        row["transfer"] = bool(ref and ref[0] in own_accounts) or statement_reader.is_own_transfer(
             row["bank_text"], row["description"], user.first_name, user.last_name)
         row.pop("bank_text", None)
 
@@ -2779,7 +2784,49 @@ def _flag_already_in_artha(user, rows: list[dict]) -> None:
         )
 
 
-def import_statement_rows(user, rows) -> tuple[int, int]:
+def remember_transfer_accounts(user, left_out) -> list[str]:
+    """Remembers the accounts named on lines the person left out of an
+    import ("SAV 7837"), so lines to or from them start unticked next time,
+    the way Copilot learns from what you do instead of asking you to set
+    rules up. Only a line that names an account (statement_reader.
+    account_reference) teaches anything. Returns the labels newly learned.
+    The caller commits."""
+    if not isinstance(left_out, list):
+        return []
+    known = {a.key for a in TransferAccount.query.filter_by(user_id=user.id)}
+    learned = []
+    for row in left_out[:200]:
+        if not isinstance(row, dict) or row.get("duplicate"):
+            continue
+        ref = statement_reader.account_reference(str(row.get("account_ref") or ""))
+        if ref is None or ref[0] in known:
+            continue
+        known.add(ref[0])
+        db.session.add(TransferAccount(user_id=user.id, key=ref[0], label=ref[1]))
+        learned.append(ref[1])
+    return learned
+
+
+def forget_transfer_account(user, account_id) -> bool:
+    """Stops treating one remembered account as the person's own (Settings'
+    Forget). False when there's no such account of theirs."""
+    account = db.session.get(TransferAccount, account_id) if isinstance(account_id, int) else None
+    if account is None or account.user_id != user.id:
+        return False
+    db.session.delete(account)
+    db.session.commit()
+    return True
+
+
+@finance_bp.route("/settings/transfer-accounts/<int:account_id>/forget", methods=["POST"])
+@login_required
+def settings_forget_transfer_account(account_id):
+    if forget_transfer_account(current_user, account_id):
+        flash("Artha will count that account's transfers again.", "success")
+    return redirect(url_for("auth.settings_page") + "#s-transfers")
+
+
+def import_statement_rows(user, rows, left_out=None) -> tuple[int, int]:
     """
     Saves the (possibly edited) rows a preview produced, for the website
     and the app alike, and returns (imported, skipped). Each row keeps its
@@ -2872,6 +2919,9 @@ def import_statement_rows(user, rows) -> tuple[int, int]:
         ))
         imported += 1
 
+    # Lines the person left out that name one of their accounts teach
+    # Artha that account (remember_transfer_accounts).
+    remember_transfer_accounts(user, left_out)
     try:
         db.session.commit()
     except Exception:
@@ -2908,7 +2958,7 @@ def import_commit():
     (import_statement_rows)."""
     data = request.get_json(silent=True) or {}
     try:
-        imported, skipped = import_statement_rows(current_user, data.get("rows"))
+        imported, skipped = import_statement_rows(current_user, data.get("rows"), data.get("left_out"))
     except ValidationError as exc:
         return jsonify({"message": str(exc)}), 400
     except Exception as e:

@@ -30,7 +30,7 @@ from functools import wraps
 from flask import g, jsonify, request
 
 from ...extensions import AI_IMPORT_LIMIT, AI_LIMIT_MESSAGE, db, limiter, user_or_ip_key
-from ...models import ApiToken, Goal, Transaction, User
+from ...models import ApiToken, Goal, Transaction, TransferAccount, User
 from ...models.account import Account
 from ...cli import DEFAULT_REMINDER_HOUR
 from ...services.exchange_rate_service import get_rates
@@ -83,6 +83,7 @@ from ..finance.routes import (
     pair_transaction_record,
     preview_statement,
     unpair_transaction_record,
+    forget_transfer_account,
     keep_new_price_record,
     split_transaction_record,
     unsplit_transaction_record,
@@ -684,6 +685,8 @@ def preview_import():
         "currency": row.get("currency") or g.api_user.preferred_currency or "USD",
         "duplicate": bool(row.get("duplicate")),
         "transfer": bool(row.get("transfer")),
+        # The account the line names ("SAV 7837"), when it names one.
+        "account_ref": row.get("account_ref"),
     } for row in result["rows"]]
     return jsonify({
         "rows": rows, "warnings": result["warnings"], "notice": result.get("notice"),
@@ -691,17 +694,35 @@ def preview_import():
     })
 
 
+@api_bp.get("/me/transfer-accounts")
+@api_auth_required
+def transfer_accounts():
+    """The accounts Artha treats as the person's own (learned from imports):
+    lines to or from them start unticked as transfers."""
+    accounts = TransferAccount.query.filter_by(user_id=g.api_user.id).order_by(TransferAccount.label).all()
+    return jsonify({"accounts": [{"id": a.id, "label": a.label} for a in accounts]})
+
+
+@api_bp.delete("/me/transfer-accounts/<int:account_id>")
+@api_auth_required
+def delete_transfer_account(account_id):
+    if not forget_transfer_account(g.api_user, account_id):
+        return api_error(404, "not_found", "That account isn't remembered anymore.")
+    return "", 204
+
+
 @api_bp.post("/imports")
 @api_auth_required
 def commit_import():
-    """Body: {"rows": [...]}, the reviewed rows from /imports/preview (only
-    the ones to keep, edited as the person chose). Saved exactly as the
+    """Body: {"rows": [...], "left_out": [...]}: the reviewed rows from
+    /imports/preview to keep (edited as the person chose), and the ones
+    they unticked, whose account_ref teaches Artha their own accounts. Saved exactly as the
     website saves them (finance.routes.import_statement_rows). Returns how
     many were imported and how many couldn't be."""
     data = _json_body() or {}
     user = g.api_user
     try:
-        imported, skipped = import_statement_rows(user, data.get("rows"))
+        imported, skipped = import_statement_rows(user, data.get("rows"), data.get("left_out"))
     except ValidationError as exc:
         return api_error(400, "invalid_import", str(exc))
     except Exception:
