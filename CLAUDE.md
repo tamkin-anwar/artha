@@ -308,6 +308,14 @@ and Artha shouldn't repeat that.
   by the time left. Rows already in Artha (exact, or the same amount within
   three days under a name sharing a real word, e.g. an Apple Pay entry) and
   transfers between the person's own accounts start unticked.
+  A scan or a photo (no text layer) is read by AI from its page images
+  (`_read_scanned_statement`, `AIService.extract_scanned_statement`): at
+  most 12 pages, two per call, the calls in parallel inside the same time
+  budget; the tool also returns the opening and closing balance, so a scan
+  gets the same totals check. The app scans paper with VisionKit's document
+  camera (iPhone, iPad) into an in-memory PDF and converts HEIC photos to
+  JPEG first. `templates/privacy.html` says page images go to Claude for
+  scans only.
   Reading is two-tiered: a fast, free, deterministic regex parser runs first and
   handles most real statements; an AI-assisted fallback
   (`_parse_statement_pdf_with_ai`, same tool-use pattern as above) only

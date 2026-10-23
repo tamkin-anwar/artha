@@ -27,6 +27,12 @@ render order too.
 CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
+        "category": "new",
+        "title": "Import a paper statement",
+        "body": "Scan a paper statement with your iPhone's camera, or upload a photo or a scanned PDF, and Artha reads the transactions off the page. It checks them against the statement's own balances, and you review every row before anything is saved.",
+    },
+    {
+        "date": "2026-10-23",
         "category": "improved",
         "title": "A one-off charge doesn't change your bill",
         "body": "If a bill is charged a different amount once, like a late fee, Artha still expects the usual amount next time. When it's really a new price, tap Expect it from now on, or Artha picks it up after two charges in a row.",

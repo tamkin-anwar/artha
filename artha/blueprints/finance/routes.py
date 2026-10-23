@@ -2057,14 +2057,21 @@ def _parse_statement_pdf(
 
     with pdf:
         pages_text = [page.extract_text() or "" for page in pdf.pages]
+        if not any(text.strip() for text in pages_text):
+            # A scan: no text layer, so the pages themselves go to AI.
+            try:
+                images = [_image_for_ai(page.to_image(resolution=150).original)
+                          for page in pdf.pages[:_SCAN_MAX_PAGES]]
+            except Exception:
+                log.warning("Couldn't render a scanned statement's pages", exc_info=True)
+                images = []
+    if not any(text.strip() for text in pages_text):
+        if not images:
+            return [], ["Couldn't read that PDF. Try the PDF or CSV your bank lets you download."], False, None
+        rows, warnings, totals = _read_scanned_statement(images, fallback_currency, deadline)
+        return rows, warnings, ("scan" if rows else False), totals
 
     full_text = "\n".join(pages_text)
-    if not any(text.strip() for text in pages_text):
-        return [], [
-            "Couldn't read any text from that PDF. This works on text-based statements "
-            "(the normal kind a bank emails or lets you download). A scanned or "
-            "photographed page has no text to read."
-        ], False, None
 
     day_first = _detect_day_first(full_text)
     currency = _detect_import_currency(full_text, fallback_currency)
@@ -2289,42 +2296,143 @@ def _parse_statement_pdf_with_ai(
         if "error" in result:
             log.warning("AI statement-extraction fallback failed: %s", result["error"])
             continue
-        for raw in result.get("transactions") or []:
-            if not isinstance(raw, dict):
-                continue
-            try:
-                parsed_date = datetime.strptime(str(raw.get("date", "")), "%Y-%m-%d").date()
-            except ValueError:
-                warnings.append("Skipped a transaction: couldn't make sense of its date.")
-                continue
-            description = str(raw.get("description") or "").strip()
-            if not description or not any(ch.isalpha() for ch in description):
-                warnings.append(
-                    f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: no usable description."
-                )
-                continue
-            t_type = raw.get("type")
-            if t_type not in ("income", "expense"):
-                continue
-            try:
-                amount = abs(float(raw.get("amount")))
-            except (TypeError, ValueError):
-                continue
-            if amount == 0:
-                continue
-            rows.append({
-                "date": parsed_date.strftime("%Y-%m-%d"),
-                "description": description,
-                "amount": amount,
-                "type": t_type,
-                "category": _guess_category(description, t_type),
-            })
+        _rows_from_ai(result, rows, warnings)
         if result.get("truncated"):
             warnings.append(
                 "This statement was long enough that only the first part of it was read. "
                 "Later transactions may be missing."
             )
     return rows, warnings
+
+
+def _rows_from_ai(result: dict, rows: list[dict], warnings: list[str]) -> None:
+    """Appends the usable transactions in one AI extraction result to
+    `rows`, and a warning for each one it had to leave out."""
+    for raw in result.get("transactions") or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            parsed_date = datetime.strptime(str(raw.get("date", "")), "%Y-%m-%d").date()
+        except ValueError:
+            warnings.append("Skipped a transaction: couldn't make sense of its date.")
+            continue
+        description = str(raw.get("description") or "").strip()
+        if not description or not any(ch.isalpha() for ch in description):
+            warnings.append(
+                f"Skipped a transaction on {parsed_date.strftime('%b %d, %Y')}: no usable description."
+            )
+            continue
+        t_type = raw.get("type")
+        if t_type not in ("income", "expense"):
+            continue
+        try:
+            amount = abs(float(raw.get("amount")))
+        except (TypeError, ValueError):
+            continue
+        if amount == 0:
+            continue
+        rows.append({
+            "date": parsed_date.strftime("%Y-%m-%d"),
+            "description": description,
+            "amount": amount,
+            "type": t_type,
+            "category": _guess_category(description, t_type),
+        })
+
+
+# ---------------------------------------------------------------------------
+# Scanned statements and photos: no text to read, so AI reads the pages
+# themselves, a couple per call, the calls side by side, inside the same
+# time budget, with the same totals check (it reads the opening and closing
+# balance off the page too).
+# ---------------------------------------------------------------------------
+
+_SCAN_MAX_PAGES = 12
+_SCAN_PAGES_PER_CALL = 2
+_SCAN_PARALLEL_CALLS = 6
+# Long enough edge for small print to stay readable, small enough to keep
+# each request quick.
+_SCAN_LONG_EDGE = 1600
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif")
+
+
+class UnreadablePhoto(ValueError):
+    """A photo in a format Artha can't open (HEIC without a converter)."""
+
+
+def _looks_like_image(data: bytes, name: str) -> bool:
+    if name.endswith(_IMAGE_EXTENSIONS):
+        return True
+    head = data[:16]
+    return (head.startswith(b"\xff\xd8\xff") or head.startswith(b"\x89PNG")
+            or (head[:4] == b"RIFF" and head[8:12] == b"WEBP") or head[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"))
+
+
+def _image_for_ai(image) -> tuple[str, str]:
+    """A PIL image (or raw bytes of one) as a JPEG for the AI: upright,
+    RGB, its long edge at most _SCAN_LONG_EDGE."""
+    import base64
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    if isinstance(image, (bytes, bytearray)):
+        try:
+            image = Image.open(io.BytesIO(image))
+            image.load()
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+            raise UnreadablePhoto() from None
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    image.thumbnail((_SCAN_LONG_EDGE, _SCAN_LONG_EDGE))
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG", quality=82)
+    return "image/jpeg", base64.standard_b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _read_scanned_statement(images: list[tuple[str, str]], fallback_currency: str,
+                            deadline: float | None) -> tuple[list[dict], list[str], str | None]:
+    """Transactions from images of statement pages. Returns (rows,
+    warnings, totals) like the PDF reader."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ...services.ai_service import AIService  # local: circular import, see above
+
+    if not images:
+        return [], [], None
+    timeout = None
+    if deadline is not None:
+        timeout = deadline - time.monotonic() - 1
+        if timeout < 6:
+            return [], ["Reading that scan took too long. Try again in a moment."], None
+    chunks = [images[i:i + _SCAN_PAGES_PER_CALL] for i in range(0, len(images), _SCAN_PAGES_PER_CALL)]
+    with ThreadPoolExecutor(max_workers=min(_SCAN_PARALLEL_CALLS, len(chunks))) as pool:
+        results = list(pool.map(lambda c: AIService.extract_scanned_statement(c, timeout=timeout), chunks))
+
+    rows: list[dict] = []
+    warnings: list[str] = []
+    readable = [r for r in results if "error" not in r]
+    for result in results:
+        if "error" in result:
+            log.warning("Reading a scanned statement failed: %s", result["error"])
+            continue
+        _rows_from_ai(result, rows, warnings)
+    if not readable:
+        return [], ["Artha couldn't read that scan. Try again in a moment, or upload the PDF your bank emails."], None
+    if len(readable) < len(results):
+        warnings.append("Some pages couldn't be read, so transactions may be missing.")
+
+    currency = next((str(r["currency"]).upper() for r in readable
+                     if str(r.get("currency") or "").upper() in CURRENCY_CODES), fallback_currency)
+    for row in rows:
+        row["currency"] = currency
+    opening = next((r["opening_balance"] for r in readable if isinstance(r.get("opening_balance"), (int, float))), None)
+    closing = next((r["closing_balance"] for r in reversed(readable) if isinstance(r.get("closing_balance"), (int, float))), None)
+    totals = None
+    if opening is not None and closing is not None:
+        card = any(r.get("is_credit_card") is True for r in readable)
+        totals = statement_reader.check_totals(
+            f"Opening balance {opening:.2f}\nClosing balance {closing:.2f}", rows, card)
+    if len(images) >= _SCAN_MAX_PAGES:
+        warnings.append(f"Only the first {_SCAN_MAX_PAGES} pages were read.")
+    return rows, warnings, totals
 
 
 # Bounds one categorize_transactions call — a very large statement's tail
@@ -2566,7 +2674,17 @@ def preview_statement(user, file, password: str | None = None) -> dict:
     ai_assisted = False
     totals = None
 
-    if name.endswith((".ofx", ".qfx")) or statement_reader.looks_like_ofx(data):
+    if _looks_like_image(data, name):
+        # A photo of a paper statement: read like a scanned PDF.
+        try:
+            images = [_image_for_ai(data)]
+        except UnreadablePhoto:
+            raise ValidationError(
+                "Artha can't open that kind of photo. Save it as a JPEG or PNG, or take a screenshot of it."
+            ) from None
+        rows, warnings, totals = _read_scanned_statement(images, fallback, deadline)
+        ai_assisted = "scan" if rows else False
+    elif name.endswith((".ofx", ".qfx")) or statement_reader.looks_like_ofx(data):
         rows, warnings, _ = statement_reader.parse_ofx(data, fallback)
     elif name.endswith(".qif") or statement_reader.looks_like_qif(data):
         rows, warnings = statement_reader.parse_qif(data, fallback)
@@ -2595,7 +2713,12 @@ def preview_statement(user, file, password: str | None = None) -> dict:
         row.pop("bank_text", None)
 
     result = {"rows": rows, "warnings": warnings, "totals": totals}
-    if ai_assisted:
+    if ai_assisted == "scan":
+        result["notice"] = (
+            "This was a scan or a photo, so Artha read it with AI. Double-check "
+            "the dates and amounts below before importing."
+        )
+    elif ai_assisted:
         # Distinct from "warnings" (which the client renders as "N rows
         # skipped") — this isn't a skip, it's a heads-up that these rows
         # came from AI-assisted reading rather than direct parsing, worth

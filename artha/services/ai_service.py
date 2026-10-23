@@ -320,10 +320,35 @@ _STATEMENT_TOOL = {
                     "required": ["date", "description", "amount", "type"],
                 },
             },
+            # Read from a scanned page or photo, where there's no text for
+            # Artha to find these in itself (statement_reader.check_totals
+            # does that for text). Left out when the page doesn't show them.
+            "opening_balance": {"type": "number", "description": "The statement's opening/beginning/previous balance, if shown."},
+            "closing_balance": {"type": "number", "description": "The statement's closing/ending/new balance, if shown."},
+            "currency": {"type": "string", "description": "ISO 4217 code of the statement's currency, if shown (USD, GBP, EUR, INR, BDT...)."},
+            "is_credit_card": {"type": "boolean", "description": "True for a credit card statement."},
         },
         "required": ["transactions"],
     },
 }
+
+_SCAN_SYSTEM_PROMPT = _STATEMENT_SYSTEM_PROMPT.replace(
+    "You read bank/card statement text extracted from a PDF",
+    "You read photographed or scanned pages of a bank/card statement",
+).replace(
+    "The text was pulled from a table \
+layout, so it often arrives jumbled: a transaction's date and description \
+may sit on one line while its amount and running balance sit on another, \
+several lines down, with no date on that line at all. Read the whole \
+document as a human reading a printed statement would, not line by line.",
+    "The pages may be photographed at an angle, slightly blurred, or \
+split across several images; read every row in every image the way a \
+person reading the paper statement would, following each row across \
+to its own amount. If a value is unreadable, leave that transaction out \
+rather than guess.",
+) + """- Also give the statement's opening and closing balance, its currency and \
+whether it's a credit card statement, when the pages show them.
+"""
 
 # ---------------------------------------------------------------------------
 # Statement-import categorization — fills in the category for whatever an
@@ -981,6 +1006,67 @@ class AIService:
     # ------------------------------------------------------------------
     # Statement-PDF extraction  (fallback for the deterministic PDF parser)
     # ------------------------------------------------------------------
+
+    @classmethod
+    def extract_scanned_statement(cls, images: list[tuple[str, str]], context: str = "",
+                                  timeout: float | None = None) -> dict:
+        """
+        Reads transactions from images of statement pages: a scanned PDF
+        (no text layer to parse) or a photo of a paper statement.
+
+        Args:
+            images: (media_type, base64 data) per page, a few at a time;
+                    the caller splits a long statement across calls.
+            context: A line to help with dates ("This statement's period
+                     ends October 6, 2026."), or "".
+            timeout: Seconds this call may take (the import's budget).
+
+        Returns:
+            {"transactions": [...], "opening_balance", "closing_balance",
+             "currency", "is_credit_card"} (the last four may be absent)
+            {"error": str}
+        """
+        if not images:
+            return {"transactions": []}
+        try:
+            client = _get_client()
+        except RuntimeError as exc:
+            log.error("AI client init failed for scanned statement: %s", exc)
+            return {"error": str(exc)}
+
+        content = [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}}
+            for media_type, data in images
+        ]
+        content.append({"type": "text", "text": (context + "\n" if context else "") +
+                        "Record every transaction on these statement pages."})
+        try:
+            resp = client.messages.create(
+                model=_get_model(),
+                max_tokens=_STATEMENT_MAX_TOKENS,
+                system=_SCAN_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content}],
+                tools=[_STATEMENT_TOOL],
+                tool_choice={"type": "tool", "name": "record_transactions"},
+                **({"timeout": timeout} if timeout else {}),
+            )
+        except APITimeoutError:
+            log.warning("Anthropic timeout reading a scanned statement.")
+            return {"error": "Request timed out. Please try again."}
+        except APIConnectionError as exc:
+            log.error("Anthropic connection error reading a scanned statement: %s", exc)
+            return {"error": "Could not reach AI service. Check connectivity."}
+        except APIStatusError as exc:
+            log.error("Anthropic status error %s reading a scanned statement: %s", exc.status_code, exc.message)
+            return {"error": f"AI service error ({exc.status_code}). Please try again."}
+        except Exception as exc:
+            log.exception("Unexpected error reading a scanned statement: %s", exc)
+            return {"error": "An unexpected error occurred."}
+
+        tool_call = next((block for block in resp.content if block.type == "tool_use"), None)
+        data = dict(tool_call.input) if tool_call else {}
+        data.setdefault("transactions", [])
+        return data
 
     @classmethod
     def extract_pdf_transactions(cls, pages_text: list[str], timeout: float | None = None) -> dict:

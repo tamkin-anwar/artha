@@ -148,13 +148,13 @@
 
         <div id="csv-import-step-upload">
             <p class="csv-import-hint">
-                Upload a statement from your bank: PDF, CSV, OFX, QFX or QIF, from any country. Transactions import
-                under the date on the statement, not today's, so an old statement won't clutter this month. PDFs need
-                to be text-based, not scanned or photographed.
+                Upload a statement from your bank: PDF, CSV, OFX, QFX or QIF, from any country, or a scan or photo of
+                a paper one. Transactions import under the date on the statement, not today's, so an old statement
+                won't clutter this month.
             </p>
             <p id="csv-import-error" class="csv-import-error"></p>
             <div class="csv-import-file-row">
-                <input type="file" id="csv-import-file" accept=".csv,text/csv,.pdf,application/pdf,.ofx,.qfx,.qif,.txt">
+                <input type="file" id="csv-import-file" accept=".csv,text/csv,.pdf,application/pdf,.ofx,.qfx,.qif,.txt,image/jpeg,image/png,image/webp,image/heic">
                 <button type="button" id="csv-import-preview-btn" class="btn-primary" style="padding:8px 18px; font-size:0.8125rem;">Preview</button>
             </div>
             <div id="csv-import-password-row" class="csv-import-file-row" style="margin-top:10px;" hidden>
