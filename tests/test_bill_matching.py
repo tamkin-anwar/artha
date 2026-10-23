@@ -102,15 +102,27 @@ def test_a_new_price_is_taken_and_carried_forward(auth_client, user):
     assert len(rows) == 1 and rows[0].amount == Decimal("16.99")
 
 
-def test_rent_paid_under_another_name_matches_on_the_exact_amount(auth_client, user):
+def test_a_bill_paid_under_another_name_matches_on_an_exact_amount_with_cents(auth_client, user):
     due = _day_this_month()
-    _track(user, "Rent", "1650.00", due, category="housing")
+    _track(user, "Electric", "87.43", due, category="utilities")
     _generate(auth_client)
 
-    _add(auth_client, "Zelle to J Smith", "1650.00", due - timedelta(days=2))
+    _add(auth_client, "AUTOPAY UTILCO 4471", "87.43", due - timedelta(days=2))
 
     rows = _expenses_this_month(user)
-    assert len(rows) == 1 and rows[0].description == "Rent" and rows[0].bill_matched
+    assert len(rows) == 1 and rows[0].description == "Electric" and rows[0].bill_matched
+
+
+def test_a_round_amount_under_another_name_is_not_enough(auth_client, user):
+    # From the first real cleanup run: a $60 Zelle payment to someone else
+    # is not the $60.00 Verizon bill.
+    due = _day_this_month()
+    _track(user, "Verizon Bill", "60.00", due, category="utilities")
+    _generate(auth_client)
+
+    _add(auth_client, "Zelle payment to ATTERNA LLC", "60.00", due + timedelta(days=2))
+
+    assert len(_expenses_this_month(user)) == 2
 
 
 def test_an_unrelated_purchase_is_left_alone(auth_client, user):
@@ -308,8 +320,11 @@ def test_cleanup_merges_past_pairs_and_leaves_the_rest(app, user):
     _row(user, "Netflix", "15.49", old, is_recurring=True, recurring_month=old.replace(day=1), category="subscriptions")
     _row(user, "NETFLIX.COM", "15.99", old + timedelta(days=2), import_source="csv")
     # Rent typed in as a repeating bill, and the Zelle payment for it.
-    _row(user, "Rent", "1650.00", older, is_recurring=True, import_source="manual", category="housing")
-    _row(user, "Zelle to J Smith", "1650.00", older - timedelta(days=1), import_source="csv")
+    _row(user, "Rent", "1650.25", older, is_recurring=True, import_source="manual", category="housing")
+    _row(user, "Zelle to J Smith", "1650.25", older - timedelta(days=1), import_source="csv")
+    # A round amount to someone else is left alone (Verizon vs a $60 Zelle).
+    _row(user, "Verizon Bill", "60.00", old, is_recurring=True, recurring_month=old.replace(day=1))
+    _row(user, "Zelle payment to ATTERNA LLC", "60.00", old + timedelta(days=2), import_source="csv")
     # Two bills with the same amount and a payment that could be either.
     _row(user, "Gym", "30.00", older, is_recurring=True, recurring_month=older.replace(day=1))
     _row(user, "Phone", "30.00", older, is_recurring=True, recurring_month=older.replace(day=1))
@@ -321,7 +336,8 @@ def test_cleanup_merges_past_pairs_and_leaves_the_rest(app, user):
 
     assert "Merged 2 pair(s)" in result.output, result.output
     names = sorted(t.description for t in Transaction.query.filter_by(user_id=user.id).all())
-    assert names == ["Gym", "Netflix", "Online payment", "Phone", "Rent", "Whole Foods"]
+    assert names == ["Gym", "Netflix", "Online payment", "Phone", "Rent", "Verizon Bill", "Whole Foods",
+                     "Zelle payment to ATTERNA LLC"]
     netflix = Transaction.query.filter_by(user_id=user.id, description="Netflix").one()
     assert netflix.amount == Decimal("15.99") and netflix.bill_matched and netflix.import_source == "csv"
     assert netflix.timestamp.date() == old + timedelta(days=2)

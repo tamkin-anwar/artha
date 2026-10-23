@@ -25,8 +25,9 @@ dates are within 10 days):
 
 It only matches when it's sure: the same type and currency, the same
 calendar month as the occurrence, a date within the window for that
-cadence, and either the exact amount or a similar name with an amount within
-10%. Two equally good candidates means no match. Leaving a real duplicate
+cadence, and either a similar name with an amount within 10%, or the exact
+amount when it has cents ($9.99 is nearly a fingerprint; a round $60.00
+needs the name too). Two equally good candidates means no match. Leaving a real duplicate
 for the person to delete is far better than silently merging two genuine
 purchases.
 """
@@ -91,7 +92,16 @@ def _score(bill_name: str, bill_amount: Decimal, charge_description: str, charge
     matching name before an amount-only match, then the closer date."""
     same_name = names_match(bill_name, charge_description)
     if charge_amount == bill_amount:
-        return (0 if same_name else 1, distance)
+        if same_name:
+            return (0, distance)
+        # An exact amount alone is only trusted when it has cents ($9.99,
+        # $65.33): close to a fingerprint. A round one ($60.00) is too common
+        # to tell bills apart by, and needs the name to match as well (a
+        # "Zelle payment to ..." for $60 isn't the $60 Verizon bill, as the
+        # first real cleanup run showed).
+        if charge_amount % 1 != 0:
+            return (1, distance)
+        return None
     if same_name and bill_amount > 0 and abs(charge_amount - bill_amount) <= bill_amount * CLOSE_AMOUNT:
         return (0, distance)
     return None

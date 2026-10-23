@@ -169,8 +169,9 @@ and Artha shouldn't repeat that.
   charge (`create_transaction`, the import commit) is first offered to
   `find_open_occurrence`, which merges it into an open bill row of the
   same type and currency in the same month (within 10 days for monthly,
-  2 weekly, 4 biweekly) when the amount matches exactly or a similar name
-  is within 10%; `generate_due_recurring` likewise adopts an earlier
+  2 weekly, 4 biweekly) when a similar name is within 10%, or the exact
+  amount matches and has cents (a round $60.00 alone matched a $60 Zelle
+  to someone else in the first real cleanup run, so it needs the name); `generate_due_recurring` likewise adopts an earlier
   charge (`find_charge_for`) instead of adding a copy. Ties never match.
   `Transaction.bill_matched` marks an occurrence a charge already landed
   on, and `Transaction.occurrence_day` keeps a weekly bill's due date
