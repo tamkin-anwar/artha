@@ -236,7 +236,8 @@ and Artha shouldn't repeat that.
   in the sidebar footer (`[data-feedback-open]` forwards to the hidden
   `#feedback-fab`), and the top bar only renders below `md`. Font sizes
   are rem, never px, so text follows the browser's font-size setting.
-  `templates/privacy.html` has a section on the iPhone app; keep it in
+  `templates/privacy.html` has a section on the iPhone, iPad and Mac apps
+  (what each keeps, widgets, Siri) and one on website notifications; keep it in
   step with what the app does.
 - Models live in `artha/models/`, one file per model, exported through
   `__init__.py`.
