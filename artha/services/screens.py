@@ -97,6 +97,13 @@ def month_info(snap) -> dict:
     }
 
 
+def _paired_charge(tx: Transaction) -> str | None:
+    pairing = tx.pairing if tx.bill_matched else None
+    if not isinstance(pairing, dict) or pairing.get("kind") not in ("absorbed", "adopted"):
+        return None
+    return (pairing.get("charge") or {}).get("description") or tx.description
+
+
 def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict:
     """A transaction's own amount and currency, exactly as entered. When
     that currency isn't the person's display currency, its converted
@@ -117,6 +124,10 @@ def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict
         # "manual", "csv" (statement import), "apple_pay", or null (older rows).
         "source": tx.import_source,
         "needs_review": bool(tx.needs_review),
+        # The real charge's own name when Artha paired it with this bill
+        # (services/bill_matching.py) and the pairing can still be split;
+        # null otherwise.
+        "paired_charge": _paired_charge(tx),
         "display_amount": None,
     }
     if tx.native_currency != display_currency:

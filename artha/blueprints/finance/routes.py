@@ -480,7 +480,8 @@ def create_transaction(user, fields) -> Transaction:
             user.id, t_type, currency, amount, description, timestamp.date())
         if occurrence is not None:
             bill_matching.absorb_charge(
-                occurrence, amount=amount, currency=currency, usd_value=usd_value,
+                occurrence, description=description, category=category,
+                amount=amount, currency=currency, usd_value=usd_value,
                 usd_rate_locked=usd_rate_locked, timestamp=timestamp,
                 import_source=import_source, needs_review=import_source == "apple_pay")
             try:
@@ -967,7 +968,7 @@ def generate_due_recurring(user) -> dict:
                     if _exists_on_day(key, due):
                         skipped += 1
                     elif (charge := bill_matching.find_charge_for(template_tx, due)) is not None:
-                        bill_matching.adopt_charge(charge, template_tx, due)
+                        bill_matching.adopt_charge(charge, template_tx, due, due)
                         adopted.append(charge)
                         skipped += 1
                     else:
@@ -1002,7 +1003,7 @@ def generate_due_recurring(user) -> dict:
                 elif (charge := bill_matching.find_charge_for(template_tx, target)) is not None:
                     # Already paid by a real charge under another name
                     # (bill_matching): that charge becomes this occurrence.
-                    bill_matching.adopt_charge(charge, template_tx, month)
+                    bill_matching.adopt_charge(charge, template_tx, month, target)
                     adopted.append(charge)
                     skipped += 1
                 else:
@@ -2470,7 +2471,8 @@ def import_commit():
         occurrence = bill_matching.find_open_occurrence(uid, t_type, currency, amount, description, timestamp.date())
         if occurrence is not None:
             bill_matching.absorb_charge(
-                occurrence, amount=amount, currency=currency, usd_value=usd_value,
+                occurrence, description=description, category=category,
+                amount=amount, currency=currency, usd_value=usd_value,
                 usd_rate_locked=usd_rate_locked, timestamp=timestamp,
                 import_source="csv", needs_review=False)
             imported += 1
@@ -2874,6 +2876,38 @@ def activity_page():
         categories=TRANSACTION_CATEGORIES,
         selected=request.args.get("selected", type=int),
     )
+
+
+def unpair_transaction_record(user, tx: Transaction) -> tuple[Transaction, Transaction]:
+    """Splits a bill and the charge Artha paired on `tx` back into two
+    transactions (bill_matching.unpair), for the web Activity editor and
+    the app alike. Raises bill_matching.NotPaired when there's nothing to
+    split; any other exception is a real failure (already rolled back)."""
+    try:
+        bill, charge = bill_matching.unpair(tx)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if tx.type == "expense":
+        _check_budget_overage_alerts(user.id)
+    return bill, charge
+
+
+@finance_bp.route("/activity/<int:tx_id>/unpair", methods=["POST"])
+@login_required
+def activity_unpair(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    try:
+        bill, charge = unpair_transaction_record(current_user, tx)
+    except bill_matching.NotPaired as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
+        log.error("Error unpairing transaction %s: %s", tx_id, e, exc_info=True)
+        return jsonify({"message": "Artha couldn't split those. Try again in a moment."}), 500
+    return jsonify({"bill_id": bill.id, "charge_id": charge.id})
 
 
 @finance_bp.route("/activity/reviewed", methods=["POST"])

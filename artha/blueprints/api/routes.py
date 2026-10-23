@@ -44,6 +44,7 @@ from ...services.screens import (
     transactions_screen,
     wealth_screen,
 )
+from ...services.bill_matching import NotPaired
 from ...services.goals import GoalError, add_to_goal, delete_goal, describe_goal, save_goal
 from ...services.recurring_detect import SuggestionError, dismiss_suggestion, track_suggestion
 from ...utils import CURRENCY_CODES, user_today
@@ -73,6 +74,7 @@ from ..finance.routes import (
     remove_category_budget,
     save_budget,
     save_category_budget,
+    unpair_transaction_record,
     update_transaction_fields,
 )
 from ..push.routes import update_notification_preferences
@@ -484,6 +486,33 @@ def edit_transaction(transaction_id):
     currency = user.preferred_currency or "USD"
     rates = get_rates() if currency != "USD" else None
     return jsonify({"transaction": serialize_transaction(tx, currency, rates)})
+
+
+@api_bp.post("/transactions/<int:transaction_id>/unpair")
+@api_auth_required
+def unpair_transaction(transaction_id):
+    """Splits a bill and the charge Artha paired with it (a row whose
+    paired_charge isn't null) back into two transactions, the same as
+    Unpair on the web. Returns both; the charge won't be paired with a
+    bill on its own again."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    user = g.api_user
+    try:
+        bill, charge = unpair_transaction_record(user, tx)
+    except NotPaired as exc:
+        return api_error(400, "not_paired", str(exc))
+    except Exception:
+        log.error("Error unpairing transaction %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't split those. Try again in a moment.")
+
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({
+        "bill": serialize_transaction(bill, currency, rates),
+        "charge": serialize_transaction(charge, currency, rates),
+    })
 
 
 @api_bp.delete("/transactions/<int:transaction_id>")

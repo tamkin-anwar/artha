@@ -93,6 +93,11 @@ function select(row, { push = true } = {}) {
     setCategory(tx.category);
     syncType();
     field("detail-review").hidden = !tx.needs_review;
+    field("detail-paired").hidden = !tx.paired_charge;
+    field("detail-paired-title").textContent = tx.type === "income" ? "Paired with its repeating income" : "Paired with its bill";
+    field("detail-paired-text").textContent = tx.paired_charge
+        ? `Artha matched \u201C${tx.paired_charge}\u201D to this, so it counts once.`
+        : "";
     field("detail-source").textContent = SOURCES[tx.source] || "";
     errorEl.hidden = true;
 
@@ -239,6 +244,25 @@ field("detail-delete").addEventListener("click", async () => {
             }
         },
     });
+});
+
+// A wrong pairing splits back into the bill (as planned) and the charge
+// (under its own name), which Artha then leaves unpaired.
+field("detail-unpair").addEventListener("click", async () => {
+    if (!current) return;
+    if (!window.confirm("Unpair these? Both will count again, and Artha won't pair this charge on its own again.")) return;
+    try {
+        const res = await postJSON(`/activity/${current.id}/unpair`, {});
+        if (!res.ok) {
+            showToast(res.data.message || "Artha couldn't split those. Try again in a moment.", "error");
+            return;
+        }
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+        return;
+    }
+    toastAfterReload("Unpaired");
+    window.location.reload();
 });
 
 field("detail-looks-right").addEventListener("click", async () => {

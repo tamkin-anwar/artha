@@ -26,6 +26,12 @@ render order too.
 
 CHANGELOG_ENTRIES = [
     {
+        "date": "2026-10-23",
+        "category": "new",
+        "title": "Unpair a bill and a charge",
+        "body": "If Artha ever pairs a charge with the wrong bill, open it in Activity and tap Unpair. The bill goes back to how it was planned, the charge gets its own name back, and Artha won't pair that charge again.",
+    },
+    {
         "date": "2026-10-22",
         "category": "fixed",
         "title": "A bill and its payment count once",

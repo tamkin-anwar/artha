@@ -54,6 +54,18 @@ class Transaction(db.Model):
     # False; it means nothing on a row that isn't part of a series.
     bill_matched = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
+    # What a bill and its charge each were before bill_matching paired them
+    # on this row, so the pairing can be undone (bill_matching.unpair): the
+    # bill's own planned amount and date, the charge's own name, category
+    # and source. Plain JSON (money as strings). NULL on rows paired before
+    # this existed, which can't be split back apart.
+    pairing = db.Column(db.JSON, nullable=True)
+
+    # Set on a charge someone split off its bill: it's never paired with a
+    # bill on its own again (Simplifi's most-asked fix is a wrong match
+    # that keeps coming back).
+    bill_match_declined = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     # The period this generated row represents, set only on rows created
     # by generate_recurring() (NULL for everything else) — for a monthly
     # series (recurrence_interval is None, the default) that's the

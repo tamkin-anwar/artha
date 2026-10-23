@@ -30,17 +30,23 @@ amount when it has cents ($9.99 is nearly a fingerprint; a round $60.00
 needs the name too). Two equally good candidates means no match. Leaving a real duplicate
 for the person to delete is far better than silently merging two genuine
 purchases.
+
+Every pairing can be undone (`unpair`, YNAB's Unmatch): the row keeps what
+the bill and the charge each were in Transaction.pairing, and splitting
+them puts both back, the bill as planned and the charge under its own
+name, which is then never paired with a bill on its own again.
 """
 
 from __future__ import annotations
 
 import calendar
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from ..extensions import db
 from ..models import Transaction
+from .exchange_rate_service import lock_usd_value
 
 # Where a transaction came from when it's already the real charge.
 BANK_SOURCES = ("csv", "apple_pay")
@@ -154,12 +160,40 @@ def find_open_occurrence(user_id: int, t_type: str, currency: str, amount: Decim
     return _best(scored)
 
 
-def absorb_charge(occurrence: Transaction, *, amount: Decimal, currency: str, usd_value, usd_rate_locked,
-                  timestamp, import_source: str | None, needs_review: bool) -> Transaction:
+def _money(value) -> str | None:
+    return None if value is None else str(value)
+
+
+def _decimal(value) -> Decimal | None:
+    return None if value is None else Decimal(value)
+
+
+def _when(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def absorb_charge(occurrence: Transaction, *, description: str, category: str | None, amount: Decimal,
+                  currency: str, usd_value, usd_rate_locked, timestamp, import_source: str | None,
+                  needs_review: bool) -> Transaction:
     """Writes a real charge onto the bill occurrence it pays. The bill keeps
     its own name and category; the amount, currency and date become the
     real ones. A weekly copy's due date stays in recurring_month, so the
-    occurrence still reads as posted even when the charge lands a day off."""
+    occurrence still reads as posted even when the charge lands a day off.
+    What the bill was, and the charge's own name and category, are kept in
+    `pairing` so `unpair` can split them again."""
+    occurrence.pairing = {
+        "kind": "absorbed",
+        "bill": {
+            "amount": _money(occurrence.amount),
+            "currency": occurrence.currency,
+            "usd_value": _money(occurrence.usd_value),
+            "usd_rate_locked": _money(occurrence.usd_rate_locked),
+            "timestamp": _when(occurrence.timestamp),
+            "import_source": occurrence.import_source,
+            "needs_review": bool(occurrence.needs_review),
+        },
+        "charge": {"description": description, "category": category},
+    }
     occurrence.amount = amount
     occurrence.currency = currency
     occurrence.usd_value = usd_value
@@ -232,6 +266,8 @@ def find_charge_for(template: Transaction, due: date, *, allow_same_name: bool =
         Transaction.is_recurring.is_(False),
         Transaction.recurring_month.is_(None),
         Transaction.bill_matched.is_(False),
+        # Split off a bill by hand once: never paired on its own again.
+        Transaction.bill_match_declined.is_(False),
         Transaction.timestamp >= start,
         Transaction.timestamp < end,
     ).all()
@@ -260,10 +296,25 @@ def find_charge_for(template: Transaction, due: date, *, allow_same_name: bool =
     return None if _contested(charge, template.description, best) else charge
 
 
-def adopt_charge(charge: Transaction, template: Transaction, recurring_month: date) -> Transaction:
+def adopt_charge(charge: Transaction, template: Transaction, recurring_month: date, due: date) -> Transaction:
     """Makes an existing real charge this occurrence of the series: it takes
     the bill's name, category and cadence, keeps its own amount, date and
-    currency. Then it's the series' latest row like any generated copy."""
+    currency. Then it's the series' latest row like any generated copy.
+    The charge's own name and category, and the copy that would have been
+    generated (due on `due`), are kept in `pairing` for `unpair`."""
+    charge.pairing = {
+        "kind": "adopted",
+        "charge": {"description": charge.description, "category": charge.category},
+        "bill": {
+            "amount": _money(template.amount),
+            "currency": template.native_currency,
+            "category": template.category,
+            "due": due.isoformat(),
+            "recurring_month": recurring_month.isoformat(),
+            "recurrence_interval": template.recurrence_interval,
+            "recurring_end_date": template.recurring_end_date.isoformat() if template.recurring_end_date else None,
+        },
+    }
     charge.description = template.description
     if template.category:
         charge.category = template.category
@@ -306,8 +357,107 @@ def past_duplicate_pairs(user_id: int) -> list[tuple[Transaction, Transaction]]:
 def merge_pair(occurrence: Transaction, charge: Transaction) -> None:
     """The live rule, after the fact: the charge's real amount, date and
     currency go onto the bill occurrence, and the charge row goes."""
-    absorb_charge(occurrence, amount=charge.amount, currency=charge.native_currency,
+    absorb_charge(occurrence, description=charge.description, category=charge.category,
+                  amount=charge.amount, currency=charge.native_currency,
                   usd_value=charge.usd_value, usd_rate_locked=charge.usd_rate_locked,
                   timestamp=charge.timestamp, import_source=charge.import_source,
                   needs_review=charge.needs_review)
     db.session.delete(charge)
+
+
+# --- Undoing a pairing ---------------------------------------------------------
+
+class NotPaired(ValueError):
+    """The row isn't a pairing Artha can split: never paired, or paired
+    before the original values were kept."""
+
+
+def _next_position(user_id: int) -> int:
+    top = db.session.query(db.func.max(Transaction.position)).filter_by(user_id=user_id).scalar()
+    return int(top or 0) + 1
+
+
+def unpair(row: Transaction) -> tuple[Transaction, Transaction]:
+    """Splits a paired row back into the bill occurrence and the real
+    charge, the way each was before: the bill at its planned amount and
+    date (open for a charge again), the charge under its own name and
+    category with whatever amount, date and source the row has now. The
+    charge is marked bill_match_declined so the same pairing doesn't come
+    straight back. Returns (bill, charge); the caller commits."""
+    snapshot = row.pairing
+    if not row.bill_matched or not isinstance(snapshot, dict) or snapshot.get("kind") not in ("absorbed", "adopted"):
+        raise NotPaired("This transaction isn't paired with a bill.")
+    bill_was = snapshot.get("bill") or {}
+    charge_was = snapshot.get("charge") or {}
+
+    if snapshot["kind"] == "absorbed":
+        # The row is the bill; the charge comes back as its own row.
+        charge = Transaction(
+            description=charge_was.get("description") or row.description,
+            amount=row.amount,
+            type=row.type,
+            category=charge_was.get("category"),
+            user_id=row.user_id,
+            position=_next_position(row.user_id),
+            timestamp=row.timestamp,
+            import_source=row.import_source,
+            needs_review=row.needs_review,
+            currency=row.currency,
+            usd_value=row.usd_value,
+            usd_rate_locked=row.usd_rate_locked,
+            bill_match_declined=True,
+        )
+        row.amount = _decimal(bill_was.get("amount")) or row.amount
+        row.currency = bill_was.get("currency")
+        row.usd_value = _decimal(bill_was.get("usd_value"))
+        row.usd_rate_locked = _decimal(bill_was.get("usd_rate_locked"))
+        if bill_was.get("timestamp"):
+            row.timestamp = datetime.fromisoformat(bill_was["timestamp"])
+        row.import_source = bill_was.get("import_source")
+        row.needs_review = bool(bill_was.get("needs_review"))
+        row.bill_matched = False
+        row.pairing = None
+        db.session.add(charge)
+        db.session.flush()
+        return row, charge
+
+    # Adopted: the row is the charge; the copy it stood in for comes back.
+    bill_name = row.description
+    still_repeating = bool(row.is_recurring)
+    row.description = charge_was.get("description") or row.description
+    row.category = charge_was.get("category")
+    row.is_recurring = False
+    row.recurring_month = None
+    row.recurrence_interval = None
+    row.recurring_end_date = None
+    row.bill_matched = False
+    row.pairing = None
+    row.bill_match_declined = True
+    # The bill row below reuses this row's (name, recurring_month) slot, so
+    # the change has to reach the database first.
+    db.session.flush()
+
+    due = date.fromisoformat(bill_was["due"])
+    amount = _decimal(bill_was.get("amount"))
+    currency = bill_was.get("currency") or "USD"
+    usd_value, usd_rate_locked = lock_usd_value(amount, currency)
+    ends = bill_was.get("recurring_end_date")
+    bill = Transaction(
+        description=bill_name,
+        amount=amount,
+        type=row.type,
+        category=bill_was.get("category"),
+        user_id=row.user_id,
+        position=_next_position(row.user_id),
+        is_recurring=still_repeating,
+        timestamp=datetime(due.year, due.month, due.day, 12, 0, 0, tzinfo=timezone.utc),
+        recurring_month=date.fromisoformat(bill_was["recurring_month"]),
+        recurrence_interval=bill_was.get("recurrence_interval"),
+        recurring_end_date=date.fromisoformat(ends) if ends else None,
+        currency=currency,
+        usd_value=usd_value,
+        usd_rate_locked=usd_rate_locked,
+    )
+    db.session.add(bill)
+    db.session.flush()
+    return bill, row

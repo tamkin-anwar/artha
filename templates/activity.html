@@ -134,6 +134,16 @@
                 </div>
             </div>
 
+            {# A bill and the real charge for it, counted once
+               (services/bill_matching.py); Unpair splits them again. #}
+            <div class="card notice" id="detail-paired" hidden>
+                <div class="notice-text">
+                    <span class="notice-title" id="detail-paired-title">Paired with its bill</span>
+                    <span id="detail-paired-text"></span>
+                    <button type="button" class="link-accent" id="detail-unpair">Unpair</button>
+                </div>
+            </div>
+
             <div class="field-group">
                 <label class="field-row"><span>Name</span><input id="detail-description" name="description" maxlength="200" autocomplete="off"></label>
                 <div class="field-row">

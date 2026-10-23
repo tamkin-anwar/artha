@@ -360,3 +360,133 @@ def test_generation_does_not_hand_one_payment_to_either_of_two_equal_bills(auth_
     rows = _expenses_this_month(user)
     assert sorted(r.description for r in rows) == ["Gym", "Online payment", "Phone"]
     assert not any(r.bill_matched for r in rows)
+
+
+# --- undoing a pairing (Unpair) -----------------------------------------------
+
+def _unpair(auth_client, tx_id):
+    return auth_client.post(f"/activity/{tx_id}/unpair", json={}, headers={"X-Requested-With": "XMLHttpRequest"})
+
+
+def test_unpairing_a_charge_written_onto_the_bill_puts_both_back(auth_client, user):
+    due = _day_this_month()
+    _track(user, "Netflix", "15.49", due)
+    _generate(auth_client)
+    planned = _expenses_this_month(user)[0]
+    planned_id, planned_when = planned.id, planned.timestamp.date()
+    _add(auth_client, "NETFLIX.COM", "15.99", due + timedelta(days=1), source="apple_pay")
+    assert len(_expenses_this_month(user)) == 1
+
+    resp = _unpair(auth_client, planned_id)
+
+    assert resp.status_code == 200, resp.get_json()
+    rows = {t.description: t for t in _expenses_this_month(user)}
+    assert set(rows) == {"Netflix", "NETFLIX.COM"}
+    bill, charge = rows["Netflix"], rows["NETFLIX.COM"]
+    # The bill is back as planned, and open for a charge again.
+    assert bill.id == planned_id and bill.amount == Decimal("15.49")
+    assert bill.timestamp.date() == planned_when
+    assert not bill.bill_matched and bill.pairing is None and bill.import_source is None
+    assert not bill.needs_review and bill.is_recurring
+    # The charge is its own transaction again, as it came in.
+    assert charge.amount == Decimal("15.99") and charge.timestamp.date() == due + timedelta(days=1)
+    assert charge.import_source == "apple_pay" and charge.needs_review
+    assert charge.bill_match_declined and not charge.is_recurring
+    assert resp.get_json() == {"bill_id": bill.id, "charge_id": charge.id}
+    # Loading the app again doesn't pair them back up.
+    _generate(auth_client)
+    assert len(_expenses_this_month(user)) == 2
+
+
+def test_unpairing_a_charge_taken_as_the_bill_brings_the_bill_back(auth_client, user):
+    due = _day_this_month()
+    _track(user, "Netflix", "15.49", due)
+    charge_day = due - timedelta(days=1)
+    db.session.add(Transaction(
+        description="NETFLIX.COM", amount=Decimal("15.49"), type="expense", user_id=user.id,
+        currency="USD", category="entertainment", import_source="csv",
+        timestamp=datetime(charge_day.year, charge_day.month, charge_day.day, 12, tzinfo=timezone.utc),
+    ))
+    db.session.commit()
+    _generate(auth_client)
+    adopted = _expenses_this_month(user)[0]
+    assert adopted.description == "Netflix" and adopted.bill_matched
+
+    resp = _unpair(auth_client, adopted.id)
+
+    assert resp.status_code == 200, resp.get_json()
+    rows = {t.description: t for t in _expenses_this_month(user)}
+    assert set(rows) == {"Netflix", "NETFLIX.COM"}
+    charge, bill = rows["NETFLIX.COM"], rows["Netflix"]
+    assert charge.id == adopted.id and charge.category == "entertainment"
+    assert not charge.is_recurring and charge.recurring_month is None and charge.bill_match_declined
+    assert bill.amount == Decimal("15.49") and bill.timestamp.date() == due
+    assert bill.is_recurring and bill.recurring_month == due.replace(day=1)
+    assert bill.category == "subscriptions" and not bill.bill_matched
+    # Generating again neither adds another copy nor takes the charge back.
+    assert _generate(auth_client)["generated"] == 0
+    rows = {t.description: t for t in _expenses_this_month(user)}
+    assert set(rows) == {"Netflix", "NETFLIX.COM"} and not rows["NETFLIX.COM"].bill_matched
+
+
+def test_unpairing_a_cleanup_merge_brings_the_deleted_charge_back(app, user, auth_client):
+    old = _past_month_day(2)
+    _row(user, "Netflix", "15.49", old, is_recurring=True, recurring_month=old.replace(day=1), category="subscriptions")
+    _row(user, "NETFLIX.COM", "15.99", old + timedelta(days=2), import_source="csv")
+    app.test_cli_runner().invoke(args=["merge-bill-duplicates", "--apply"])
+    merged = Transaction.query.filter_by(user_id=user.id).one()
+
+    assert _unpair(auth_client, merged.id).status_code == 200
+
+    rows = {t.description: t for t in Transaction.query.filter_by(user_id=user.id).all()}
+    assert rows["Netflix"].amount == Decimal("15.49") and rows["Netflix"].timestamp.date() == old
+    assert rows["NETFLIX.COM"].amount == Decimal("15.99") and rows["NETFLIX.COM"].import_source == "csv"
+    # And the cleanup leaves the pair alone from now on.
+    again = app.test_cli_runner().invoke(args=["merge-bill-duplicates", "--apply"])
+    assert "Merged 0 pair(s)" in again.output
+
+
+def test_only_a_pairing_with_its_originals_kept_can_be_unpaired(auth_client, user):
+    due = _day_this_month()
+    # Paired before the originals were kept: nothing to split back into.
+    old_pair = _row(user, "Spotify", "11.99", due, is_recurring=True, recurring_month=due.replace(day=1),
+                    bill_matched=True)
+    plain = _row(user, "Whole Foods", "84.12", due)
+
+    for tx in (old_pair, plain):
+        resp = _unpair(auth_client, tx.id)
+        assert resp.status_code == 400
+    page = auth_client.get("/activity")
+    assert b"paired_charge&#34;: null" in page.data or b'"paired_charge": null' in page.data
+
+
+def test_someone_elses_transaction_cannot_be_unpaired(auth_client, user):
+    from .conftest import make_user
+    other = make_user(username="mallory", email="mallory@example.com")
+    tx = _row(other, "Netflix", "15.49", _day_this_month(), bill_matched=True,
+              pairing={"kind": "absorbed", "bill": {"amount": "15.49"}, "charge": {"description": "X"}})
+
+    assert _unpair(auth_client, tx.id).status_code == 404
+    assert db.session.get(Transaction, tx.id).bill_matched
+
+
+def test_the_app_sees_and_splits_a_pairing(client, user):
+    due = _day_this_month()
+    _track(user, "Netflix", "15.49", due)
+    token = client.post("/api/v1/sessions", json={"username": user.username, "password": "password123"}).get_json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.get("/api/v1/today", headers=headers)  # generates this month's copy
+    added = client.post("/api/v1/transactions", headers=headers, json={
+        "description": "NETFLIX.COM", "amount": "15.49", "type": "expense",
+        "date": (due + timedelta(days=1)).isoformat(), "currency": "USD",
+    }).get_json()["transaction"]
+    assert added["description"] == "Netflix" and added["paired_charge"] == "NETFLIX.COM"
+
+    resp = client.post(f"/api/v1/transactions/{added['id']}/unpair", headers=headers)
+
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()
+    assert body["bill"]["description"] == "Netflix" and body["bill"]["paired_charge"] is None
+    assert body["charge"]["description"] == "NETFLIX.COM" and body["charge"]["amount"] == "15.49"
+    again = client.post(f"/api/v1/transactions/{added['id']}/unpair", headers=headers)
+    assert again.status_code == 400 and again.get_json()["error"] == "not_paired"

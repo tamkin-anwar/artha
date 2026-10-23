@@ -177,6 +177,14 @@ and Artha shouldn't repeat that.
   on, and `Transaction.occurrence_day` keeps a weekly bill's due date
   when its charge lands a day off; Safe to Spend and Plan's "posted?"
   checks use it.
+  Every pairing can be undone (`bill_matching.unpair`, YNAB's Unmatch):
+  `absorb_charge` / `adopt_charge` save what the bill and the charge each
+  were in `Transaction.pairing` (JSON), and `unpair_transaction_record`
+  (web `POST /activity/<id>/unpair`, API `POST /transactions/<id>/unpair`)
+  puts both back, the bill as planned and the charge under its own name,
+  marked `bill_match_declined` so it's never paired on its own again.
+  Rows paired before 2026-10-23 have no `pairing` and can't be split; the
+  serializer's `paired_charge` is null for them.
   `flask merge-bill-duplicates` is the one-time cleanup for pairs from
   before this existed: a dry run unless `--apply`, counts per account
   only unless `--details` (those are other people's transactions), the
