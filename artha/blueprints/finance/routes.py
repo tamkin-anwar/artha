@@ -1698,7 +1698,7 @@ def _parse_import_amount(raw: str) -> Decimal | None:
     return -value if negative else value
 
 
-def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
+def _parse_statement_csv(file_stream, fallback_currency: str = "USD") -> tuple[list[dict], list[str]]:
     """
     Parses an uploaded bank-statement CSV into row dicts, each carrying
     its own statement date (see _parse_import_date's docstring on why
@@ -1717,7 +1717,7 @@ def _parse_statement_csv(file_stream) -> tuple[list[dict], list[str]]:
             return [], ["Could not read file — please export as CSV (UTF-8 or Latin-1)."]
 
     day_first = _detect_day_first(text)
-    currency = _detect_import_currency(text, current_user.preferred_currency or "USD")
+    currency = _detect_import_currency(text, fallback_currency)
 
     reader = csv.reader(io.StringIO(text))
     try:
@@ -1897,7 +1897,7 @@ class PdfPasswordRequired(Exception):
 
 
 def _parse_statement_pdf(
-    file_stream, password: str | None = None
+    file_stream, password: str | None = None, fallback_currency: str = "USD"
 ) -> tuple[list[dict], list[str], bool]:
     """
     Returns (rows, warnings, ai_assisted) — ai_assisted is True only when
@@ -1968,7 +1968,7 @@ def _parse_statement_pdf(
     any_text_found = any(text.strip() for text in pages_text)
     year_context = _resolve_pdf_statement_years(full_text)
     day_first = _detect_day_first(full_text)
-    currency = _detect_import_currency(full_text, current_user.preferred_currency or "USD")
+    currency = _detect_import_currency(full_text, fallback_currency)
 
     rows: list[dict] = []
     warnings: list[str] = []
@@ -2395,38 +2395,34 @@ def export_csv():
     return response
 
 
-@finance_bp.route("/finance/import/preview", methods=["POST"])
-@login_required
-@ai_limit(AI_IMPORT_LIMIT)
-def import_preview():
+def preview_statement(user, file, password: str | None = None) -> dict:
     """
-    Parses an uploaded statement (CSV or PDF) and returns what WOULD be
-    imported — nothing is saved here. The client renders this as an
-    editable table (date/description/amount/type/category per row,
-    duplicates pre-unchecked); only import_commit() below actually writes
-    anything.
+    Parses an uploaded statement (CSV or PDF, a werkzeug FileStorage) and
+    returns what WOULD be imported; nothing is saved here. Shared by the
+    website's import sheet and the app's POST /api/v1/imports/preview, so
+    both read statements the same way: the free offline parser first, AI
+    only for what it misses, the file read from the upload in memory and
+    never written anywhere. Raises PdfPasswordRequired for a locked PDF
+    and ValidationError when nothing could be read.
+
+    Returns {"rows", "warnings", "notice"?}: each row has date, description,
+    amount (a float, as the parsers produce it), type, category, currency,
+    and duplicate (already in Artha: same date, description, amount and
+    type, so the review leaves it unchecked).
     """
-    file = request.files.get("statement")
     if file is None or not file.filename:
-        return jsonify({"message": "No file uploaded"}), 400
+        raise ValidationError("No file uploaded")
 
     is_pdf = file.filename.lower().endswith(".pdf") or file.mimetype == "application/pdf"
+    # A statement that doesn't say its currency is read in the person's own.
+    fallback = user.preferred_currency or "USD"
     ai_assisted = False
     if is_pdf:
-        password = request.form.get("pdf_password") or None
-        try:
-            rows, warnings, ai_assisted = _parse_statement_pdf(file.stream, password=password)
-        except PdfPasswordRequired:
-            message = (
-                "That PDF needs a password to open."
-                if password is None
-                else "That password didn't work."
-            )
-            return jsonify({"message": message, "needs_password": True}), 400
+        rows, warnings, ai_assisted = _parse_statement_pdf(file.stream, password=password, fallback_currency=fallback)
     else:
-        rows, warnings = _parse_statement_csv(file.stream)
+        rows, warnings = _parse_statement_csv(file.stream, fallback_currency=fallback)
     if not rows:
-        return jsonify({"message": warnings[0] if warnings else "No transactions found in file."}), 400
+        raise ValidationError(warnings[0] if warnings else "No transactions found in file.")
 
     _fill_uncategorized_via_ai(rows)
 
@@ -2436,44 +2432,40 @@ def import_preview():
     # overlaps a previous import shouldn't double every transaction in it.
     existing = {
         (t.timestamp.strftime("%Y-%m-%d"), t.description, f"{t.amount:.2f}", t.type)
-        for t in Transaction.query.filter_by(user_id=current_user.id).all()
+        for t in Transaction.query.filter_by(user_id=user.id).all()
     }
     for row in rows:
         key = (row["date"], row["description"], f"{row['amount']:.2f}", row["type"])
         row["duplicate"] = key in existing
 
-    response = {
-        "rows": rows,
-        "warnings": warnings,
-        "categories": {key: val["label"] for key, val in TRANSACTION_CATEGORIES.items()},
-    }
+    result = {"rows": rows, "warnings": warnings}
     if ai_assisted:
         # Distinct from "warnings" (which the client renders as "N rows
         # skipped") — this isn't a skip, it's a heads-up that these rows
         # came from AI-assisted reading rather than direct parsing, worth
         # a closer look before importing but not a sign anything is wrong.
-        response["notice"] = (
+        result["notice"] = (
             "This PDF's layout didn't match the usual pattern, so these were read "
-            "with AI assistance instead of parsed directly — double-check the "
+            "with AI assistance instead of parsed directly. Double-check the "
             "dates and amounts below before importing."
         )
-    return jsonify(response)
+    return result
 
 
-@finance_bp.route("/finance/import/commit", methods=["POST"])
-@login_required
-def import_commit():
+def import_statement_rows(user, rows) -> tuple[int, int]:
     """
-    Saves the (possibly user-edited) row list produced by import_preview().
-    Each row keeps its own statement date exactly as parsed — a March
-    statement imported in July is filed under March, never today.
+    Saves the (possibly edited) rows a preview produced, for the website
+    and the app alike, and returns (imported, skipped). Each row keeps its
+    own statement date exactly as parsed — a March statement imported in
+    July is filed under March, never today. A row that pays a tracked bill
+    fills in that bill instead of counting twice (bill_matching). Raises
+    ValidationError for an empty list; any other exception is a real
+    failure (already rolled back).
     """
-    data = request.get_json(silent=True) or {}
-    rows = data.get("rows")
     if not isinstance(rows, list) or not rows:
-        return jsonify({"message": "No rows to import"}), 400
+        raise ValidationError("No rows to import")
 
-    uid = current_user.id
+    uid = user.id
     max_pos = db.session.query(func.max(Transaction.position)).filter_by(user_id=uid).scalar() or 0
 
     imported = 0
@@ -2517,7 +2509,7 @@ def import_commit():
         # skipping an otherwise-valid row over it.
         currency = (row.get("currency") or "").strip().upper()
         if currency not in CURRENCY_CODES:
-            currency = current_user.preferred_currency or "USD"
+            currency = user.preferred_currency or "USD"
         usd_value, usd_rate_locked = lock_usd_value(amount, currency)
 
         # A statement line that pays a tracked bill fills in that bill's
@@ -2555,14 +2547,46 @@ def import_commit():
 
     try:
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        log.error("Error committing CSV import: %s", e, exc_info=True)
-        return jsonify({"message": "Database error"}), 500
+        raise
 
     if imported:
         _check_budget_overage_alerts(uid)
+    return imported, skipped
 
+
+@finance_bp.route("/finance/import/preview", methods=["POST"])
+@login_required
+@ai_limit(AI_IMPORT_LIMIT)
+def import_preview():
+    """The website's import sheet: preview_statement() as JSON, plus the
+    category labels its editable table offers. Nothing is saved here."""
+    password = request.form.get("pdf_password") or None
+    try:
+        result = preview_statement(current_user, request.files.get("statement"), password)
+    except PdfPasswordRequired:
+        message = "That PDF needs a password to open." if password is None else "That password didn't work."
+        return jsonify({"message": message, "needs_password": True}), 400
+    except ValidationError as exc:
+        return jsonify({"message": str(exc)}), 400
+    result["categories"] = {key: val["label"] for key, val in TRANSACTION_CATEGORIES.items()}
+    return jsonify(result)
+
+
+@finance_bp.route("/finance/import/commit", methods=["POST"])
+@login_required
+def import_commit():
+    """Saves the rows the website's import sheet reviewed
+    (import_statement_rows)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        imported, skipped = import_statement_rows(current_user, data.get("rows"))
+    except ValidationError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
+        log.error("Error committing CSV import: %s", e, exc_info=True)
+        return jsonify({"message": "Database error"}), 500
     return jsonify({
         "message": f"Imported {imported} transaction{'s' if imported != 1 else ''}.",
         "imported": imported,

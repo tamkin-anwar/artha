@@ -259,8 +259,16 @@ and Artha shouldn't repeat that.
 - `Conversation` / `Message` models hold chat history server-side, not in
   client-side state, so the same conversation follows a user across
   devices.
-- Bank statement import (`artha/blueprints/finance/routes.py`) is
-  two-tiered: a fast, free, deterministic regex parser runs first and
+- Bank statement import (`artha/blueprints/finance/routes.py`) runs
+  through two shared functions, `preview_statement` and
+  `import_statement_rows`, behind both the website's import sheet and the
+  app's `POST /api/v1/imports/preview` (multipart, AI-rate-limited per
+  account: `user_or_ip_key` also knows the API's `g.api_user`) and
+  `POST /api/v1/imports` (2026-10-23). The parsers take the person's
+  currency as `fallback_currency` instead of reading `current_user`, since
+  the API has no web session. The app reads a picked or "Open in Artha"
+  file in place (security-scoped, never copied) and uploads it from memory.
+  Reading is two-tiered: a fast, free, deterministic regex parser runs first and
   handles most real statements; an AI-assisted fallback
   (`_parse_statement_pdf_with_ai`, same tool-use pattern as above) only
   runs when the regex parser finds nothing at all, or leaves money-shaped

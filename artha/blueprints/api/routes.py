@@ -24,11 +24,12 @@ response. Same rule as the web app (see CLAUDE.md's multi-currency notes).
 
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from functools import wraps
 
 from flask import g, jsonify, request
 
-from ...extensions import db, limiter
+from ...extensions import AI_IMPORT_LIMIT, AI_LIMIT_MESSAGE, db, limiter, user_or_ip_key
 from ...models import ApiToken, Goal, Transaction, User
 from ...models.account import Account
 from ...cli import DEFAULT_REMINDER_HOUR
@@ -36,6 +37,7 @@ from ...services.exchange_rate_service import get_rates
 from ...services.screens import (
     HISTORY_MONTHS_DEFAULT,
     ScreenError,
+    category_label,
     history_screen,
     plan_screen,
     serialize_account,
@@ -66,16 +68,19 @@ from ..auth.routes import (
 )
 from ..finance.routes import (
     TRANSACTION_CATEGORIES,
+    PdfPasswordRequired,
     ValidationError,
     create_transaction,
     delete_transaction_record,
     generate_due_recurring,
+    import_statement_rows,
     mark_transactions_reviewed,
     remove_category_budget,
     save_budget,
     save_category_budget,
     bill_choices,
     pair_transaction_record,
+    preview_statement,
     unpair_transaction_record,
     update_transaction_fields,
 )
@@ -570,6 +575,65 @@ def remove_transaction(transaction_id):
         log.error("Error deleting transaction %s via API for user %s", transaction_id, g.api_user.id, exc_info=True)
         return api_error(500, "server_error", "Artha couldn't delete that. Try again in a moment.")
     return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Importing a statement
+# ---------------------------------------------------------------------------
+
+@api_bp.post("/imports/preview")
+@api_auth_required
+@limiter.limit(AI_IMPORT_LIMIT, key_func=user_or_ip_key, error_message=AI_LIMIT_MESSAGE)
+def preview_import():
+    """Multipart form: "statement" (a PDF or CSV) and, for a locked PDF,
+    "pdf_password". Reads it exactly as the website does
+    (finance.routes.preview_statement: in memory, never stored) and
+    returns the rows to review; nothing is saved. Each row: date,
+    description, amount (a string), type, category, category_label,
+    currency, duplicate (already in Artha, so start it unticked)."""
+    password = request.form.get("pdf_password") or None
+    try:
+        result = preview_statement(g.api_user, request.files.get("statement"), password)
+    except PdfPasswordRequired:
+        if password is None:
+            return api_error(400, "needs_password", "That PDF needs a password to open.")
+        return api_error(400, "wrong_password", "That password didn't work.")
+    except ValidationError as exc:
+        return api_error(400, "unreadable_statement", str(exc))
+    except Exception:
+        log.error("Error reading a statement via API for user %s", g.api_user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't read that file. Try again in a moment.")
+
+    rows = [{
+        "date": row["date"],
+        "description": row["description"],
+        "amount": f"{Decimal(str(row['amount'])):.2f}",
+        "type": row["type"],
+        "category": row.get("category"),
+        "category_label": category_label(row.get("category")),
+        "currency": row.get("currency") or g.api_user.preferred_currency or "USD",
+        "duplicate": bool(row.get("duplicate")),
+    } for row in result["rows"]]
+    return jsonify({"rows": rows, "warnings": result["warnings"], "notice": result.get("notice")})
+
+
+@api_bp.post("/imports")
+@api_auth_required
+def commit_import():
+    """Body: {"rows": [...]}, the reviewed rows from /imports/preview (only
+    the ones to keep, edited as the person chose). Saved exactly as the
+    website saves them (finance.routes.import_statement_rows). Returns how
+    many were imported and how many couldn't be."""
+    data = _json_body() or {}
+    user = g.api_user
+    try:
+        imported, skipped = import_statement_rows(user, data.get("rows"))
+    except ValidationError as exc:
+        return api_error(400, "invalid_import", str(exc))
+    except Exception:
+        log.error("Error importing statement rows via API for user %s", user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save those. Try again in a moment.")
+    return jsonify({"imported": imported, "skipped": skipped})
 
 
 @api_bp.get("/categories")

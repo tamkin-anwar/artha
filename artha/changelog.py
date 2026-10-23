@@ -28,6 +28,12 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
         "category": "new",
+        "title": "Import a statement from the app",
+        "body": "The iPhone, iPad and Mac apps can now import a bank statement, the same way the website does. Pick a PDF or CSV, or open one in Artha from Mail or Files, check the rows, and tap Import. Anything already in Artha starts unticked.",
+    },
+    {
+        "date": "2026-10-23",
+        "category": "new",
         "title": "A heads-up before you go over",
         "body": "Turn on Spending ahead of pace in Settings and Artha tells you partway through the month when you're running ahead, with what a day keeps you on plan. It's off unless you want it.",
     },

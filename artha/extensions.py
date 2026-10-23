@@ -26,6 +26,13 @@ def user_or_ip_key() -> str:
     two people on one network don't share a budget and one person can't
     dodge a limit by switching networks. Falls back to the IP if there's
     somehow no session (those routes are @login_required anyway)."""
+    from flask import g
+
+    # The app's API signs in with a bearer token (api.routes'
+    # api_auth_required sets g.api_user), not a session.
+    api_user = g.get("api_user")
+    if api_user is not None:
+        return f"user:{api_user.id}"
     if current_user and current_user.is_authenticated:
         return f"user:{current_user.id}"
     return get_remote_address()
