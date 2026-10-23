@@ -6,8 +6,11 @@
     /* The Artha orb, the same gradients as the app's OrbMark
        (Palette.swift's orb and sun colors): a blue planet with the sun
        rising on its upper left. It used to be a gold-on-navy blur that
-       turned plain blue once --gold became the accent. It holds still
-       until Artha is thinking; Daybreak has no ambient loops. */
+       turned plain blue once --gold became the accent. While it waits it
+       breathes, slowly (4s): the one ambient loop Daybreak keeps, because
+       the AI Assistant's orb is meant to feel alive (Tamkin asked for it
+       back after the 2026-10-22 sweep stilled it). Thinking is a faster
+       pulse, so the two never look alike. Reduce Motion holds it still. */
     .ai-orb {
         width: 120px;
         height: 120px;
@@ -16,6 +19,15 @@
             radial-gradient(52% 52% at 34% 31%, #fff4d8 0%, #ffd27a 22%, rgba(245,165,36,0.75) 50%, rgba(245,165,36,0.12) 78%, rgba(245,165,36,0) 100%),
             radial-gradient(78% 78% at 64% 70%, #5c90de 0%, #3466c0 50%, #1d3b8c 82%, #142b68 100%);
         box-shadow: 0 0 60px rgba(245,165,36,0.18), 0 0 120px rgba(52,102,192,0.25);
+    }
+
+    .ai-orb:not(.ai-orb-mini) {
+        animation: orb-breathe 4s ease-in-out infinite;
+    }
+
+    @keyframes orb-breathe {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 60px rgba(245,165,36,0.18), 0 0 120px rgba(52,102,192,0.25); }
+        50% { transform: scale(1.06); box-shadow: 0 0 80px rgba(245,165,36,0.32), 0 0 150px rgba(52,102,192,0.38); }
     }
 
     .ai-orb.thinking {
@@ -38,6 +50,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+        .ai-orb:not(.ai-orb-mini) { animation: none; }
         .ai-orb.thinking { animation: none; opacity: 0.7; }
         .ai-orb.speaking { animation: none; }
     }
