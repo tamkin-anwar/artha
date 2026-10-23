@@ -162,6 +162,20 @@ and Artha shouldn't repeat that.
   never set it, since every row there is reviewed before saving.
   New endpoints should follow that rule: extract the web route's
   logic into a shared function and call it from both, never copy it.
+- **A tracked bill and its real charge count once**
+  (`services/bill_matching.py`, 2026-10-22). Bill series are keyed by
+  exact description, so Apple Pay's "NETFLIX.COM" or a statement line
+  used to count again beside the generated "Netflix" row. Every real
+  charge (`create_transaction`, the import commit) is first offered to
+  `find_open_occurrence`, which merges it into an open bill row of the
+  same type and currency in the same month (within 10 days for monthly,
+  2 weekly, 4 biweekly) when the amount matches exactly or a similar name
+  is within 10%; `generate_due_recurring` likewise adopts an earlier
+  charge (`find_charge_for`) instead of adding a copy. Ties never match.
+  `Transaction.bill_matched` marks an occurrence a charge already landed
+  on, and `Transaction.occurrence_day` keeps a weekly bill's due date
+  when its charge lands a day off; Safe to Spend and Plan's "posted?"
+  checks use it.
 - **One design language across web and apps: Daybreak** (written down
   2026-10-22 in the artha-apple repo's `Docs/Design.md`). The web's
   tokens in `static/css/style.css` mirror `Palette.swift` value for value

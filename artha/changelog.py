@@ -27,6 +27,12 @@ render order too.
 CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-22",
+        "category": "fixed",
+        "title": "A bill and its payment count once",
+        "body": "When a bill you track also shows up as a real charge, from Apple Pay, a bank statement or something you typed in, Artha now sees they're the same payment. Your spending and Safe to spend stay right, and a new price for the bill carries into next month.",
+    },
+    {
+        "date": "2026-10-22",
         "category": "new",
         "title": "Any currency you use",
         "body": "Artha now works in about 160 currencies, from the Hong Kong dollar to the Japanese yen, not just six. Pick yours in Settings and it follows you to every device, the iPhone app included.",

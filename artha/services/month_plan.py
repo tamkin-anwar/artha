@@ -77,7 +77,7 @@ def bills_this_month(snap: MonthSnapshot) -> MonthBills:
             continue
         day = tx.timestamp.date()
         posted_in_month.add(key)
-        posted_on_day.add((tx.description, tx.type, day))
+        posted_on_day.add((tx.description, tx.type, tx.occurrence_day))
         status = "paid" if day <= snap.today else "scheduled"
         result.bills.append(Bill(tx.description, tx.amount, tx.native_currency, tx.value_in_usd,
                                  tx.category, day, status))

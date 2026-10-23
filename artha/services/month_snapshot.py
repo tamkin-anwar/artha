@@ -206,7 +206,9 @@ def build_month_snapshot(user, today: date | None = None) -> MonthSnapshot:
     if budget["has_budget"]:
         month_last_day = (month_end - timedelta(days=1)).date()
         posted_in_month = {(t.description, t.type) for t in transactions}
-        posted_on_day = {(t.description, t.type, t.timestamp.date()) for t in transactions}
+        # occurrence_day: a weekly bill's due date, which stays put when its
+        # real charge landed a day or two off (services/bill_matching.py).
+        posted_on_day = {(t.description, t.type, t.occurrence_day) for t in transactions}
         # Two totals: everything still dated today-or-later this month
         # (what the "after $X in upcoming bills" line tells the user), and
         # just the part of that not yet posted (what actually gets

@@ -18,6 +18,7 @@ from ...models import Transaction, User, PushSubscription
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
 from ...models.merchant_category_rule import MerchantCategoryRule
+from ...services import bill_matching
 from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
 from ...services.cash_flow import month_starts, monthly_totals
 from ...services.push_service import send_push
@@ -468,6 +469,29 @@ def create_transaction(user, fields) -> Transaction:
     # own, versus one someone typed in. Anything else reads as manual.
     import_source = "apple_pay" if fields.get("source") == "apple_pay" else "manual"
 
+    timestamp = _resolve_transaction_timestamp(fields.get("date"), user)
+
+    # The real charge for a tracked bill (Apple Pay's "NETFLIX.COM" for
+    # "Netflix") lands on that bill's open occurrence instead of being
+    # saved as a second expense -- see services/bill_matching.py. Not for
+    # a new series someone is setting up right now (is_recurring).
+    if not is_recurring:
+        occurrence = bill_matching.find_open_occurrence(
+            user.id, t_type, currency, amount, description, timestamp.date())
+        if occurrence is not None:
+            bill_matching.absorb_charge(
+                occurrence, amount=amount, currency=currency, usd_value=usd_value,
+                usd_rate_locked=usd_rate_locked, timestamp=timestamp,
+                import_source=import_source, needs_review=import_source == "apple_pay")
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
+            if t_type == "expense":
+                _check_budget_overage_alerts(user.id)
+            return occurrence
+
     max_pos = (
         db.session.query(func.max(Transaction.position))
         .filter_by(user_id=user.id)
@@ -480,7 +504,7 @@ def create_transaction(user, fields) -> Transaction:
         type=t_type,
         user_id=user.id,
         position=int(max_pos) + 1,
-        timestamp=_resolve_transaction_timestamp(fields.get("date"), user),
+        timestamp=timestamp,
         is_recurring=is_recurring,
         recurrence_interval=recurrence_interval,
         recurring_end_date=recurring_end_date,
@@ -929,6 +953,8 @@ def generate_due_recurring(user) -> dict:
         last_date = template_tx.timestamp.date()
         # (occurrence date, recurring_month value) for each copy to create.
         targets: list[tuple[date, date]] = []
+        # Real charges taken on as occurrences of this series instead.
+        adopted: list[Transaction] = []
         series_ended = False
 
         if interval in ("weekly", "biweekly"):
@@ -939,6 +965,10 @@ def generate_due_recurring(user) -> dict:
                 window_start = max(after_last, today - timedelta(days=_RECURRING_CATCHUP_DAYS))
                 for due in recurring_occurrences(template_tx, window_start, today, limit=60):
                     if _exists_on_day(key, due):
+                        skipped += 1
+                    elif (charge := bill_matching.find_charge_for(template_tx, due)) is not None:
+                        bill_matching.adopt_charge(charge, template_tx, due)
+                        adopted.append(charge)
                         skipped += 1
                     else:
                         targets.append((due, due))
@@ -969,6 +999,12 @@ def generate_due_recurring(user) -> dict:
                     break
                 if _exists_in_month(key, month):
                     skipped += 1
+                elif (charge := bill_matching.find_charge_for(template_tx, target)) is not None:
+                    # Already paid by a real charge under another name
+                    # (bill_matching): that charge becomes this occurrence.
+                    bill_matching.adopt_charge(charge, template_tx, month)
+                    adopted.append(charge)
+                    skipped += 1
                 else:
                     targets.append((target, month))
                 month = _add_months(month, 1)
@@ -984,7 +1020,9 @@ def generate_due_recurring(user) -> dict:
         # each copy rather than copied -- a genuinely new transaction
         # created right now locks in *this* moment's rate.
         currency = template_tx.native_currency
-        latest_row = template_tx
+        # Naive and aware datetimes can't be compared (SQLite reads them
+        # back naive); the date alone decides which row is newest.
+        latest_row = max([template_tx, *adopted], key=lambda row: row.timestamp.replace(tzinfo=None))
         for target_date, recurring_month in targets:
             usd_value, usd_rate_locked = lock_usd_value(template_tx.amount, currency)
             max_pos += 1
@@ -2426,6 +2464,18 @@ def import_commit():
             currency = current_user.preferred_currency or "USD"
         usd_value, usd_rate_locked = lock_usd_value(amount, currency)
 
+        # A statement line that pays a tracked bill fills in that bill's
+        # occurrence rather than counting a second time (bill_matching).
+        timestamp = _resolve_transaction_timestamp(date_str)
+        occurrence = bill_matching.find_open_occurrence(uid, t_type, currency, amount, description, timestamp.date())
+        if occurrence is not None:
+            bill_matching.absorb_charge(
+                occurrence, amount=amount, currency=currency, usd_value=usd_value,
+                usd_rate_locked=usd_rate_locked, timestamp=timestamp,
+                import_source="csv", needs_review=False)
+            imported += 1
+            continue
+
         max_pos += 1
         db.session.add(Transaction(
             description=description,
@@ -2437,7 +2487,7 @@ def import_commit():
             # transaction date in the app goes through — date_str is
             # already confirmed valid above, so this never hits that
             # helper's own "fall back to today" branch.
-            timestamp=_resolve_transaction_timestamp(date_str),
+            timestamp=timestamp,
             category=category,
             import_source="csv",
             currency=currency,

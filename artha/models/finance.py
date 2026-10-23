@@ -45,6 +45,15 @@ class Transaction(db.Model):
     # every row there is already reviewed before it's saved.
     needs_review = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
+    # True once a real charge (Apple Pay, a statement import, a manual add)
+    # has been matched to this generated bill occurrence, by
+    # services/bill_matching.py: the charge's amount, date and currency
+    # were written onto this row instead of a second transaction being
+    # saved, or this real row was adopted as the occurrence. Stops a second
+    # charge from being absorbed into the same bill. Generated rows start
+    # False; it means nothing on a row that isn't part of a series.
+    bill_matched = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     # The period this generated row represents, set only on rows created
     # by generate_recurring() (NULL for everything else) — for a monthly
     # series (recurrence_interval is None, the default) that's the
@@ -116,6 +125,17 @@ class Transaction(db.Model):
             name="uq_transaction_recurring_month",
         ),
     )
+
+    @property
+    def occurrence_day(self):
+        """The day this row counts for as a bill occurrence. A weekly or
+        biweekly copy's due date lives in recurring_month and stays put when
+        a real charge a day or two off is matched onto it (bill_matched), so
+        "is this week's occurrence posted?" checks use it; everything else
+        is simply the transaction's own date."""
+        if self.recurrence_interval in ("weekly", "biweekly") and self.recurring_month:
+            return self.recurring_month
+        return self.timestamp.date() if self.timestamp else None
 
     @property
     def native_currency(self) -> str:
