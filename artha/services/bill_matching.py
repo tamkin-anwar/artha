@@ -33,6 +33,7 @@ purchases.
 
 from __future__ import annotations
 
+import calendar
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -161,11 +162,57 @@ def absorb_charge(occurrence: Transaction, *, amount: Decimal, currency: str, us
     return occurrence
 
 
-def find_charge_for(template: Transaction, due: date) -> Transaction | None:
+def _series_templates(user_id: int, t_type: str) -> dict[str, Transaction]:
+    """The latest row of each of this person's bill series, by name."""
+    rows = Transaction.query.filter_by(user_id=user_id, type=t_type, is_recurring=True).all()
+    latest: dict[str, Transaction] = {}
+    for row in rows:
+        current = latest.get(row.description)
+        if current is None or (row.timestamp and current.timestamp
+                               and row.timestamp.replace(tzinfo=None) > current.timestamp.replace(tzinfo=None)):
+            latest[row.description] = row
+    return latest
+
+
+def _distance_to_series(template: Transaction, day: date) -> int:
+    """Days between `day` and the nearest occurrence of `template`'s series
+    in that month: a monthly bill's day of the month, or the nearest step
+    of a weekly or biweekly one."""
+    if template.recurrence_interval in ("weekly", "biweekly"):
+        period = 7 if template.recurrence_interval == "weekly" else 14
+        offset = (day - template.timestamp.date()).days % period
+        return min(offset, period - offset)
+    last = calendar.monthrange(day.year, day.month)[1]
+    due = date(day.year, day.month, min(template.timestamp.day, last))
+    return abs((day - due).days)
+
+
+def _contested(charge: Transaction, chosen_bill: str, best: tuple) -> bool:
+    """Whether another tracked bill could claim this charge just as well,
+    in which case it isn't given to either (no guessing between two $30
+    bills for one $30 payment)."""
+    day = charge.timestamp.date()
+    for name, template in _series_templates(charge.user_id, charge.type).items():
+        if name == chosen_bill or template.native_currency != charge.native_currency or not template.timestamp:
+            continue
+        distance = _distance_to_series(template, day)
+        if distance > WINDOW_DAYS.get(template.recurrence_interval or "monthly", WINDOW_DAYS["monthly"]):
+            continue
+        score = _score(template.description, template.amount, charge.description, charge.amount, distance)
+        if score is not None and score[0] <= best[0]:
+            return True
+    return False
+
+
+def find_charge_for(template: Transaction, due: date, *, allow_same_name: bool = False,
+                    exclude_ids: set[int] | None = None) -> Transaction | None:
     """An existing real charge that already pays this occurrence of
     `template`'s series, if exactly one fits: one nobody tracked as a bill,
     not yet matched, same type and currency, near the due date in the
-    same month. Used by generate_due_recurring() before it adds a copy."""
+    same month. Used by generate_due_recurring() before it adds a copy
+    (where a charge with the bill's own name is already handled by its
+    own check) and by the one-time cleanup of past duplicates (where it
+    isn't: allow_same_name)."""
     window = WINDOW_DAYS.get(template.recurrence_interval or "monthly", WINDOW_DAYS["monthly"])
     start = datetime(due.year, due.month, due.day) - timedelta(days=window + 1)
     end = datetime(due.year, due.month, due.day) + timedelta(days=window + 2)
@@ -175,13 +222,16 @@ def find_charge_for(template: Transaction, due: date) -> Transaction | None:
         Transaction.is_recurring.is_(False),
         Transaction.recurring_month.is_(None),
         Transaction.bill_matched.is_(False),
-        Transaction.description != template.description,
         Transaction.timestamp >= start,
         Transaction.timestamp < end,
     ).all()
 
     scored = []
     for row in candidates:
+        if not allow_same_name and row.description == template.description:
+            continue
+        if exclude_ids and row.id in exclude_ids:
+            continue
         if row.native_currency != template.native_currency or row.timestamp is None:
             continue
         day = row.timestamp.date()
@@ -193,7 +243,11 @@ def find_charge_for(template: Transaction, due: date) -> Transaction | None:
         score = _score(template.description, template.amount, row.description, row.amount, distance)
         if score is not None:
             scored.append((score, row))
-    return _best(scored)
+    charge = _best(scored)
+    if charge is None:
+        return None
+    best = min(item[0] for item in scored if item[1] is charge)
+    return None if _contested(charge, template.description, best) else charge
 
 
 def adopt_charge(charge: Transaction, template: Transaction, recurring_month: date) -> Transaction:
@@ -210,3 +264,40 @@ def adopt_charge(charge: Transaction, template: Transaction, recurring_month: da
     charge.bill_matched = True
     db.session.flush()
     return charge
+
+
+# --- One-time cleanup of duplicates from before this existed -----------------
+
+def past_duplicate_pairs(user_id: int) -> list[tuple[Transaction, Transaction]]:
+    """Every (bill occurrence, real charge) pair in this person's history
+    that counted twice before matching existed, by the same rules: each
+    bill row that came from Artha or was typed in (not from a bank), with
+    no charge matched yet, paired with the one real charge that fits it.
+    A charge pairs with at most one bill; anything ambiguous is left out."""
+    occurrences = Transaction.query.filter(
+        Transaction.user_id == user_id,
+        db.or_(Transaction.recurring_month.isnot(None), Transaction.is_recurring.is_(True)),
+        Transaction.bill_matched.is_(False),
+        db.or_(Transaction.import_source.is_(None), Transaction.import_source.notin_(BANK_SOURCES)),
+        Transaction.timestamp.isnot(None),
+    ).order_by(Transaction.timestamp).all()
+
+    pairs = []
+    used: set[int] = set()
+    for occurrence in occurrences:
+        due = _occurrence_day(occurrence)
+        charge = find_charge_for(occurrence, due, allow_same_name=True, exclude_ids=used)
+        if charge is not None:
+            pairs.append((occurrence, charge))
+            used.add(charge.id)
+    return pairs
+
+
+def merge_pair(occurrence: Transaction, charge: Transaction) -> None:
+    """The live rule, after the fact: the charge's real amount, date and
+    currency go onto the bill occurrence, and the charge row goes."""
+    absorb_charge(occurrence, amount=charge.amount, currency=charge.native_currency,
+                  usd_value=charge.usd_value, usd_rate_locked=charge.usd_rate_locked,
+                  timestamp=charge.timestamp, import_source=charge.import_source,
+                  needs_review=charge.needs_review)
+    db.session.delete(charge)

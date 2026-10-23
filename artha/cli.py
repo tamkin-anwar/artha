@@ -240,6 +240,59 @@ def register_cli(app):
         db.session.commit()
         click.echo(f"Purged {count} account(s) past their deletion grace period.")
 
+    @app.cli.command("merge-bill-duplicates")
+    @click.option("--apply", "apply_changes", is_flag=True,
+                  help="Make the changes. Without it, nothing is written (a dry run).")
+    @click.option("--details", is_flag=True,
+                  help="List each pair (bill name, amounts, dates). Off by default: it shows people's transactions.")
+    @click.option("--user", "username", default=None, help="Only this username.")
+    def merge_bill_duplicates_command(apply_changes, details, username):
+        """One-time cleanup: merge each tracked bill with the real charge
+        that paid it, for pairs that counted twice before
+        services/bill_matching.py existed (2026-10-22). Same rules as the
+        live matching; ambiguous pairs are left alone. A dry run unless
+        --apply, and only counts per account unless --details, since the
+        details are other people's transactions."""
+        from .services import bill_matching
+
+        query = User.query.order_by(User.id)
+        if username:
+            query = query.filter_by(username=username)
+        users = query.all()
+        if username and not users:
+            raise click.ClickException(f"No user named {username}.")
+
+        total = 0
+        for user in users:
+            pairs = bill_matching.past_duplicate_pairs(user.id)
+            if not pairs:
+                continue
+            total += len(pairs)
+            click.echo(f"user {user.id}: {len(pairs)} pair(s)")
+            for occurrence, charge in pairs:
+                if details:
+                    click.echo(
+                        f"  {occurrence.description!r} {occurrence.amount} {occurrence.native_currency}"
+                        f" due {bill_matching._occurrence_day(occurrence)}"
+                        f"  <-  {charge.description!r} {charge.amount} on {charge.timestamp.date()}"
+                        f" (transaction {charge.id})"
+                    )
+                if apply_changes:
+                    # Enough to put a removed charge back by hand if ever needed.
+                    log.info("merge-bill-duplicates: user %s bill %s absorbed charge %s (%s %s on %s)",
+                             user.id, occurrence.id, charge.id, charge.amount, charge.native_currency,
+                             charge.timestamp.date())
+                    bill_matching.merge_pair(occurrence, charge)
+                    db.session.flush()
+
+        if apply_changes:
+            db.session.commit()
+            click.echo(f"Merged {total} pair(s) across {len(users)} account(s) checked.")
+        else:
+            db.session.rollback()
+            click.echo(f"Dry run: {total} pair(s) would be merged across {len(users)} account(s) checked. "
+                       "Run again with --apply to merge them.")
+
     @app.cli.command("create-review-account")
     def create_review_account_command():
         """Create (or reset) the sample account Apple's App Review signs in

@@ -269,3 +269,78 @@ def test_a_bill_that_came_from_the_bank_is_already_the_real_charge(auth_client, 
     _add(auth_client, "SPOTIFY P3A2B1 STOCKHOLM", "11.99", due)
 
     assert len(_expenses_this_month(user)) == 2
+
+
+# --- one-time cleanup of duplicates from before matching existed -------------
+
+def _row(user, description, amount, day: date, **extra):
+    tx = Transaction(description=description, amount=Decimal(amount), type="expense", user_id=user.id,
+                     currency="USD", timestamp=datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc),
+                     **extra)
+    db.session.add(tx)
+    db.session.commit()
+    return tx
+
+
+def _past_month_day(months_back: int) -> date:
+    today = date.today()
+    idx = today.year * 12 + today.month - 1 - months_back
+    return date(idx // 12, idx % 12 + 1, 15)
+
+
+def test_cleanup_is_a_dry_run_unless_applied(app, user):
+    due = _past_month_day(2)
+    _row(user, "Netflix", "15.49", due, is_recurring=True, recurring_month=due.replace(day=1),
+         category="subscriptions")
+    _row(user, "NETFLIX.COM", "15.49", due + timedelta(days=1), import_source="csv")
+
+    result = app.test_cli_runner().invoke(args=["merge-bill-duplicates"])
+
+    assert "Dry run: 1 pair(s)" in result.output
+    assert "NETFLIX.COM" not in result.output  # no one's transactions without --details
+    assert Transaction.query.filter_by(user_id=user.id).count() == 2
+
+
+def test_cleanup_merges_past_pairs_and_leaves_the_rest(app, user):
+    old = _past_month_day(2)
+    older = _past_month_day(3)
+    # A generated Netflix copy and its statement line, two months ago.
+    _row(user, "Netflix", "15.49", old, is_recurring=True, recurring_month=old.replace(day=1), category="subscriptions")
+    _row(user, "NETFLIX.COM", "15.99", old + timedelta(days=2), import_source="csv")
+    # Rent typed in as a repeating bill, and the Zelle payment for it.
+    _row(user, "Rent", "1650.00", older, is_recurring=True, import_source="manual", category="housing")
+    _row(user, "Zelle to J Smith", "1650.00", older - timedelta(days=1), import_source="csv")
+    # Two bills with the same amount and a payment that could be either.
+    _row(user, "Gym", "30.00", older, is_recurring=True, recurring_month=older.replace(day=1))
+    _row(user, "Phone", "30.00", older, is_recurring=True, recurring_month=older.replace(day=1))
+    _row(user, "Online payment", "30.00", older, import_source="csv")
+    # An ordinary purchase.
+    _row(user, "Whole Foods", "84.12", old, import_source="csv")
+
+    result = app.test_cli_runner().invoke(args=["merge-bill-duplicates", "--apply", "--details"])
+
+    assert "Merged 2 pair(s)" in result.output, result.output
+    names = sorted(t.description for t in Transaction.query.filter_by(user_id=user.id).all())
+    assert names == ["Gym", "Netflix", "Online payment", "Phone", "Rent", "Whole Foods"]
+    netflix = Transaction.query.filter_by(user_id=user.id, description="Netflix").one()
+    assert netflix.amount == Decimal("15.99") and netflix.bill_matched and netflix.import_source == "csv"
+    assert netflix.timestamp.date() == old + timedelta(days=2)
+    rent = Transaction.query.filter_by(user_id=user.id, description="Rent").one()
+    assert rent.bill_matched and rent.timestamp.date() == older - timedelta(days=1)
+
+    # Running it again finds nothing more.
+    again = app.test_cli_runner().invoke(args=["merge-bill-duplicates", "--apply"])
+    assert "Merged 0 pair(s)" in again.output
+
+
+def test_generation_does_not_hand_one_payment_to_either_of_two_equal_bills(auth_client, user):
+    due = _day_this_month()
+    _track(user, "Gym", "30.00", due)
+    _track(user, "Phone", "30.00", due)
+    _row(user, "Online payment", "30.00", due - timedelta(days=1), import_source="csv")
+
+    _generate(auth_client)
+
+    rows = _expenses_this_month(user)
+    assert sorted(r.description for r in rows) == ["Gym", "Online payment", "Phone"]
+    assert not any(r.bill_matched for r in rows)

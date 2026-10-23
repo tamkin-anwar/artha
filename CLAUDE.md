@@ -176,6 +176,11 @@ and Artha shouldn't repeat that.
   on, and `Transaction.occurrence_day` keeps a weekly bill's due date
   when its charge lands a day off; Safe to Spend and Plan's "posted?"
   checks use it.
+  `flask merge-bill-duplicates` is the one-time cleanup for pairs from
+  before this existed: a dry run unless `--apply`, counts per account
+  only unless `--details` (those are other people's transactions), the
+  same rules plus one more: a charge another tracked bill could claim
+  just as well (two $30 bills, one $30 payment) is never merged.
 - **One design language across web and apps: Daybreak** (written down
   2026-10-22 in the artha-apple repo's `Docs/Design.md`). The web's
   tokens in `static/css/style.css` mirror `Palette.swift` value for value
