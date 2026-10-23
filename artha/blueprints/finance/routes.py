@@ -1156,12 +1156,16 @@ def generate_due_recurring(user) -> dict:
         # Naive and aware datetimes can't be compared (SQLite reads them
         # back naive); the date alone decides which row is newest.
         latest_row = max([template_tx, *adopted], key=lambda row: row.timestamp.replace(tzinfo=None))
+        # What the bill expects next: its usual amount, unless a new price
+        # is confirmed (bill_matching.expected_amount). A one-off charge
+        # on the last occurrence doesn't carry forward.
+        next_amount = bill_matching.expected_amount(template_tx)
         for target_date, recurring_month in targets:
-            usd_value, usd_rate_locked = lock_usd_value(template_tx.amount, currency)
+            usd_value, usd_rate_locked = lock_usd_value(next_amount, currency)
             max_pos += 1
             new_tx = Transaction(
                 description=template_tx.description,
-                amount=template_tx.amount,
+                amount=next_amount,
                 type=template_tx.type,
                 category=template_tx.category,
                 user_id=uid,
@@ -3241,6 +3245,38 @@ def activity_pair(tx_id):
         log.error("Error pairing transaction %s: %s", tx_id, e, exc_info=True)
         return jsonify({"message": "Artha couldn't pair those. Try again in a moment."}), 500
     return jsonify({"bill_id": bill.id})
+
+
+def keep_new_price_record(user, tx: Transaction) -> Transaction:
+    """The person says the amount a bill was just charged is its price from
+    now on (bill_matching.keep_new_price), for the web Activity editor and
+    the app alike. Raises bill_matching.NotAPriceChange when there's no new
+    amount to keep."""
+    try:
+        bill_matching.keep_new_price(tx)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if tx.type == "expense":
+        _check_budget_overage_alerts(user.id)
+    return tx
+
+
+@finance_bp.route("/activity/<int:tx_id>/new-price", methods=["POST"])
+@login_required
+def activity_new_price(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    try:
+        keep_new_price_record(current_user, tx)
+    except bill_matching.NotAPriceChange as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
+        log.error("Error keeping a new price on %s: %s", tx_id, e, exc_info=True)
+        return jsonify({"message": "Artha couldn't save that. Try again in a moment."}), 500
+    return jsonify({"id": tx.id})
 
 
 @finance_bp.route("/activity/<int:tx_id>/split", methods=["POST"])

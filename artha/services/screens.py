@@ -153,6 +153,9 @@ def serialize_transaction(tx: Transaction, display_currency: str, rates, as_purc
         "can_pair": bill_matching.can_pair(tx),
         "display_amount": None,
         "can_split": splits.can_split(tx),
+        # A bill charged something other than usual: what it was charged,
+        # what it usually is, and what comes next (bill_matching).
+        "price_change": bill_matching.price_change(tx),
         "split": None,
     }
     if tx.native_currency != display_currency:
@@ -274,7 +277,7 @@ def today_screen(user, today=None) -> dict:
             continue
         coming_up.append({
             "description": desc,
-            "amount": money(tx.amount),
+            "amount": money(bill_matching.expected_amount(tx)),
             "currency": tx.native_currency,
             "category": tx.category,
             "due": due.isoformat(),

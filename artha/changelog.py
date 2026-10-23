@@ -27,6 +27,12 @@ render order too.
 CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
+        "category": "improved",
+        "title": "A one-off charge doesn't change your bill",
+        "body": "If a bill is charged a different amount once, like a late fee, Artha still expects the usual amount next time. When it's really a new price, tap Expect it from now on, or Artha picks it up after two charges in a row.",
+    },
+    {
+        "date": "2026-10-23",
         "category": "new",
         "title": "Split a purchase across categories",
         "body": "A Costco run that's part groceries, part household can count as both. Open it in Activity, choose Split across categories, and give each part its category and amount. Your budgets count each part where it belongs, and Activity still shows one purchase.",

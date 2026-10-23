@@ -159,9 +159,116 @@ def find_open_occurrence(user_id: int, t_type: str, currency: str, amount: Decim
         if distance > WINDOW_DAYS.get(row.recurrence_interval or "monthly", WINDOW_DAYS["monthly"]):
             continue
         score = _score(row.description, row.amount, description, amount, distance)
+        if score is None and amount == _last_charged(row) and names_match(row.description, description):
+            # The price the bill was last charged: a rise seen once before.
+            score = (0, distance)
         if score is not None:
             scored.append((score, row))
     return _best(scored)
+
+
+# ---------------------------------------------------------------------------
+# What a bill should cost next time
+# ---------------------------------------------------------------------------
+#
+# A charge that pays a bill writes its real amount onto the bill's row, and
+# the next occurrence copies the latest row. Copied blindly, one odd month
+# (a late fee, a prorated first month, a one-time surcharge) became what
+# Artha expected every month after. So the next occurrence expects the new
+# amount only once it's a real price: the person says so ("Expect $17.99
+# from now on"), or two charges in a row came to it. Until then a one-off
+# is paid as charged and the bill still expects its usual amount. A charge
+# at the amount the bill was last charged still matches it, even past the
+# usual 10%, so a genuine price rise pairs again on the second month
+# instead of counting twice.
+
+def planned_amount(row: Transaction) -> Decimal | None:
+    """What a paid occurrence was expecting before its charge landed, or
+    None when nothing was paid on it (or it was paired before this was
+    kept)."""
+    if not row.bill_matched or not isinstance(row.pairing, dict):
+        return None
+    return _decimal((row.pairing.get("bill") or {}).get("amount"))
+
+
+def previous_occurrence(row: Transaction) -> Transaction | None:
+    if row.timestamp is None:
+        return None
+    return Transaction.query.filter(
+        Transaction.user_id == row.user_id,
+        Transaction.description == row.description,
+        Transaction.type == row.type,
+        db.or_(Transaction.recurring_month.isnot(None), Transaction.is_recurring.is_(True)),
+        Transaction.timestamp < row.timestamp,
+        Transaction.id != row.id,
+    ).order_by(Transaction.timestamp.desc()).first()
+
+
+def expected_amount(template: Transaction) -> Decimal:
+    """What the bill's next occurrence should expect, given its latest
+    row: the amount it was charged when that's the usual amount, a price
+    the person confirmed, or one two charges in a row agree on; otherwise
+    its usual amount."""
+    planned = planned_amount(template)
+    if planned is None or planned == template.amount:
+        return template.amount
+    if template.pairing.get("new_price"):
+        return template.amount
+    previous = previous_occurrence(template)
+    if previous is not None and previous.bill_matched and previous.amount == template.amount:
+        return template.amount
+    return planned
+
+
+def expected_usd(template: Transaction) -> Decimal:
+    amount = expected_amount(template)
+    if amount == template.amount:
+        return template.value_in_usd
+    return lock_usd_value(amount, template.native_currency)[0]
+
+
+def price_change(row: Transaction) -> dict | None:
+    """For a paid bill charged something other than it expected: what it
+    was charged, what it usually is, and what comes next, so the person can
+    tell Artha it's the new price. None otherwise."""
+    planned = planned_amount(row)
+    if planned is None or planned == row.amount:
+        return None
+    following = Transaction.query.filter(
+        Transaction.user_id == row.user_id,
+        Transaction.description == row.description,
+        Transaction.type == row.type,
+        db.or_(Transaction.recurring_month.isnot(None), Transaction.is_recurring.is_(True)),
+        Transaction.timestamp > row.timestamp,
+    ).first() if row.timestamp else None
+    return {
+        "charged": _money(row.amount),
+        "usual": _money(planned),
+        "next": _money(expected_amount(row)),
+        # Only the latest occurrence decides what's next.
+        "can_set": following is None,
+    }
+
+
+class NotAPriceChange(ValueError):
+    """There's no new price on this transaction to keep."""
+
+
+def keep_new_price(row: Transaction) -> Transaction:
+    """The person says this charge's amount is the bill's price from now
+    on. The caller commits."""
+    if planned_amount(row) is None or planned_amount(row) == row.amount:
+        raise NotAPriceChange("This bill was charged what it usually is.")
+    pairing = dict(row.pairing)
+    pairing["new_price"] = True
+    row.pairing = pairing
+    return row
+
+
+def _last_charged(row: Transaction) -> Decimal | None:
+    """The amount this bill was most recently charged, before `row`."""
+    previous = previous_occurrence(row)
+    return previous.amount if previous is not None and previous.bill_matched else None
 
 
 def _money(value) -> str | None:

@@ -199,6 +199,18 @@ and Artha shouldn't repeat that.
   only unless `--details` (those are other people's transactions), the
   same rules plus one more: a charge another tracked bill could claim
   just as well (two $30 bills, one $30 payment) is never merged.
+- **A one-off charge doesn't reset a bill** (2026-10-23). A paid
+  occurrence keeps what it expected in `pairing["bill"]["amount"]`, and
+  `bill_matching.expected_amount(template)` decides what the next
+  occurrence expects: the new amount only once it's confirmed (the person
+  taps "Expect $X from now on", `pairing["new_price"]`, or two charges in a
+  row agree), otherwise the usual amount. Everything that reads a bill's
+  coming amount uses it (`generate_due_recurring`, Safe to Spend's bills
+  still due, Plan's unposted bills, Coming up, this week's renewals), never
+  the latest row's `amount` directly. A charge at the amount the bill was
+  last charged still matches it past the usual 10%, so a real price rise
+  pairs again the second month. `price_change` in the serializer, web
+  `/activity/<id>/new-price`, API `/transactions/<id>/new-price`.
 - **A purchase can be split across categories** (`services/splits.py`,
   2026-10-23). Each part is its own Transaction sharing
   `Transaction.split_group`, so budgets, Safe to Spend, charts and the AI

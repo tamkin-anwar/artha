@@ -91,7 +91,7 @@ def test_an_apple_pay_charge_fills_in_the_bill_instead_of_counting_twice(auth_cl
     assert resp.get_json()["id"] == bill.id
 
 
-def test_a_new_price_is_taken_and_carried_forward(auth_client, user):
+def test_a_bill_is_paid_at_what_it_was_charged(auth_client, user):
     due = _day_this_month()
     _track(user, "Netflix", "15.49", due)
     _generate(auth_client)

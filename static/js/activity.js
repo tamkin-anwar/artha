@@ -97,6 +97,7 @@ function select(row, { push = true } = {}) {
     field("detail-paired").hidden = !tx.paired_charge;
     resetPairing(tx);
     resetSplit(tx);
+    resetPriceChange(tx);
     field("detail-paired-title").textContent = tx.type === "income" ? "Paired with its repeating income" : "Paired with its bill";
     field("detail-paired-text").textContent = tx.paired_charge
         ? `Artha matched \u201C${tx.paired_charge}\u201D to this, so it counts once.`
@@ -451,6 +452,52 @@ document.querySelector("[data-categorize]")?.addEventListener("click", async (e)
 
 document.querySelectorAll("[data-import-open]").forEach((b) =>
     b.addEventListener("click", () => document.getElementById("csv-import-btn")?.click()));
+
+// ---------------------------------------------------------------------------
+// A bill charged something other than usual (bill_matching.price_change).
+// One odd month doesn't change what Artha expects next; the person can
+// say it's the new price.
+// ---------------------------------------------------------------------------
+
+const priceBox = field("detail-price");
+const newPriceButton = field("detail-new-price");
+
+function resetPriceChange(tx) {
+    const change = tx.price_change;
+    priceBox.hidden = !change;
+    if (!change) return;
+    const charged = formatMoneyIn(change.charged, tx.currency);
+    const usual = formatMoneyIn(change.usual, tx.currency);
+    const more = Number(change.charged) > Number(change.usual);
+    field("detail-price-title").textContent = more ? "Charged more than usual" : "Charged less than usual";
+    const keepsUsual = change.next === change.usual;
+    field("detail-price-text").textContent = !change.can_set
+        ? `Charged ${charged} that time. It's usually ${usual}.`
+        : (keepsUsual
+            ? `Charged ${charged}. It's usually ${usual}, and that's what Artha expects next time.`
+            : `Artha expects ${charged} from now on.`);
+    newPriceButton.hidden = !(change.can_set && keepsUsual);
+    newPriceButton.textContent = `Expect ${charged} from now on`;
+}
+
+newPriceButton.addEventListener("click", async () => {
+    if (!current || !current.price_change) return;
+    const charged = formatMoneyIn(current.price_change.charged, current.currency);
+    try {
+        const res = await postJSON(`/activity/${current.id}/new-price`, {});
+        if (!res.ok) {
+            showToast(res.data.message || "Artha couldn't save that. Try again in a moment.", "error");
+            return;
+        }
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+        return;
+    }
+    toastAfterReload(`Artha expects ${charged} from now on`);
+    const url = new URL(window.location.href);
+    url.searchParams.set("selected", current.id);
+    window.location.replace(url);
+});
 
 // ---------------------------------------------------------------------------
 // One purchase across categories (services/splits.py). The parts must add

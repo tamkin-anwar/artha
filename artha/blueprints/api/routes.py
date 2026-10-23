@@ -47,7 +47,7 @@ from ...services.screens import (
     wealth_screen,
 )
 from ...services.splits import SplitError
-from ...services.bill_matching import CannotPair, NotPaired
+from ...services.bill_matching import CannotPair, NotAPriceChange, NotPaired
 from ...services.goals import GoalError, add_to_goal, delete_goal, describe_goal, save_goal
 from ...services.recurring_detect import SuggestionError, dismiss_suggestion, track_suggestion
 from ...utils import CURRENCY_CODES, user_today
@@ -83,6 +83,7 @@ from ..finance.routes import (
     pair_transaction_record,
     preview_statement,
     unpair_transaction_record,
+    keep_new_price_record,
     split_transaction_record,
     unsplit_transaction_record,
     update_transaction_fields,
@@ -534,6 +535,27 @@ def pair_transaction(transaction_id):
     currency = user.preferred_currency or "USD"
     rates = get_rates() if currency != "USD" else None
     return jsonify({"transaction": serialize_transaction(bill, currency, rates)})
+
+
+@api_bp.post("/transactions/<int:transaction_id>/new-price")
+@api_auth_required
+def keep_new_price(transaction_id):
+    """A bill charged something other than usual (its price_change isn't
+    null): keep that amount as its price from now on. Returns the bill."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    user = g.api_user
+    try:
+        keep_new_price_record(user, tx)
+    except NotAPriceChange as exc:
+        return api_error(400, "not_a_price_change", str(exc))
+    except Exception:
+        log.error("Error keeping a new price on %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't save that. Try again in a moment.")
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({"transaction": serialize_transaction(tx, currency, rates)})
 
 
 @api_bp.post("/transactions/<int:transaction_id>/split")

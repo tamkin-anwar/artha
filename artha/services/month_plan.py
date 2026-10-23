@@ -22,6 +22,7 @@ from sqlalchemy import func
 from ..extensions import db
 from ..models import Transaction
 from ..utils import recurring_occurrences
+from .bill_matching import expected_amount, expected_usd
 from .exchange_rate_service import convert_usd_to
 from .month_snapshot import MonthSnapshot
 
@@ -96,9 +97,11 @@ def bills_this_month(snap: MonthSnapshot) -> MonthBills:
                 posted = (desc, ttype) in posted_in_month
             if posted:
                 continue
-            result.bills.append(Bill(desc, tx.amount, tx.native_currency, tx.value_in_usd,
+            # What the bill expects next, not a one-off it was last charged.
+            usd = expected_usd(tx)
+            result.bills.append(Bill(desc, expected_amount(tx), tx.native_currency, usd,
                                      tx.category, due, "due"))
-            result.unposted_usd += tx.value_in_usd
+            result.unposted_usd += usd
 
     result.bills.sort(key=lambda b: (b.due, b.description))
     return result

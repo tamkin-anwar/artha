@@ -19,6 +19,7 @@ from ..extensions import db
 from ..models import Transaction
 from ..models.budget import Budget
 from ..utils import budget_status, current_month_bounds, next_due_date, recurring_occurrences, user_today
+from .bill_matching import expected_amount, expected_usd
 from .exchange_rate_service import convert_amount, convert_usd_to, get_rates
 
 # How far ahead of an even pace (as a share of the monthly budget) spending
@@ -157,9 +158,11 @@ def build_month_snapshot(user, today: date | None = None) -> MonthSnapshot:
             renewals_this_week.append({
                 "description": desc,
                 "type": ttype,
-                "amount": float(tx.amount),
+                # What the bill expects next, not a one-off it was last
+                # charged (bill_matching.expected_amount).
+                "amount": float(expected_amount(tx)),
                 "currency": tx.native_currency,
-                "usd_amount": float(tx.value_in_usd),
+                "usd_amount": float(expected_usd(tx)),
                 "due": due,
                 "due_label": "Today" if due == today else f"{cal.month_abbr[due.month]} {due.day}",
             })
@@ -219,14 +222,15 @@ def build_month_snapshot(user, today: date | None = None) -> MonthSnapshot:
         for (desc, ttype), tx in templates_by_key.items():
             if ttype != "expense":
                 continue
+            bill_usd = expected_usd(tx)
             for due in recurring_occurrences(tx, today, month_last_day):
-                upcoming_usd += tx.value_in_usd
+                upcoming_usd += bill_usd
                 if tx.recurrence_interval in ("weekly", "biweekly"):
                     posted = (desc, ttype, due) in posted_on_day
                 else:
                     posted = (desc, ttype) in posted_in_month
                 if not posted:
-                    unposted_usd += tx.value_in_usd
+                    unposted_usd += bill_usd
         safe_to_spend_upcoming = float(convert_usd_to(upcoming_usd, display_currency, rates))
         unposted = float(convert_usd_to(unposted_usd, display_currency, rates))
         safe_to_spend = budget["cap"] - budget["spent"] - unposted

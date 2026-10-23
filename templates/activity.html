@@ -144,6 +144,17 @@
                 </div>
             </div>
 
+            {# A bill charged something other than usual: a one-off (a late
+               fee) doesn't change what Artha expects next time unless the
+               person says it's the new price (bill_matching.expected_amount). #}
+            <div class="card notice" id="detail-price" hidden>
+                <div class="notice-text">
+                    <span class="notice-title" id="detail-price-title"></span>
+                    <span id="detail-price-text"></span>
+                    <button type="button" class="link-accent" id="detail-new-price" hidden></button>
+                </div>
+            </div>
+
             <div class="field-group">
                 <label class="field-row"><span>Name</span><input id="detail-description" name="description" maxlength="200" autocomplete="off"></label>
                 <div class="field-row">
