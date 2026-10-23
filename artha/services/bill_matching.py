@@ -35,6 +35,10 @@ Every pairing can be undone (`unpair`, YNAB's Unmatch): the row keeps what
 the bill and the charge each were in Transaction.pairing, and splitting
 them puts both back, the bill as planned and the charge under its own
 name, which is then never paired with a bill on its own again.
+
+When it misses a pair, the person can make it (`bills_for` and
+`pair_by_hand`, like Copilot's "tap Recurring" or YNAB's manual Match):
+pick the bill a charge paid from the open ones nearby, closest first.
 """
 
 from __future__ import annotations
@@ -461,3 +465,72 @@ def unpair(row: Transaction) -> tuple[Transaction, Transaction]:
     db.session.add(bill)
     db.session.flush()
     return bill, row
+
+
+# --- Pairing by hand ----------------------------------------------------------------
+
+# How far a bill's due date can be from the charge to be offered at all.
+# Wider than the automatic windows: a person choosing knows better than a
+# date rule, so this only keeps the list short.
+HAND_WINDOW_DAYS = 25
+HAND_LIMIT = 8
+
+
+class CannotPair(ValueError):
+    """The charge or the chosen bill can't be paired by hand."""
+
+
+def can_pair(tx: Transaction) -> bool:
+    """A real charge: not a bill occurrence itself, not already paired."""
+    return not tx.is_recurring and tx.recurring_month is None and not tx.bill_matched
+
+
+def bills_for(charge: Transaction) -> list[Transaction]:
+    """The open bill occurrences this charge could have paid, likeliest
+    first: a matching name, then the closest amount, then the closest
+    date. Same type and currency, not paid yet, not from a bank."""
+    if not can_pair(charge) or charge.timestamp is None:
+        return []
+    day = charge.timestamp.date()
+    start = datetime(day.year, day.month, day.day) - timedelta(days=HAND_WINDOW_DAYS + 1)
+    end = datetime(day.year, day.month, day.day) + timedelta(days=HAND_WINDOW_DAYS + 2)
+    rows = Transaction.query.filter(
+        Transaction.user_id == charge.user_id,
+        Transaction.type == charge.type,
+        Transaction.id != charge.id,
+        db.or_(Transaction.recurring_month.isnot(None), Transaction.is_recurring.is_(True)),
+        Transaction.bill_matched.is_(False),
+        db.or_(Transaction.import_source.is_(None), Transaction.import_source.notin_(BANK_SOURCES)),
+        Transaction.timestamp >= start,
+        Transaction.timestamp < end,
+    ).all()
+
+    ranked = []
+    for row in rows:
+        due = _occurrence_day(row)
+        if row.native_currency != charge.native_currency or due is None:
+            continue
+        distance = abs((due - day).days)
+        if distance > HAND_WINDOW_DAYS:
+            continue
+        gap = abs(row.amount - charge.amount) / max(row.amount, Decimal("1"))
+        ranked.append(((0 if names_match(row.description, charge.description) else 1, gap, distance), row))
+    ranked.sort(key=lambda item: item[0])
+    return [row for _, row in ranked[:HAND_LIMIT]]
+
+
+def pair_by_hand(charge: Transaction, bill: Transaction) -> Transaction:
+    """Pairs a charge with the bill the person picked, exactly like an
+    automatic pairing: the charge's amount, date and source go onto the
+    bill, which keeps its name and category, the charge row goes, and the
+    originals are kept so Unpair can split them again. The caller commits."""
+    if bill.id not in {row.id for row in bills_for(charge)}:
+        raise CannotPair("That bill can't be paired with this transaction.")
+    absorb_charge(bill, description=charge.description, category=charge.category,
+                  amount=charge.amount, currency=charge.native_currency,
+                  usd_value=charge.usd_value, usd_rate_locked=charge.usd_rate_locked,
+                  timestamp=charge.timestamp, import_source=charge.import_source,
+                  needs_review=charge.needs_review)
+    db.session.delete(charge)
+    db.session.flush()
+    return bill

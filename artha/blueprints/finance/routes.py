@@ -2910,6 +2910,60 @@ def activity_unpair(tx_id):
     return jsonify({"bill_id": bill.id, "charge_id": charge.id})
 
 
+def bill_choices(user, tx: Transaction) -> list[dict]:
+    """The bills `tx` could be paired with by hand, likeliest first, for
+    the web Activity editor and the app alike."""
+    from ...services.screens import serialize_transaction
+
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return [serialize_transaction(bill, currency, rates) for bill in bill_matching.bills_for(tx)]
+
+
+def pair_transaction_record(user, tx: Transaction, bill_id) -> Transaction:
+    """Pairs charge `tx` with the bill the person picked
+    (bill_matching.pair_by_hand). Raises bill_matching.CannotPair for a
+    bill that isn't one of its choices; any other exception is a real
+    failure (already rolled back). Returns the bill, which now holds the
+    charge."""
+    bill = db.session.get(Transaction, bill_id) if isinstance(bill_id, int) and not isinstance(bill_id, bool) else None
+    if bill is None or bill.user_id != user.id:
+        raise bill_matching.CannotPair("That bill doesn't exist anymore.")
+    try:
+        paired = bill_matching.pair_by_hand(tx, bill)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return paired
+
+
+@finance_bp.route("/activity/<int:tx_id>/bills")
+@login_required
+def activity_bills(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    return jsonify({"bills": bill_choices(current_user, tx)})
+
+
+@finance_bp.route("/activity/<int:tx_id>/pair", methods=["POST"])
+@login_required
+def activity_pair(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        bill = pair_transaction_record(current_user, tx, data.get("bill_id"))
+    except bill_matching.CannotPair as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
+        log.error("Error pairing transaction %s: %s", tx_id, e, exc_info=True)
+        return jsonify({"message": "Artha couldn't pair those. Try again in a moment."}), 500
+    return jsonify({"bill_id": bill.id})
+
+
 @finance_bp.route("/activity/reviewed", methods=["POST"])
 @login_required
 def activity_reviewed():

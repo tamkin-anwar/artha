@@ -185,6 +185,15 @@ and Artha shouldn't repeat that.
   marked `bill_match_declined` so it's never paired on its own again.
   Rows paired before 2026-10-23 have no `pairing` and can't be split; the
   serializer's `paired_charge` is null for them.
+  When it misses one, the person pairs it by hand (`bills_for` /
+  `pair_by_hand`, web `GET /activity/<id>/bills` + `POST .../pair`, API
+  `/transactions/<id>/bills` + `/pair`, shared through
+  `finance.routes.bill_choices` / `pair_transaction_record`): open bill
+  occurrences of the same type and currency within 25 days, a name match
+  first, then the closest amount and date. It merges exactly like an
+  automatic pairing, so Unpair works on it, and it's allowed on a charge
+  marked `bill_match_declined` (that flag only stops automatic pairing).
+  `can_pair` in the serializer says whether to offer it.
   `flask merge-bill-duplicates` is the one-time cleanup for pairs from
   before this existed: a dry run unless `--apply`, counts per account
   only unless `--details` (those are other people's transactions), the

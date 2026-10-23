@@ -28,6 +28,12 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
         "category": "new",
+        "title": "Pair a payment with its bill yourself",
+        "body": "If Artha didn't notice that a payment was for one of your bills, open it in Activity and choose Pair with a bill. Pick the bill from the list and they count once. Unpair works on it too.",
+    },
+    {
+        "date": "2026-10-23",
+        "category": "new",
         "title": "Unpair a bill and a charge",
         "body": "If Artha ever pairs a charge with the wrong bill, open it in Activity and tap Unpair. The bill goes back to how it was planned, the charge gets its own name back, and Artha won't pair that charge again.",
     },

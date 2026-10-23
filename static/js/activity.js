@@ -94,6 +94,7 @@ function select(row, { push = true } = {}) {
     syncType();
     field("detail-review").hidden = !tx.needs_review;
     field("detail-paired").hidden = !tx.paired_charge;
+    resetPairing(tx);
     field("detail-paired-title").textContent = tx.type === "income" ? "Paired with its repeating income" : "Paired with its bill";
     field("detail-paired-text").textContent = tx.paired_charge
         ? `Artha matched \u201C${tx.paired_charge}\u201D to this, so it counts once.`
@@ -245,6 +246,93 @@ field("detail-delete").addEventListener("click", async () => {
         },
     });
 });
+
+// A charge Artha didn't pair: pick the bill it paid from the open ones
+// nearby (likeliest first), and it counts once, exactly like an automatic
+// pairing (and can be unpaired the same way).
+const pairBox = field("detail-pair");
+const pairOpen = field("detail-pair-open");
+const pairChoices = field("detail-pair-choices");
+const pairList = field("detail-pair-list");
+const pairEmpty = field("detail-pair-empty");
+
+function shortDate(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function resetPairing(tx) {
+    const income = tx.type === "income";
+    pairBox.hidden = !tx.can_pair;
+    pairOpen.textContent = income ? "Pair with repeating income" : "Pair with a bill";
+    pairOpen.setAttribute("aria-expanded", "false");
+    field("detail-pair-question").textContent = income ? "Which repeating income is this?" : "Which bill did this pay?";
+    pairChoices.hidden = true;
+    pairList.replaceChildren();
+    pairEmpty.hidden = true;
+}
+
+pairOpen.addEventListener("click", async () => {
+    if (!current) return;
+    if (!pairChoices.hidden) {
+        pairChoices.hidden = true;
+        pairOpen.setAttribute("aria-expanded", "false");
+        return;
+    }
+    const tx = current;
+    let bills;
+    try {
+        const res = await fetch(`/activity/${tx.id}/bills`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        if (!res.ok) throw new Error(String(res.status));
+        bills = (await res.json()).bills || [];
+    } catch (err) {
+        showToast("Artha couldn't load your bills. Try again in a moment.", "error");
+        return;
+    }
+    if (current !== tx) return;
+    pairList.replaceChildren(...bills.map((bill) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "pair-choice";
+        row.setAttribute("role", "listitem");
+        const name = document.createElement("span");
+        name.className = "pair-name";
+        name.textContent = bill.description;
+        const meta = document.createElement("span");
+        meta.className = "pair-meta";
+        meta.textContent = `${shortDate(bill.date)}, ${formatMoneyIn(bill.amount, bill.currency)}`;
+        row.append(name, meta);
+        row.addEventListener("click", () => pairWith(tx, bill));
+        return row;
+    }));
+    pairList.hidden = bills.length === 0;
+    pairEmpty.hidden = bills.length > 0;
+    pairEmpty.textContent = tx.type === "income"
+        ? "No repeating income is waiting near this date. Repeating income you track shows up here."
+        : "No unpaid bills near this date. Bills you track in Plan show up here.";
+    pairChoices.hidden = false;
+    pairOpen.setAttribute("aria-expanded", "true");
+});
+
+async function pairWith(tx, bill) {
+    pairList.querySelectorAll(".pair-choice").forEach((b) => { b.disabled = true; });
+    try {
+        const res = await postJSON(`/activity/${tx.id}/pair`, { bill_id: bill.id });
+        if (!res.ok) {
+            showToast(res.data.message || "Artha couldn't pair those. Try again in a moment.", "error");
+            pairList.querySelectorAll(".pair-choice").forEach((b) => { b.disabled = false; });
+            return;
+        }
+        toastAfterReload(`Paired with ${bill.description}`);
+        const url = new URL(window.location.href);
+        url.searchParams.set("selected", res.data.bill_id);
+        window.location.replace(url);
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+        pairList.querySelectorAll(".pair-choice").forEach((b) => { b.disabled = false; });
+    }
+}
 
 // A wrong pairing splits back into the bill (as planned) and the charge
 // (under its own name), which Artha then leaves unpaired.

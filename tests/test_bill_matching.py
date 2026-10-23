@@ -286,8 +286,9 @@ def test_a_bill_that_came_from_the_bank_is_already_the_real_charge(auth_client, 
 # --- one-time cleanup of duplicates from before matching existed -------------
 
 def _row(user, description, amount, day: date, **extra):
+    extra.setdefault("currency", "USD")
     tx = Transaction(description=description, amount=Decimal(amount), type="expense", user_id=user.id,
-                     currency="USD", timestamp=datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc),
+                     timestamp=datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc),
                      **extra)
     db.session.add(tx)
     db.session.commit()
@@ -490,3 +491,112 @@ def test_the_app_sees_and_splits_a_pairing(client, user):
     assert body["charge"]["description"] == "NETFLIX.COM" and body["charge"]["amount"] == "15.49"
     again = client.post(f"/api/v1/transactions/{added['id']}/unpair", headers=headers)
     assert again.status_code == 400 and again.get_json()["error"] == "not_paired"
+
+
+# --- pairing by hand --------------------------------------------------------------
+
+def _bills(auth_client, tx_id):
+    resp = auth_client.get(f"/activity/{tx_id}/bills", headers={"X-Requested-With": "XMLHttpRequest"})
+    assert resp.status_code == 200, resp.get_json()
+    return resp.get_json()["bills"]
+
+
+def _pair(auth_client, tx_id, bill_id):
+    return auth_client.post(f"/activity/{tx_id}/pair", json={"bill_id": bill_id},
+                            headers={"X-Requested-With": "XMLHttpRequest"})
+
+
+def test_the_bills_a_charge_could_have_paid_come_likeliest_first(auth_client, user):
+    due = _day_this_month()
+    netflix = _row(user, "Netflix", "15.49", due, is_recurring=True, recurring_month=due.replace(day=1))
+    spotify = _row(user, "Spotify", "15.99", due - timedelta(days=2), is_recurring=True, recurring_month=due.replace(day=1))
+    gym = _row(user, "Gym", "40.00", due + timedelta(days=3), is_recurring=True, recurring_month=due.replace(day=1))
+    # Not offered: already paid, another currency, came from a bank, far away.
+    _row(user, "Hulu", "15.99", due, is_recurring=True, recurring_month=due.replace(day=1), bill_matched=True)
+    _row(user, "BBC", "15.99", due, is_recurring=True, recurring_month=due.replace(day=1), currency="GBP")
+    _row(user, "Phone", "15.99", due, is_recurring=True, import_source="csv")
+    _row(user, "Insurance", "15.99", due - timedelta(days=40), is_recurring=True,
+         recurring_month=(due - timedelta(days=40)).replace(day=1))
+    charge = _row(user, "NETFLIX.COM", "15.99", due + timedelta(days=1), import_source="csv")
+
+    names = [b["description"] for b in _bills(auth_client, charge.id)]
+
+    # The name match first, then the exact amount, then the rest.
+    assert names == ["Netflix", "Spotify", "Gym"], names
+    assert {netflix.id, spotify.id, gym.id} == {b["id"] for b in _bills(auth_client, charge.id)}
+
+
+def test_pairing_by_hand_counts_once_and_can_be_unpaired(auth_client, user):
+    due = _day_this_month()
+    rent = _row(user, "Rent", "1650.00", due, is_recurring=True, recurring_month=due.replace(day=1),
+                category="housing")
+    # A round amount under another name: never paired on its own.
+    charge = _row(user, "Zelle to J Smith", "1650.00", due - timedelta(days=1), import_source="csv",
+                  category="other")
+    assert not rent.bill_matched and Transaction.query.filter_by(user_id=user.id).count() == 2
+
+    resp = _pair(auth_client, charge.id, rent.id)
+
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json() == {"bill_id": rent.id}
+    rows = Transaction.query.filter_by(user_id=user.id).all()
+    assert len(rows) == 1
+    paired = rows[0]
+    assert paired.description == "Rent" and paired.category == "housing" and paired.bill_matched
+    assert paired.timestamp.date() == due - timedelta(days=1) and paired.import_source == "csv"
+
+    # Unpair puts both back, the charge under its own name.
+    assert _unpair(auth_client, rent.id).status_code == 200
+    names = sorted(t.description for t in Transaction.query.filter_by(user_id=user.id).all())
+    assert names == ["Rent", "Zelle to J Smith"]
+    zelle = Transaction.query.filter_by(user_id=user.id, description="Zelle to J Smith").one()
+    assert zelle.category == "other" and zelle.bill_match_declined
+    # Split off by hand, it can still be paired by hand again.
+    assert [b["id"] for b in _bills(auth_client, zelle.id)] == [rent.id]
+    assert _pair(auth_client, zelle.id, rent.id).status_code == 200
+
+
+def test_only_an_offered_bill_can_be_picked(auth_client, user):
+    from .conftest import make_user
+    due = _day_this_month()
+    charge = _row(user, "NETFLIX.COM", "15.49", due, import_source="csv")
+    far = _row(user, "Netflix", "15.49", due - timedelta(days=60), is_recurring=True,
+               recurring_month=(due - timedelta(days=60)).replace(day=1))
+    other = make_user(username="mallory", email="mallory@example.com")
+    theirs = _row(other, "Netflix", "15.49", due, is_recurring=True, recurring_month=due.replace(day=1))
+    plain = _row(user, "Whole Foods", "15.49", due)
+
+    for bill_id in (far.id, theirs.id, plain.id, "1", None):
+        assert _pair(auth_client, charge.id, bill_id).status_code == 400
+    assert db.session.get(Transaction, charge.id) is not None and not db.session.get(Transaction, theirs.id).bill_matched
+
+
+def test_a_bill_itself_is_not_offered_pairing(auth_client, user):
+    due = _day_this_month()
+    bill = _row(user, "Netflix", "15.49", due, is_recurring=True, recurring_month=due.replace(day=1))
+    _row(user, "Spotify", "11.99", due, is_recurring=True, recurring_month=due.replace(day=1))
+
+    assert _bills(auth_client, bill.id) == []
+    assert not bill_matching.can_pair(bill)
+
+
+def test_the_app_pairs_by_hand(client, user):
+    due = _day_this_month()
+    rent = _row(user, "Rent", "1650.00", due, is_recurring=True, recurring_month=due.replace(day=1))
+    charge = _row(user, "Zelle to J Smith", "1650.00", due, import_source="csv")
+    token = client.post("/api/v1/sessions", json={"username": user.username, "password": "password123"}).get_json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    listed = client.get("/api/v1/transactions?limit=50", headers=headers).get_json()["transactions"]
+    flags = {t["description"]: t["can_pair"] for t in listed}
+    assert flags == {"Rent": False, "Zelle to J Smith": True}
+    bills = client.get(f"/api/v1/transactions/{charge.id}/bills", headers=headers).get_json()["bills"]
+    assert [b["id"] for b in bills] == [rent.id]
+
+    resp = client.post(f"/api/v1/transactions/{charge.id}/pair", headers=headers, json={"bill_id": rent.id})
+
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()["transaction"]
+    assert body["id"] == rent.id and body["paired_charge"] == "Zelle to J Smith" and not body["can_pair"]
+    bad = client.post(f"/api/v1/transactions/{rent.id}/pair", headers=headers, json={"bill_id": rent.id})
+    assert bad.status_code == 400 and bad.get_json()["error"] == "cannot_pair"

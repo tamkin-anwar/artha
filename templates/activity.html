@@ -177,6 +177,17 @@
             </fieldset>
 
             <p class="detail-source" id="detail-source"></p>
+
+            {# A charge Artha didn't pair with the bill it paid: pick the
+               bill (bill_matching.bills_for), likeliest first. #}
+            <div class="detail-pair" id="detail-pair" hidden>
+                <button type="button" class="link-accent" id="detail-pair-open" aria-expanded="false" aria-controls="detail-pair-choices">Pair with a bill</button>
+                <div class="detail-pair-choices" id="detail-pair-choices" hidden>
+                    <p class="section-label" id="detail-pair-question">Which bill did this pay?</p>
+                    <div class="field-group" id="detail-pair-list" role="list" aria-labelledby="detail-pair-question"></div>
+                    <p class="detail-source" id="detail-pair-empty" hidden></p>
+                </div>
+            </div>
             <p class="sheet-error" id="detail-error" role="alert" hidden></p>
 
             <div class="detail-actions">

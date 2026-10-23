@@ -23,6 +23,7 @@ from ..models import Transaction
 from ..models.account import ACCOUNT_TYPES, Account, NetWorthSnapshot
 from ..models.category_budget import CategoryBudget
 from ..utils import CURRENCY_CODES, current_month_bounds, next_due_date, user_today
+from . import bill_matching
 from .cash_flow import monthly_totals, months_back
 from .exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from .month_plan import bills_this_month, typical_spending
@@ -128,6 +129,9 @@ def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict
         # (services/bill_matching.py) and the pairing can still be split;
         # null otherwise.
         "paired_charge": _paired_charge(tx),
+        # A real charge that could still be paired with a bill by hand
+        # (GET .../bills lists which).
+        "can_pair": bill_matching.can_pair(tx),
         "display_amount": None,
     }
     if tx.native_currency != display_currency:

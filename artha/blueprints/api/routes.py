@@ -44,7 +44,7 @@ from ...services.screens import (
     transactions_screen,
     wealth_screen,
 )
-from ...services.bill_matching import NotPaired
+from ...services.bill_matching import CannotPair, NotPaired
 from ...services.goals import GoalError, add_to_goal, delete_goal, describe_goal, save_goal
 from ...services.recurring_detect import SuggestionError, dismiss_suggestion, track_suggestion
 from ...utils import CURRENCY_CODES, user_today
@@ -74,6 +74,8 @@ from ..finance.routes import (
     remove_category_budget,
     save_budget,
     save_category_budget,
+    bill_choices,
+    pair_transaction_record,
     unpair_transaction_record,
     update_transaction_fields,
 )
@@ -486,6 +488,41 @@ def edit_transaction(transaction_id):
     currency = user.preferred_currency or "USD"
     rates = get_rates() if currency != "USD" else None
     return jsonify({"transaction": serialize_transaction(tx, currency, rates)})
+
+
+@api_bp.get("/transactions/<int:transaction_id>/bills")
+@api_auth_required
+def transaction_bills(transaction_id):
+    """The open bills this transaction could have paid, likeliest first,
+    for pairing by hand (a transaction whose can_pair is true)."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    return jsonify({"bills": bill_choices(g.api_user, tx)})
+
+
+@api_bp.post("/transactions/<int:transaction_id>/pair")
+@api_auth_required
+def pair_transaction(transaction_id):
+    """Body: {"bill_id": n}, one of GET .../bills. Pairs them like an
+    automatic pairing (counted once, undone with .../unpair) and returns
+    the bill, which now holds the charge; the charge's own id is gone."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    data = _json_body() or {}
+    user = g.api_user
+    try:
+        bill = pair_transaction_record(user, tx, data.get("bill_id"))
+    except CannotPair as exc:
+        return api_error(400, "cannot_pair", str(exc))
+    except Exception:
+        log.error("Error pairing transaction %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't pair those. Try again in a moment.")
+
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({"transaction": serialize_transaction(bill, currency, rates)})
 
 
 @api_bp.post("/transactions/<int:transaction_id>/unpair")
