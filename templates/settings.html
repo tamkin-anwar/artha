@@ -87,6 +87,7 @@
                     <div id="push-preferences" hidden>
                         <label class="settings-row"><span>Bills due</span><input type="checkbox" class="settings-switch" data-pref="notify_bills_due" {{ 'checked' if current_user.notify_bills_due }}></label>
                         <label class="settings-row"><span>Going over a budget</span><input type="checkbox" class="settings-switch" data-pref="notify_budget_alerts" {{ 'checked' if current_user.notify_budget_alerts }}></label>
+                        <label class="settings-row"><span>Spending ahead of pace</span><input type="checkbox" class="settings-switch" data-pref="notify_pace_heads_up" {{ 'checked' if current_user.notify_pace_heads_up }}></label>
                         <label class="settings-row"><span>Notes due</span><input type="checkbox" class="settings-switch" data-pref="notify_notes_due" {{ 'checked' if current_user.notify_notes_due }}></label>
                         <label class="settings-row"><span>Calendar events</span><input type="checkbox" class="settings-switch" data-pref="notify_events_due" {{ 'checked' if current_user.notify_events_due }}></label>
                         <label class="settings-row">

@@ -6,7 +6,7 @@ import time
 import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 
 from flask import render_template, redirect, url_for, request, flash, session, jsonify, Response
 from flask_login import login_required, current_user
@@ -32,6 +32,7 @@ from ...utils import (
     CURRENCY_CODES,
     CURRENCY_SYMBOLS,
     csv_formula_safe,
+    format_money,
 )
 from . import finance_bp
 
@@ -306,6 +307,57 @@ def _current_month_bounds_local(today: date) -> tuple[date, date]:
     return date(today.year, today.month, 1), date(today.year, today.month + 1, 1)
 
 
+# A pace heads-up waits until this day of the month: one big purchase on
+# the 2nd says nothing yet about where the month is heading.
+PACE_HEADS_UP_FROM_DAY = 5
+
+
+def _check_pace_heads_up(user_id: int) -> None:
+    """Sends one push when spending first runs ahead of an even pace this
+    month (MonthSnapshot.pace_status "ahead": more than 5% of the budget
+    past even, but not over it yet, which _check_budget_overage_alerts
+    covers), for someone who turned the heads-up on. Once a month
+    (Budget.pace_alerted_month), re-armed if spending drops back to an
+    even pace, so drifting ahead again warns again without flapping at the
+    margin. Never raises, like the overage check it runs beside."""
+    from ...services.month_snapshot import build_month_snapshot
+
+    try:
+        owner = db.session.get(User, user_id)
+        if owner is None or not owner.notify_pace_heads_up:
+            return
+        budget = Budget.query.filter_by(user_id=user_id).first()
+        if budget is None or not budget.monthly_cap or budget.monthly_cap <= 0:
+            return
+
+        snap = build_month_snapshot(owner)
+        month_start = date(snap.today.year, snap.today.month, 1)
+        if budget.pace_alerted_month == month_start:
+            even = snap.even_pace_spent
+            if even is not None and Decimal(str(snap.expense)) <= even:
+                budget.pace_alerted_month = None
+                db.session.commit()
+            return
+        if snap.pace_status != "ahead" or snap.today.day < PACE_HEADS_UP_FROM_DAY:
+            return
+
+        subs = PushSubscription.query.filter_by(user_id=user_id).all()
+        if not subs:
+            return
+        per_day = (Decimal(str(snap.safe_to_spend)) / snap.days_left).quantize(Decimal("1"), rounding=ROUND_DOWN)
+        month = snap.today.strftime("%B")
+        body = (f"You're ahead of pace for {month}. Up to "
+                f"{format_money(per_day, snap.display_currency, whole=True)} a day keeps it on plan.")
+        for sub in subs:
+            if send_push(sub, title="Heads-up", body=body, url="/plan") == "gone":
+                db.session.delete(sub)
+        budget.pace_alerted_month = month_start
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log.error("Error checking the pace heads-up for user %s: %s", user_id, e, exc_info=True)
+
+
 def _check_budget_overage_alerts(user_id: int) -> None:
     """
     Sends one push the moment this user's overall budget, or any one of
@@ -322,7 +374,10 @@ def _check_budget_overage_alerts(user_id: int) -> None:
     never raises: a failed push, or a user with alerts off or no
     subscriptions at all, should never surface as an error on the save
     that triggered this check.
+
+    Every call site wants the pace heads-up checked too, so it runs first.
     """
+    _check_pace_heads_up(user_id)
     try:
         owner = db.session.get(User, user_id)
         if owner is None or not owner.notify_budget_alerts:

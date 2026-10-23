@@ -5,6 +5,9 @@
 // and scrubbable with a pointer or the arrow keys.
 
 import { formatMoneyIn } from "./currency.js";
+import { turnOnPushHere } from "./notifications.js";
+import { postJSON } from "./shell.js";
+import { showToast } from "./toast.js";
 
 const HERO_KEY = "artha-today-hero";
 
@@ -180,3 +183,32 @@ function setupPace() {
 
 setupHero();
 setupPace();
+
+// The one-time pace heads-up card. Either answer is remembered on the
+// account, so it never shows again on any device. "Turn on" also asks
+// this browser for notifications, since that's where it would arrive.
+function setupPacePrompt() {
+    const card = document.getElementById("pace-prompt");
+    if (!card) return;
+    card.querySelectorAll("[data-pace-answer]").forEach((button) => {
+        button.addEventListener("click", async () => {
+            const on = button.dataset.paceAnswer === "on";
+            card.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+            const saved = await postJSON("/push/preferences", { notify_pace_heads_up: on, pace_prompt_answered: true })
+                .catch(() => ({ ok: false }));
+            if (!saved.ok) {
+                card.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+                showToast("Couldn't save that. Try again in a moment.", "error");
+                return;
+            }
+            card.remove();
+            if (!on) return;
+            const here = await turnOnPushHere();
+            showToast(here
+                ? "Heads-up is on. Artha will tell you if you get ahead of pace."
+                : "Heads-up is on. Turn on notifications in Settings to get it in this browser.", "success", 6000);
+        });
+    });
+}
+
+setupPacePrompt();

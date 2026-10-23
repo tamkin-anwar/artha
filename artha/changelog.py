@@ -28,6 +28,12 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
         "category": "new",
+        "title": "A heads-up before you go over",
+        "body": "Turn on Spending ahead of pace in Settings and Artha tells you partway through the month when you're running ahead, with what a day keeps you on plan. It's off unless you want it.",
+    },
+    {
+        "date": "2026-10-23",
+        "category": "new",
         "title": "Pair a payment with its bill yourself",
         "body": "If Artha didn't notice that a payment was for one of your bills, open it in Activity and choose Pair with a bill. Pick the bill from the list and they count once. Unpair works on it too.",
     },

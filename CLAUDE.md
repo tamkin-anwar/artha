@@ -199,6 +199,15 @@ and Artha shouldn't repeat that.
   only unless `--details` (those are other people's transactions), the
   same rules plus one more: a charge another tracked bill could claim
   just as well (two $30 bills, one $30 payment) is never merged.
+- **The pace heads-up is opt-in** (2026-10-23): `User.notify_pace_heads_up`
+  defaults off (deeper engagement stays opt-in, per the YNAB lesson above),
+  and Today offers it once (`today_screen`'s `pace_prompt`; either answer
+  sets `User.pace_prompt_answered`, so it never shows again on any device).
+  `finance.routes._check_pace_heads_up` runs first inside
+  `_check_budget_overage_alerts`, so every save checks both: one push per
+  month (`Budget.pace_alerted_month`) when `MonthSnapshot.pace_status` is
+  "ahead" from the 5th on, re-armed once spending is back at an even pace.
+  The app does the same locally (`Reminders.checkPace`).
 - **One design language across web and apps: Daybreak** (written down
   2026-10-22 in the artha-apple repo's `Docs/Design.md`). The web's
   tokens in `static/css/style.css` mirror `Palette.swift` value for value

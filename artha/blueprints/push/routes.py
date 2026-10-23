@@ -96,7 +96,8 @@ def update_notification_preferences(user, data) -> None:
         hour = data.get("reminder_hour")
         if isinstance(hour, bool) or not isinstance(hour, int) or not (0 <= hour <= 23):
             raise ValueError("Pick an hour between 0 and 23.")
-    for flag in ("notify_bills_due", "notify_notes_due", "notify_events_due", "notify_budget_alerts"):
+    for flag in ("notify_bills_due", "notify_notes_due", "notify_events_due", "notify_budget_alerts",
+                 "notify_pace_heads_up", "pace_prompt_answered"):
         if flag in data:
             setattr(user, flag, bool(data.get(flag)))
     if "reminder_hour" in data:

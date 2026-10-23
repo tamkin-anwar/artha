@@ -37,6 +37,11 @@ class Budget(db.Model):
     # month without a cron job or migration touching this column: a new
     # month's date simply doesn't match whatever got stored last month.
     alerted_month = db.Column(db.Date, nullable=True)
+    # The first-of-month a pace heads-up was sent for, the same way
+    # (finance.routes._check_pace_heads_up). Cleared again if spending
+    # drops back to an even pace, so drifting ahead a second time warns
+    # again; NULL means no heads-up is outstanding.
+    pace_alerted_month = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

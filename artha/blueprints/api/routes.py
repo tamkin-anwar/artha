@@ -152,6 +152,7 @@ def _serialize_user(user: User) -> dict:
         # per person, not per device).
         "notify_bills_due": bool(user.notify_bills_due),
         "notify_budget_alerts": bool(user.notify_budget_alerts),
+        "notify_pace_heads_up": bool(user.notify_pace_heads_up),
         "reminder_hour": user.reminder_hour if user.reminder_hour is not None else DEFAULT_REMINDER_HOUR,
     }
 
@@ -282,7 +283,8 @@ def me():
 # ---------------------------------------------------------------------------
 
 _PROFILE_FIELDS = ("first_name", "last_name", "email", "currency", "timezone")
-_NOTIFICATION_FIELDS = ("notify_bills_due", "notify_budget_alerts", "reminder_hour")
+_NOTIFICATION_FIELDS = ("notify_bills_due", "notify_budget_alerts", "notify_pace_heads_up",
+                        "pace_prompt_answered", "reminder_hour")
 
 
 @api_bp.patch("/me")
@@ -290,7 +292,8 @@ _NOTIFICATION_FIELDS = ("notify_bills_due", "notify_budget_alerts", "reminder_ho
 def update_me():
     """Body: any of {"first_name", "last_name", "email", "currency",
     "timezone", "notify_bills_due", "notify_budget_alerts",
-    "reminder_hour"}; only what's sent changes. Same rules as the web Edit
+    "notify_pace_heads_up", "pace_prompt_answered", "reminder_hour"};
+    only what's sent changes. Same rules as the web Edit
     Profile form and currency picker (auth.routes.update_profile). The app
     sends the phone's timezone on its own whenever it differs, the way the
     website follows the browser's."""

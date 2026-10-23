@@ -302,6 +302,9 @@ def today_screen(user, today=None) -> dict:
         # Purchases logged on their own and not looked at yet, from any
         # month (Transaction.needs_review).
         "to_review": Transaction.query.filter_by(user_id=user.id, needs_review=True).count(),
+        # Offer the pace heads-up once (User.pace_prompt_answered), and only
+        # to someone with a budget, the only time there's a pace to warn about.
+        "pace_prompt": bool(budget) and not user.notify_pace_heads_up and not user.pace_prompt_answered,
         "apple_pay": apple_pay_status(user),
         # How many charges look like bills nobody marked; Plan lists them.
         "bill_suggestions": len(suggest_bills(user, today_date)),

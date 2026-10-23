@@ -36,6 +36,18 @@ class User(UserMixin, db.Model):
     # the hourly cli.py job, and someone might want one without the other.
     notify_budget_alerts = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
+    # A heads-up partway through the month when spending runs ahead of
+    # pace, while there's still time to ease off (finance.routes.
+    # _check_pace_heads_up). Off unless the person turns it on: a nudge is
+    # deeper engagement, and Artha keeps that opt-in (CLAUDE.md's YNAB
+    # lesson). Today offers it once (pace_prompt_answered).
+    notify_pace_heads_up = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    # True once the person has answered Today's one-time "Want a heads-up
+    # before you go over?" card, either way, so it never shows again on
+    # any device.
+    pace_prompt_answered = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     # One of currency.js's CURRENCY_PRESETS ("USD", "GBP", ...), or None
     # if this account has never explicitly saved one — a brand-new device
     # then has nothing to inherit and falls back to USD, same as today.

@@ -119,6 +119,22 @@
             </div>
             {% endif %}
 
+            {# Offered once (User.pace_prompt_answered); off until someone
+               turns it on, since a nudge is opt-in. static/js/today.js. #}
+            {% if screen.pace_prompt %}
+            <div class="card notice" id="pace-prompt">
+                <div class="notice-icon" aria-hidden="true"><i data-lucide="bell"></i></div>
+                <div class="notice-text">
+                    <span class="notice-title">Want a heads-up before you go over?</span>
+                    <span>Artha can tell you partway through the month when you're spending ahead of pace, while there's still time to ease off.</span>
+                    <span class="notice-actions">
+                        <button type="button" class="link-accent" data-pace-answer="on">Turn on</button>
+                        <button type="button" class="link-quiet" data-pace-answer="off">Not now</button>
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
             {% if screen.bill_suggestions %}
             <div class="card notice">
                 <div class="notice-icon" aria-hidden="true"><i data-lucide="repeat"></i></div>

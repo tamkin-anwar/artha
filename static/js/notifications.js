@@ -38,13 +38,43 @@ const signedIn = Boolean(document.body.dataset.displayCurrency);
 
 // --- Push on this device ----------------------------------------------------
 
+const vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
+const vapidPublicKey = vapidMeta ? vapidMeta.content : "";
+
+// Subscribes this browser and saves the subscription on the server, or
+// undoes the browser half if the server never saved it, so a retry starts
+// clean instead of claiming reminders that will never arrive.
+function subscribeHere() {
+    return navigator.serviceWorker.ready
+        .then((reg) => reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        }))
+        .then((sub) => postJSON("/push/subscribe", sub.toJSON()).then((res) => {
+            if (res.ok) return;
+            return sub.unsubscribe().then(() => { throw new Error("server_save_failed"); });
+        }));
+}
+
+// For a control outside Settings (Today's pace heads-up card): asks this
+// browser for notifications if it hasn't been asked, and subscribes.
+// Resolves true when this browser will get them, false when it can't or
+// the person declined; never rejects.
+export function turnOnPushHere() {
+    if (!pushSupported || !signedIn || !vapidPublicKey) return Promise.resolve(false);
+    const permission = Notification.permission === "granted"
+        ? Promise.resolve("granted")
+        : Notification.requestPermission();
+    return permission
+        .then((perm) => (perm === "granted" ? subscribeHere().then(() => true) : false))
+        .catch(() => false);
+}
+
 function setupPush() {
     if (!pushSupported || !signedIn) return;
     const toggle = document.getElementById("toggle-push");
     const status = document.getElementById("push-status");
     const prefs = document.getElementById("push-preferences");
-    const vapidMeta = document.querySelector('meta[name="vapid-public-key"]');
-    const vapidPublicKey = vapidMeta ? vapidMeta.content : "";
 
     function show(subscribed) {
         if (toggle) {
@@ -65,20 +95,7 @@ function setupPush() {
     }
 
     function subscribe() {
-        return navigator.serviceWorker.ready
-            .then((reg) => reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-            }))
-            .then((sub) => postJSON("/push/subscribe", sub.toJSON()).then((res) => {
-                if (res.ok) return;
-                // The browser-side subscription succeeded but the server
-                // never saved it: undo the browser half too, so a retry
-                // starts clean instead of claiming reminders that will
-                // never arrive.
-                return sub.unsubscribe().then(() => { throw new Error("server_save_failed"); });
-            }))
-            .then(() => show(true));
+        return subscribeHere().then(() => show(true));
     }
 
     function unsubscribe() {
