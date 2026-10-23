@@ -62,7 +62,8 @@ function setCategory(value) {
 }
 
 function syncType() {
-    categoriesBox.hidden = editor.elements.type.value === "income";
+    // A split purchase's categories live in its parts (the Split section).
+    categoriesBox.hidden = editor.elements.type.value === "income" || Boolean(current && current.split);
 }
 
 function isSheet() {
@@ -95,6 +96,7 @@ function select(row, { push = true } = {}) {
     field("detail-review").hidden = !tx.needs_review;
     field("detail-paired").hidden = !tx.paired_charge;
     resetPairing(tx);
+    resetSplit(tx);
     field("detail-paired-title").textContent = tx.type === "income" ? "Paired with its repeating income" : "Paired with its bill";
     field("detail-paired-text").textContent = tx.paired_charge
         ? `Artha matched \u201C${tx.paired_charge}\u201D to this, so it counts once.`
@@ -449,6 +451,192 @@ document.querySelector("[data-categorize]")?.addEventListener("click", async (e)
 
 document.querySelectorAll("[data-import-open]").forEach((b) =>
     b.addEventListener("click", () => document.getElementById("csv-import-btn")?.click()));
+
+// ---------------------------------------------------------------------------
+// One purchase across categories (services/splits.py). The parts must add
+// up to the purchase to the cent; the editor shows what's left to assign
+// and can share it evenly between the empty parts, the way YNAB does.
+// ---------------------------------------------------------------------------
+
+const splitBox = field("detail-split");
+const splitOpen = field("detail-split-open");
+const splitEditor = field("detail-split-editor");
+const splitRows = field("detail-split-rows");
+const splitLeft = field("detail-split-left");
+const splitEven = field("detail-split-even");
+const splitSave = field("detail-split-save");
+const CATEGORY_CHOICES = chips.map((c) => [c.dataset.category, c.textContent.trim()]);
+
+const toCents = (value) => {
+    const n = Number(String(value || "").replace(/[^\d.,]/g, "").replace(/,(?=\d{3}\b)/g, "").replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+};
+const fromCents = (cents) => (cents / 100).toFixed(2);
+const totalCents = () => toCents(current && current.amount);
+
+function resetSplit(tx) {
+    splitEditor.hidden = true;
+    editor.querySelector(".detail-actions").hidden = false;
+    const isSplit = Boolean(tx.split);
+    amountInput.readOnly = isSplit;
+    amountInput.title = isSplit ? "Change the amounts in Split" : "";
+    field("detail-repeat-row").hidden = isSplit;
+    if (isSplit) endsRow.hidden = true;
+    splitBox.hidden = !isSplit;
+    splitOpen.hidden = isSplit || !tx.can_split || tx.type !== "expense";
+    field("detail-split-parts").replaceChildren(...(tx.split || []).map((part) => {
+        const row = document.createElement("div");
+        row.className = "field-row";
+        row.setAttribute("role", "listitem");
+        const name = document.createElement("span");
+        name.textContent = part.category_label;
+        const amount = document.createElement("span");
+        amount.className = "figure";
+        amount.textContent = formatMoneyIn(part.amount, tx.currency);
+        row.append(name, amount);
+        return row;
+    }));
+    syncType();
+}
+
+function addSplitRow(category = "", amount = "") {
+    const row = document.createElement("div");
+    row.className = "part-row";
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", "Category");
+    select.append(new Option("Uncategorized", ""));
+    CATEGORY_CHOICES.forEach(([key, label]) => select.append(new Option(label, key, false, key === category)));
+    const input = document.createElement("input");
+    input.className = "figure";
+    input.inputMode = "decimal";
+    input.autocomplete = "off";
+    input.placeholder = "0.00";
+    input.value = amount;
+    input.setAttribute("aria-label", "Amount");
+    input.addEventListener("input", updateSplitLeft);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "part-remove";
+    remove.setAttribute("aria-label", "Remove this part");
+    remove.textContent = "\u00d7";
+    remove.addEventListener("click", () => {
+        if (splitRows.children.length <= 2) return;
+        row.remove();
+        updateSplitLeft();
+        splitRows.querySelector("input")?.focus();
+    });
+    row.append(select, input, remove);
+    splitRows.append(row);
+    return input;
+}
+
+function updateSplitLeft() {
+    const inputs = [...splitRows.querySelectorAll("input")];
+    const left = totalCents() - inputs.reduce((sum, i) => sum + toCents(i.value), 0);
+    const currency = current ? current.currency : page.dataset.currency;
+    splitLeft.classList.toggle("is-over", left < 0);
+    splitLeft.classList.toggle("is-done", left === 0);
+    splitLeft.textContent = left === 0
+        ? "Every cent is assigned."
+        : (left > 0 ? `${formatMoneyIn(fromCents(left), currency)} left to assign` : `${formatMoneyIn(fromCents(-left), currency)} over`);
+    splitEven.hidden = !(left > 0 && inputs.some((i) => !toCents(i.value)));
+    splitSave.disabled = left !== 0;
+    splitRows.querySelectorAll(".part-remove").forEach((b) => { b.disabled = inputs.length <= 2; });
+}
+
+function openSplitEditor() {
+    if (!current) return;
+    splitRows.replaceChildren();
+    const parts = current.split || [
+        { category: current.category || "", amount: "" },
+        { category: "", amount: "" },
+    ];
+    parts.forEach((p) => addSplitRow(p.category || "", p.amount || ""));
+    splitBox.hidden = true;
+    splitOpen.hidden = true;
+    // One question at a time: the single category and pairing come back
+    // when the split is saved or cancelled.
+    categoriesBox.hidden = true;
+    pairBox.hidden = true;
+    editor.querySelector(".detail-actions").hidden = true;
+    splitEditor.hidden = false;
+    updateSplitLeft();
+    splitRows.querySelector("input").focus();
+}
+
+function closeSplitEditor() {
+    splitEditor.hidden = true;
+    editor.querySelector(".detail-actions").hidden = false;
+    if (current) {
+        resetSplit(current);
+        pairBox.hidden = !current.can_pair;
+    }
+}
+
+splitOpen.addEventListener("click", openSplitEditor);
+field("detail-split-edit").addEventListener("click", openSplitEditor);
+field("detail-split-cancel").addEventListener("click", closeSplitEditor);
+field("detail-split-add").addEventListener("click", () => {
+    if (splitRows.children.length >= 20) return;
+    addSplitRow().focus();
+    updateSplitLeft();
+});
+
+// What's left, shared between the parts with no amount yet (the last
+// one takes the odd cent).
+splitEven.addEventListener("click", () => {
+    const inputs = [...splitRows.querySelectorAll("input")];
+    const emptyInputs = inputs.filter((i) => !toCents(i.value));
+    const left = totalCents() - inputs.reduce((sum, i) => sum + toCents(i.value), 0);
+    if (!emptyInputs.length || left <= 0) return;
+    const each = Math.floor(left / emptyInputs.length);
+    emptyInputs.forEach((input, n) => {
+        input.value = fromCents(n === emptyInputs.length - 1 ? left - each * (emptyInputs.length - 1) : each);
+    });
+    updateSplitLeft();
+});
+
+splitSave.addEventListener("click", async () => {
+    if (!current) return;
+    const parts = [...splitRows.children].map((row) => ({
+        category: row.querySelector("select").value || null,
+        amount: fromCents(toCents(row.querySelector("input").value)),
+    }));
+    splitSave.disabled = true;
+    try {
+        const res = await postJSON(`/activity/${current.id}/split`, { parts });
+        if (!res.ok) {
+            splitLeft.textContent = res.data.message || "Artha couldn't split that. Try again in a moment.";
+            splitLeft.classList.add("is-over");
+            splitSave.disabled = false;
+            return;
+        }
+        toastAfterReload(`Split into ${parts.length}`);
+        const url = new URL(window.location.href);
+        url.searchParams.set("selected", res.data.id);
+        window.location.replace(url);
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+        splitSave.disabled = false;
+    }
+});
+
+field("detail-unsplit").addEventListener("click", async () => {
+    if (!current) return;
+    try {
+        const res = await postJSON(`/activity/${current.id}/unsplit`, {});
+        if (!res.ok) {
+            showToast(res.data.message || "Artha couldn't join that back. Try again in a moment.", "error");
+            return;
+        }
+        toastAfterReload("Joined back into one");
+        const url = new URL(window.location.href);
+        url.searchParams.set("selected", res.data.id);
+        window.location.replace(url);
+    } catch (err) {
+        showToast("You're offline. Check your connection and try again.", "error");
+    }
+});
 
 // Opening on a picked transaction (from Today's Recent, or a reload
 // after saving): select it, without stealing focus on a wide screen.

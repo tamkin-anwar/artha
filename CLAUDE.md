@@ -199,6 +199,21 @@ and Artha shouldn't repeat that.
   only unless `--details` (those are other people's transactions), the
   same rules plus one more: a charge another tracked bill could claim
   just as well (two $30 bills, one $30 payment) is never merged.
+- **A purchase can be split across categories** (`services/splits.py`,
+  2026-10-23). Each part is its own Transaction sharing
+  `Transaction.split_group`, so budgets, Safe to Spend, charts and the AI
+  snapshot count every part under its own category without knowing splits
+  exist. Lists show the purchase once (`screens._one_row_per_purchase`, its
+  first row standing for the total, "Split: Groceries, Shopping") except a
+  list filtered to categories, which shows the matching parts.
+  `split_transaction_record` / `unsplit_transaction_record` back the web
+  (`/activity/<id>/split`, `/unsplit`) and the API
+  (`/transactions/<id>/split`, `/unsplit`); parts must add up to the
+  purchase to the cent and each part gets its share of the locked USD
+  value. An edit's name, date and type change every part; amounts and
+  categories only change in the split. Deleting deletes the whole
+  purchase. A bill's own row can't be split, and a part is never paired
+  with a bill or matched as a bill's charge.
 - **The pace heads-up is opt-in** (2026-10-23): `User.notify_pace_heads_up`
   defaults off (deeper engagement stays opt-in, per the YNAB lesson above),
   and Today offers it once (`today_screen`'s `pace_prompt`; either answer

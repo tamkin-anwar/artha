@@ -66,6 +66,13 @@ class Transaction(db.Model):
     # that keeps coming back).
     bill_match_declined = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
+    # One purchase split across categories (services/splits.py): each part
+    # is its own row, so budgets, Safe to Spend and charts count every part
+    # under its own category with no special cases, and every part of the
+    # same purchase shares this id. Activity shows the parts as one
+    # purchase. NULL on every transaction that isn't split.
+    split_group = db.Column(db.String(32), nullable=True, index=True)
+
     # The period this generated row represents, set only on rows created
     # by generate_recurring() (NULL for everything else) — for a monthly
     # series (recurrence_interval is None, the default) that's the

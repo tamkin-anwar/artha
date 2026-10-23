@@ -1,4 +1,5 @@
 import calendar
+from types import SimpleNamespace
 import csv
 import io
 import re
@@ -18,7 +19,7 @@ from ...models import Transaction, User, PushSubscription
 from ...models.budget import Budget
 from ...models.category_budget import CategoryBudget
 from ...models.merchant_category_rule import MerchantCategoryRule
-from ...services import bill_matching, statement_reader
+from ...services import bill_matching, splits, statement_reader
 from ...services.exchange_rate_service import lock_usd_value, get_rates, convert_usd_to, convert_amount
 from ...services.cash_flow import month_starts, monthly_totals
 from ...services.push_service import send_push
@@ -637,6 +638,8 @@ def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
     (api/routes.py), so both follow the same rules. Raises ValidationError
     with a message meant for the person; any other exception is a real
     failure (already rolled back)."""
+    if tx.split_group:
+        return _update_split_purchase(user, tx, data)
     desc = str(data.get("description") or tx.description).strip()
     t_type = data.get("type") or tx.type
 
@@ -718,10 +721,84 @@ def update_transaction_fields(user, tx: Transaction, data) -> Transaction:
     return tx
 
 
+def _update_split_purchase(user, tx: Transaction, data) -> Transaction:
+    """An edit to a split purchase (services/splits.py): its name, date and
+    type are the whole purchase's, so they change on every part; amounts
+    and categories only change in the split itself, so an editor sending
+    the amounts it shows (the purchase's total, or this part's own) is
+    fine, and anything else is refused rather than quietly unbalancing
+    the parts."""
+    rows = splits.parts_of(tx)
+    if "amount" in data:
+        sent = _validate_amount(str(data.get("amount")))
+        if sent not in (Decimal(tx.amount), splits.total_of(rows)):
+            raise ValidationError("This purchase is split. Change its amounts in Split.")
+    if _truthy(data.get("is_recurring")):
+        raise ValidationError("A split purchase can't repeat. Unsplit it first.")
+    if "currency" in data:
+        new_currency = str(data.get("currency") or "").strip().upper()
+        if new_currency and new_currency != tx.native_currency:
+            raise ValidationError("A split purchase keeps its currency. Unsplit it first.")
+    t_type = data.get("type") or tx.type
+    if t_type not in ("income", "expense"):
+        raise ValidationError("Invalid transaction type.")
+    shared = {"description": str(data.get("description") or tx.description).strip(), "type": t_type, "needs_review": False}
+    date_str = str(data.get("date") or "").strip()
+    if date_str:
+        shared["timestamp"] = _resolve_transaction_timestamp(date_str, user)
+    splits.share_edit(tx, shared)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if t_type == "expense":
+        _check_budget_overage_alerts(tx.user_id)
+    return splits.lead_of(tx)
+
+
+def split_transaction_record(user, tx: Transaction, parts) -> Transaction:
+    """Splits a purchase across categories, or changes how it's split
+    (services/splits.py), for the web Activity editor and the app alike.
+    Raises splits.SplitError with a message for the person; any other
+    exception is a real failure (already rolled back). Returns the
+    purchase's first row."""
+    try:
+        lead = splits.split(tx, parts, TRANSACTION_CATEGORIES)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    if lead.type == "expense":
+        _check_budget_overage_alerts(user.id)
+    return lead
+
+
+def unsplit_transaction_record(user, tx: Transaction) -> Transaction:
+    """Joins a split purchase back into one transaction."""
+    try:
+        joined = splits.unsplit(tx)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return joined
+
+
 def delete_transaction_record(tx: Transaction) -> None:
     """Deletes one transaction, stopping its recurring series if it had
-    one. Shared by the web route below and the native app's API. Any
-    exception is a real failure (already rolled back)."""
+    one, or every part of a split purchase (it's one purchase). Shared by
+    the web route below and the native app's API. Any exception is a real
+    failure (already rolled back)."""
+    if tx.split_group:
+        try:
+            for row in splits.parts_of(tx):
+                db.session.delete(row)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        return
     try:
         # Deleting a recurring transaction only removes this month's row —
         # generate_recurring() picks its template from the most recent
@@ -2541,9 +2618,21 @@ def _flag_already_in_artha(user, rows: list[dict]) -> None:
     dates = [datetime.strptime(r["date"], "%Y-%m-%d").date() for r in rows]
     start = datetime.combine(min(dates) - timedelta(days=4), datetime.min.time())
     end = datetime.combine(max(dates) + timedelta(days=4), datetime.min.time())
-    existing = Transaction.query.filter(
+    rows_in_window = Transaction.query.filter(
         Transaction.user_id == user.id, Transaction.timestamp >= start, Transaction.timestamp < end,
     ).all()
+    # A split purchase is compared as the purchase it was, at its total.
+    split_parts = defaultdict(list)
+    existing = []
+    for t in rows_in_window:
+        (split_parts[t.split_group] if t.split_group else existing).append(t)
+    for parts in split_parts.values():
+        first = min(parts, key=lambda p: p.id)
+        existing.append(SimpleNamespace(
+            type=first.type, description=first.description, timestamp=first.timestamp,
+            amount=sum((Decimal(p.amount) for p in parts), Decimal("0")),
+            is_recurring=False, bill_matched=False,
+        ))
     exact = {
         (t.timestamp.strftime("%Y-%m-%d"), t.description, f"{t.amount:.2f}", t.type) for t in existing
     }
@@ -3152,6 +3241,37 @@ def activity_pair(tx_id):
         log.error("Error pairing transaction %s: %s", tx_id, e, exc_info=True)
         return jsonify({"message": "Artha couldn't pair those. Try again in a moment."}), 500
     return jsonify({"bill_id": bill.id})
+
+
+@finance_bp.route("/activity/<int:tx_id>/split", methods=["POST"])
+@login_required
+def activity_split(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        lead = split_transaction_record(current_user, tx, data.get("parts"))
+    except splits.SplitError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except Exception as e:
+        log.error("Error splitting transaction %s: %s", tx_id, e, exc_info=True)
+        return jsonify({"message": "Artha couldn't split that. Try again in a moment."}), 500
+    return jsonify({"id": lead.id})
+
+
+@finance_bp.route("/activity/<int:tx_id>/unsplit", methods=["POST"])
+@login_required
+def activity_unsplit(tx_id):
+    tx = db.session.get(Transaction, tx_id)
+    if tx is None or tx.user_id != current_user.id:
+        return jsonify({"message": "That transaction doesn't exist anymore."}), 404
+    try:
+        joined = unsplit_transaction_record(current_user, tx)
+    except Exception as e:
+        log.error("Error unsplitting transaction %s: %s", tx_id, e, exc_info=True)
+        return jsonify({"message": "Artha couldn't join that back. Try again in a moment."}), 500
+    return jsonify({"id": joined.id})
 
 
 @finance_bp.route("/activity/reviewed", methods=["POST"])

@@ -2067,6 +2067,37 @@ span.review-dot[aria-hidden="true"] { width: 7px; height: 7px; border-radius: 50
    display is scoped to :not([hidden]), per the hidden-attribute trap. */
 .detail-pair:not([hidden]), .detail-pair-choices:not([hidden]) { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .detail-pair > .link-accent { align-self: flex-start; }
+
+/* One purchase across categories (activity.js, services/splits.py). */
+.detail-split:not([hidden]), .detail-split-editor:not([hidden]) { display: flex; flex-direction: column; gap: 10px; }
+.detail-split-head { display: flex; justify-content: space-between; align-items: baseline; }
+.detail-split-head .section-label { margin: 0; }
+.detail-split .field-row .figure { font-variant-numeric: tabular-nums; }
+.detail-split > .link-quiet, .detail-split-open { align-self: flex-start; position: relative; }
+.detail-split > .link-quiet::after, .detail-split-open::after, .detail-split-head .link-accent::after,
+.part-tools button::after { content: ""; position: absolute; inset: -5px -6px; }
+.detail-split-head .link-accent, .part-tools button { position: relative; }
+.part-rows { display: flex; flex-direction: column; gap: 8px; }
+.part-row { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem 2.75rem; gap: 8px; align-items: center; }
+.part-row select, .part-row input {
+    min-height: 2.75rem; border-radius: var(--radius-small); border: 1px solid var(--hairline);
+    background: var(--bg-surface); color: var(--text-primary); font: inherit; padding: 0 12px; min-width: 0;
+}
+.part-row input { text-align: right; font-variant-numeric: tabular-nums; }
+.part-row select:focus-visible, .part-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.part-remove {
+    min-height: 2.75rem; border-radius: var(--radius-small); border: 0; background: transparent;
+    color: var(--text-secondary); font-size: 1.25rem; cursor: pointer;
+}
+.part-remove:hover:not(:disabled) { background: var(--raised); color: var(--text-primary); }
+.part-remove:disabled { opacity: 0.35; cursor: default; }
+.part-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.part-tools { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.part-tools [hidden] { display: none; }
+.part-left { margin: 0; font-size: 0.875rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.part-left.is-done { color: var(--good); }
+.part-left.is-over { color: var(--amber); }
+.part-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .pair-choice {
     display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;
     min-height: 52px; padding: 0; border: 0; border-bottom: 1px solid var(--hairline);
@@ -2078,7 +2109,7 @@ span.review-dot[aria-hidden="true"] { width: 7px; height: 7px; border-radius: 50
 .pair-choice:hover .pair-name { color: var(--accent); }
 .pair-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-small); }
 .pair-choice:disabled { opacity: 0.5; cursor: progress; }
-.detail-actions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.detail-actions:not([hidden]) { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .segmented-inline { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: auto; padding: 3px; border-radius: 10px; }
 .segmented-inline span { padding: 5px 12px; font-size: 0.8125rem; border-radius: 8px; }
 

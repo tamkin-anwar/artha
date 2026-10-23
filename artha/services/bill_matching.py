@@ -272,6 +272,8 @@ def find_charge_for(template: Transaction, due: date, *, allow_same_name: bool =
         Transaction.bill_matched.is_(False),
         # Split off a bill by hand once: never paired on its own again.
         Transaction.bill_match_declined.is_(False),
+        # A part of a split purchase isn't a whole charge.
+        Transaction.split_group.is_(None),
         Transaction.timestamp >= start,
         Transaction.timestamp < end,
     ).all()
@@ -481,8 +483,10 @@ class CannotPair(ValueError):
 
 
 def can_pair(tx: Transaction) -> bool:
-    """A real charge: not a bill occurrence itself, not already paired."""
-    return not tx.is_recurring and tx.recurring_month is None and not tx.bill_matched
+    """A real charge: not a bill occurrence itself, not already paired,
+    not part of a split purchase."""
+    return (not tx.is_recurring and tx.recurring_month is None and not tx.bill_matched
+            and not tx.split_group)
 
 
 def bills_for(charge: Transaction) -> list[Transaction]:

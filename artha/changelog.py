@@ -28,6 +28,18 @@ CHANGELOG_ENTRIES = [
     {
         "date": "2026-10-23",
         "category": "new",
+        "title": "Split a purchase across categories",
+        "body": "A Costco run that's part groceries, part household can count as both. Open it in Activity, choose Split across categories, and give each part its category and amount. Your budgets count each part where it belongs, and Activity still shows one purchase.",
+    },
+    {
+        "date": "2026-10-23",
+        "category": "improved",
+        "title": "Statements from any bank, checked to the cent",
+        "body": "Importing a statement is faster and reads banks around the world, including OFX, QFX and QIF files. Artha checks the rows against your statement's own totals, cleans up names, and leaves moves between your own accounts unticked.",
+    },
+    {
+        "date": "2026-10-23",
+        "category": "new",
         "title": "Import a statement from the app",
         "body": "The iPhone, iPad and Mac apps can now import a bank statement, the same way the website does. Pick a PDF or CSV, or open one in Artha from Mail or Files, check the rows, and tap Import. Anything already in Artha starts unticked.",
     },

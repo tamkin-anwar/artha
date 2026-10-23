@@ -23,7 +23,7 @@ from ..models import Transaction
 from ..models.account import ACCOUNT_TYPES, Account, NetWorthSnapshot
 from ..models.category_budget import CategoryBudget
 from ..utils import CURRENCY_CODES, current_month_bounds, next_due_date, user_today
-from . import bill_matching
+from . import bill_matching, splits
 from .cash_flow import monthly_totals, months_back
 from .exchange_rate_service import convert_amount, convert_usd_to, get_rates
 from .month_plan import bills_this_month, typical_spending
@@ -105,11 +105,30 @@ def _paired_charge(tx: Transaction) -> str | None:
     return (pairing.get("charge") or {}).get("description") or tx.description
 
 
-def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict:
+def _one_row_per_purchase(user_id: int):
+    """A filter keeping only the first row of each split purchase
+    (services/splits.py), so a list shows the purchase once."""
+    first_parts = (
+        db.session.query(db.func.min(Transaction.id))
+        .filter(Transaction.user_id == user_id, Transaction.split_group.isnot(None))
+        .group_by(Transaction.split_group)
+    )
+    return db.or_(Transaction.split_group.is_(None), Transaction.id.in_(first_parts))
+
+
+def serialize_transaction(tx: Transaction, display_currency: str, rates, as_purchase: bool | None = None) -> dict:
     """A transaction's own amount and currency, exactly as entered. When
     that currency isn't the person's display currency, its converted
     equivalent rides along separately as `display_amount` (at the USD
-    value locked when it was saved), never in place of the real amount."""
+    value locked when it was saved), never in place of the real amount.
+
+    A split purchase's first row stands for the whole purchase (its total,
+    "Split" for a category); `split` lists every part either way, so a
+    part shown on its own (a list filtered to one category) still knows
+    it's part of something larger."""
+    parts = splits.parts_of(tx) if tx.split_group else None
+    if as_purchase is None:
+        as_purchase = bool(parts) and parts[0].id == tx.id
     data = {
         "id": tx.id,
         "description": tx.description,
@@ -133,9 +152,28 @@ def serialize_transaction(tx: Transaction, display_currency: str, rates) -> dict
         # (GET .../bills lists which).
         "can_pair": bill_matching.can_pair(tx),
         "display_amount": None,
+        "can_split": splits.can_split(tx),
+        "split": None,
     }
     if tx.native_currency != display_currency:
         data["display_amount"] = money(convert_usd_to(tx.value_in_usd, display_currency, rates))
+    if parts:
+        data["can_pair"] = False
+        data["split"] = [{
+            "id": p.id, "amount": money(p.amount), "category": p.category,
+            "category_label": category_label(p.category),
+        } for p in parts]
+        if as_purchase:
+            data["id"] = parts[0].id
+            data["amount"] = money(splits.total_of(parts))
+            data["category"] = None
+            # "Split: Groceries, Shopping", each category once, in order.
+            labels = list(dict.fromkeys(category_label(p.category) for p in parts))
+            shown = ", ".join(labels[:3]) + (f", +{len(labels) - 3}" if len(labels) > 3 else "")
+            data["category_label"] = f"Split: {shown}"
+            if tx.native_currency != display_currency:
+                usd = sum((p.value_in_usd for p in parts), Decimal("0"))
+                data["display_amount"] = money(convert_usd_to(usd, display_currency, rates))
     return data
 
 
@@ -252,6 +290,7 @@ def today_screen(user, today=None) -> dict:
     end_of_today = datetime(today_date.year, today_date.month, today_date.day) + timedelta(days=1)
     recent_rows = (
         Transaction.query.filter(Transaction.user_id == user.id, Transaction.timestamp < end_of_today)
+        .filter(_one_row_per_purchase(user.id))
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
         .limit(RECENT_LIMIT)
         .all()
@@ -362,6 +401,11 @@ def transactions_screen(user, args) -> dict:
         query = query.filter(db.or_(*conditions))
     if args.get("review") == "1":
         query = query.filter(Transaction.needs_review.is_(True))
+    # A split purchase shows once, at its total, unless the list is of
+    # certain categories: then each part counts under its own, the same
+    # amounts Where the month went adds up.
+    if not categories:
+        query = query.filter(_one_row_per_purchase(user.id))
 
     rows = (
         query

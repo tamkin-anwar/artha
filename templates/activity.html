@@ -176,6 +176,32 @@
                 </div>
             </fieldset>
 
+            {# One purchase across categories (services/splits.py): each part
+               counts under its own category; the purchase stays one row. #}
+            <section class="detail-split" id="detail-split" aria-labelledby="detail-split-label" hidden>
+                <div class="detail-split-head">
+                    <p class="section-label" id="detail-split-label">Split</p>
+                    <button type="button" class="link-accent" id="detail-split-edit">Edit split</button>
+                </div>
+                <div class="field-group" id="detail-split-parts" role="list" aria-labelledby="detail-split-label"></div>
+                <button type="button" class="link-quiet" id="detail-unsplit">Unsplit</button>
+            </section>
+            <button type="button" class="link-accent detail-split-open" id="detail-split-open" hidden>Split across categories</button>
+
+            <section class="detail-split-editor" id="detail-split-editor" aria-labelledby="detail-split-editor-label" hidden>
+                <p class="section-label" id="detail-split-editor-label">Split across categories</p>
+                <div class="part-rows" id="detail-split-rows"></div>
+                <div class="part-tools">
+                    <button type="button" class="link-accent" id="detail-split-add">Add a part</button>
+                    <button type="button" class="link-quiet" id="detail-split-even">Split the rest evenly</button>
+                </div>
+                <p class="part-left" id="detail-split-left" aria-live="polite"></p>
+                <div class="part-actions">
+                    <button type="button" class="btn-quiet" id="detail-split-cancel">Cancel</button>
+                    <button type="button" class="btn-inverse" id="detail-split-save">Save split</button>
+                </div>
+            </section>
+
             <p class="detail-source" id="detail-source"></p>
 
             {# A charge Artha didn't pair with the bill it paid: pick the

@@ -46,6 +46,7 @@ from ...services.screens import (
     transactions_screen,
     wealth_screen,
 )
+from ...services.splits import SplitError
 from ...services.bill_matching import CannotPair, NotPaired
 from ...services.goals import GoalError, add_to_goal, delete_goal, describe_goal, save_goal
 from ...services.recurring_detect import SuggestionError, dismiss_suggestion, track_suggestion
@@ -82,6 +83,8 @@ from ..finance.routes import (
     pair_transaction_record,
     preview_statement,
     unpair_transaction_record,
+    split_transaction_record,
+    unsplit_transaction_record,
     update_transaction_fields,
 )
 from ..push.routes import update_notification_preferences
@@ -531,6 +534,48 @@ def pair_transaction(transaction_id):
     currency = user.preferred_currency or "USD"
     rates = get_rates() if currency != "USD" else None
     return jsonify({"transaction": serialize_transaction(bill, currency, rates)})
+
+
+@api_bp.post("/transactions/<int:transaction_id>/split")
+@api_auth_required
+def split_transaction(transaction_id):
+    """Splits a purchase across categories, or changes how it's split.
+    Body: {"parts": [{"amount": "60.00", "category": "groceries"}, ...]},
+    at least two, adding up to the purchase exactly. Returns the purchase
+    (its "split" lists the parts)."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    user = g.api_user
+    data = _json_body() or {}
+    try:
+        lead = split_transaction_record(user, tx, data.get("parts"))
+    except SplitError as exc:
+        return api_error(400, "invalid_split", str(exc))
+    except Exception:
+        log.error("Error splitting transaction %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't split that. Try again in a moment.")
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({"transaction": serialize_transaction(lead, currency, rates)})
+
+
+@api_bp.post("/transactions/<int:transaction_id>/unsplit")
+@api_auth_required
+def unsplit_transaction(transaction_id):
+    """Joins a split purchase back into one transaction. Returns it."""
+    tx = _own_transaction(transaction_id)
+    if tx is None:
+        return api_error(404, "not_found", "That transaction doesn't exist anymore.")
+    user = g.api_user
+    try:
+        joined = unsplit_transaction_record(user, tx)
+    except Exception:
+        log.error("Error unsplitting transaction %s via API for user %s", transaction_id, user.id, exc_info=True)
+        return api_error(500, "server_error", "Artha couldn't join that back. Try again in a moment.")
+    currency = user.preferred_currency or "USD"
+    rates = get_rates() if currency != "USD" else None
+    return jsonify({"transaction": serialize_transaction(joined, currency, rates)})
 
 
 @api_bp.post("/transactions/<int:transaction_id>/unpair")
