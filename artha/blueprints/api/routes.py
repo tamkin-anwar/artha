@@ -585,12 +585,15 @@ def remove_transaction(transaction_id):
 @api_auth_required
 @limiter.limit(AI_IMPORT_LIMIT, key_func=user_or_ip_key, error_message=AI_LIMIT_MESSAGE)
 def preview_import():
-    """Multipart form: "statement" (a PDF or CSV) and, for a locked PDF,
-    "pdf_password". Reads it exactly as the website does
+    """Multipart form: "statement" (a PDF, CSV, OFX/QFX or QIF file) and,
+    for a locked PDF, "pdf_password". Reads it exactly as the website does
     (finance.routes.preview_statement: in memory, never stored) and
     returns the rows to review; nothing is saved. Each row: date,
     description, amount (a string), type, category, category_label,
-    currency, duplicate (already in Artha, so start it unticked)."""
+    currency, duplicate (already in Artha) and transfer (between the
+    person's own accounts); start both unticked. "totals" is "match" when
+    the rows add up to the statement's own totals, "mismatch" when they
+    don't, null when the file doesn't print any."""
     password = request.form.get("pdf_password") or None
     try:
         result = preview_statement(g.api_user, request.files.get("statement"), password)
@@ -613,8 +616,12 @@ def preview_import():
         "category_label": category_label(row.get("category")),
         "currency": row.get("currency") or g.api_user.preferred_currency or "USD",
         "duplicate": bool(row.get("duplicate")),
+        "transfer": bool(row.get("transfer")),
     } for row in result["rows"]]
-    return jsonify({"rows": rows, "warnings": result["warnings"], "notice": result.get("notice")})
+    return jsonify({
+        "rows": rows, "warnings": result["warnings"], "notice": result.get("notice"),
+        "totals": result.get("totals"),
+    })
 
 
 @api_bp.post("/imports")

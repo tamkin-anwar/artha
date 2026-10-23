@@ -33,6 +33,7 @@ function initCsvImport() {
     const errorEl = document.getElementById("csv-import-error");
     const summaryEl = document.getElementById("csv-import-summary");
     const noticeEl = document.getElementById("csv-import-notice");
+    const totalsEl = document.getElementById("csv-import-totals");
     const tbody = document.getElementById("csv-import-tbody");
     const stepUpload = document.getElementById("csv-import-step-upload");
     const stepPreview = document.getElementById("csv-import-step-preview");
@@ -101,12 +102,16 @@ function initCsvImport() {
 
     function renderRows(rows) {
         tbody.innerHTML = rows.map((row, i) => {
+            // Already in Artha, or money moving between the person's own
+            // accounts: both start unticked, each saying why.
             const dupe = row.duplicate;
+            const transfer = !dupe && row.transfer;
+            const badge = dupe ? "already in Artha" : (transfer ? "between your accounts" : "");
             return `
-                <tr class="${dupe ? "csv-import-row-dupe" : ""}" data-index="${i}">
-                    <td><input type="checkbox" class="csv-import-row-check" ${dupe ? "" : "checked"}></td>
+                <tr class="${dupe || transfer ? "csv-import-row-dupe" : ""}" data-index="${i}">
+                    <td><input type="checkbox" class="csv-import-row-check" aria-label="Import ${escapeHtml(row.description)}" ${dupe || transfer ? "" : "checked"}></td>
                     <td>${escapeHtml(row.date)}</td>
-                    <td class="csv-import-desc">${escapeHtml(row.description)}${dupe ? ' <span class="csv-import-badge">already imported</span>' : ""}</td>
+                    <td class="csv-import-desc">${escapeHtml(row.description)}${badge ? ` <span class="csv-import-badge">${badge}</span>` : ""}</td>
                     <td style="text-align:right; font-family:var(--font-figure);">${Number(row.amount).toFixed(2)}</td>
                     <td>
                         <select class="csv-import-row-type">
@@ -127,7 +132,7 @@ function initCsvImport() {
     previewBtn.addEventListener("click", async () => {
         const file = fileInput.files && fileInput.files[0];
         if (!file) {
-            errorEl.textContent = "Choose a CSV file first.";
+            errorEl.textContent = "Choose a statement file first.";
             errorEl.style.display = "";
             return;
         }
@@ -165,11 +170,21 @@ function initCsvImport() {
             categories = data.categories || {};
 
             const dupeCount = parsedRows.filter((r) => r.duplicate).length;
+            const transferCount = parsedRows.filter((r) => !r.duplicate && r.transfer).length;
             const warningCount = (data.warnings || []).length;
             let summary = `<strong>${parsedRows.length}</strong> transaction${parsedRows.length === 1 ? "" : "s"} found`;
-            if (dupeCount) summary += ` · <strong>${dupeCount}</strong> look already imported (unchecked below)`;
+            if (dupeCount) summary += ` · <strong>${dupeCount}</strong> already in Artha (unchecked below)`;
+            if (transferCount) summary += ` · <strong>${transferCount}</strong> between your own accounts (unchecked)`;
             if (warningCount) summary += ` · ${warningCount} row${warningCount === 1 ? "" : "s"} skipped (couldn't be read)`;
             summaryEl.innerHTML = summary;
+
+            // The statement's own totals: proof nothing was missed, or a
+            // warning that something was.
+            totalsEl.hidden = !data.totals;
+            totalsEl.classList.toggle("is-mismatch", data.totals === "mismatch");
+            totalsEl.textContent = data.totals === "match"
+                ? "Every transaction adds up to your statement's totals."
+                : (data.totals === "mismatch" ? "These don't add up to your statement's totals, so something may be missing. Compare with your statement before importing." : "");
 
             if (data.notice) {
                 noticeEl.textContent = data.notice;

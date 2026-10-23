@@ -1876,6 +1876,10 @@ body.mobile-menu-open {
    accent, the no in quiet ink. */
 .notice-actions { display: flex; gap: 20px; align-items: center; margin-top: 2px; }
 .notice-actions .link-accent { margin-top: 0; }
+/* 44px to tap on a phone, from an invisible layer, so the focus ring
+   still hugs the words instead of crossing the line above. */
+.notice-text .link-accent, .notice-actions .link-quiet, .detail-pair > .link-accent { position: relative; }
+.notice-text .link-accent::after, .notice-actions .link-quiet::after, .detail-pair > .link-accent::after { content: ""; position: absolute; inset: -5px -6px; }
 .link-quiet { color: var(--text-secondary); background: none; border: 0; padding: 6px 0; margin: -6px 0; font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer; }
 .link-quiet:hover { color: var(--text-primary); }
 .link-quiet:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

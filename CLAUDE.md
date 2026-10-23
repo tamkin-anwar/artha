@@ -268,6 +268,19 @@ and Artha shouldn't repeat that.
   currency as `fallback_currency` instead of reading `current_user`, since
   the API has no web session. The app reads a picked or "Open in Artha"
   file in place (security-scoped, never copied) and uploads it from memory.
+  Since 2026-10-23 the format rules live in `services/statement_reader.py`
+  (amounts like 1.234,56 / 12.00 DR / (12.00), dates in the main European
+  languages and without a year, names cleaned of card and ACH clutter,
+  OFX/QFX and QIF, the statement's own totals, transfers between the
+  person's own accounts). The whole preview runs inside
+  `_IMPORT_TIME_BUDGET_SECONDS` (22s): Render's gunicorn stops a request at
+  30s with one worker, and a real Bank of America statement that went to AI
+  over its "Beginning balance" line used to die there. AI never runs when
+  the rows add up to the statement's totals (`check_totals` "match"); when
+  it does run, it reads a few pages per call, in parallel, each call capped
+  by the time left. Rows already in Artha (exact, or the same amount within
+  three days under a name sharing a real word, e.g. an Apple Pay entry) and
+  transfers between the person's own accounts start unticked.
   Reading is two-tiered: a fast, free, deterministic regex parser runs first and
   handles most real statements; an AI-assisted fallback
   (`_parse_statement_pdf_with_ai`, same tool-use pattern as above) only

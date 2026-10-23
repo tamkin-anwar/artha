@@ -73,6 +73,13 @@
         border:1px solid color-mix(in srgb, var(--gold) 30%, transparent); border-radius:8px;
         padding:8px 12px; margin:0 0 12px; flex-shrink:0;
     }
+    /* Green: the rows add up to the statement's own totals. Amber when
+       they don't, the "look here" color. */
+    .csv-import-totals { font-size:0.8125rem; color:var(--good); margin:0 0 12px; flex-shrink:0; display:flex; gap:6px; align-items:baseline; }
+    .csv-import-totals::before { content:"\2713"; font-weight:700; }
+    .csv-import-totals.is-mismatch { color:var(--amber); }
+    .csv-import-totals.is-mismatch::before { content:"!"; }
+    .csv-import-totals[hidden] { display:none; }
     .csv-import-table-wrap { position:relative; flex:1; min-height:0; display:flex; }
     .csv-import-table-scroll { overflow-y:auto; overflow-x:auto; border:1px solid var(--border-subtle); border-radius:10px; flex:1; min-height:0; }
     /* Date/Description/Amount/Type/Category plus a checkbox column is
@@ -141,13 +148,13 @@
 
         <div id="csv-import-step-upload">
             <p class="csv-import-hint">
-                Upload a CSV or PDF statement from your bank. Transactions import under the date on the statement,
-                not today's, so an old statement won't clutter this month. PDFs need to be text-based, not scanned
-                or photographed. CSV is the safer bet if your bank offers it.
+                Upload a statement from your bank: PDF, CSV, OFX, QFX or QIF, from any country. Transactions import
+                under the date on the statement, not today's, so an old statement won't clutter this month. PDFs need
+                to be text-based, not scanned or photographed.
             </p>
             <p id="csv-import-error" class="csv-import-error"></p>
             <div class="csv-import-file-row">
-                <input type="file" id="csv-import-file" accept=".csv,text/csv,.pdf,application/pdf">
+                <input type="file" id="csv-import-file" accept=".csv,text/csv,.pdf,application/pdf,.ofx,.qfx,.qif,.txt">
                 <button type="button" id="csv-import-preview-btn" class="btn-primary" style="padding:8px 18px; font-size:0.8125rem;">Preview</button>
             </div>
             <div id="csv-import-password-row" class="csv-import-file-row" style="margin-top:10px;" hidden>
@@ -157,6 +164,7 @@
 
         <div id="csv-import-step-preview" class="csv-import-step-preview" hidden>
             <p id="csv-import-summary" class="csv-import-summary"></p>
+            <p id="csv-import-totals" class="csv-import-totals" role="status" hidden></p>
             <p id="csv-import-notice" class="csv-import-notice" hidden></p>
             <div class="csv-import-table-wrap">
                 <div class="csv-import-table-scroll scrollbar-thin">

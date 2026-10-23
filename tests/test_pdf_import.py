@@ -77,12 +77,12 @@ def test_preview_parses_signed_amounts_directly(auth_client):
     rows = resp.get_json()["rows"]
     assert len(rows) == 2
 
-    payroll = next(r for r in rows if "AMAZON" in r["description"])
+    payroll = next(r for r in rows if "amazon" in r["description"].lower())
     assert payroll["date"] == "2026-06-05"
     assert payroll["type"] == "income"
     assert payroll["amount"] == 953.59
 
-    setapp = next(r for r in rows if "SETAPP" in r["description"])
+    setapp = next(r for r in rows if "setapp" in r["description"].lower())
     assert setapp["type"] == "expense"
     assert setapp["amount"] == 10.86
 
@@ -117,12 +117,12 @@ def test_preview_handles_running_balance_column_and_bare_month_day_dates(auth_cl
     rows = resp.get_json()["rows"]
     assert len(rows) == 2
 
-    payroll = next(r for r in rows if "Payroll" in r["description"])
+    payroll = next(r for r in rows if "payroll" in r["description"].lower())
     assert payroll["date"] == "2026-07-02"
     assert payroll["type"] == "income"
     assert payroll["amount"] == 531.05  # not 531.52 — that's the balance, not the amount
 
-    shell = next(r for r in rows if "Shell" in r["description"])
+    shell = next(r for r in rows if "shell" in r["description"].lower())
     assert shell["date"] == "2026-07-06"
     assert shell["type"] == "expense"
     assert shell["amount"] == 3.52
@@ -233,7 +233,7 @@ def test_preview_parses_sterling_amounts(auth_client):
     rows = resp.get_json()["rows"]
     assert len(rows) == 1
     assert rows[0]["amount"] == 45.23
-    assert "TESCO" in rows[0]["description"]
+    assert "TESCO" in rows[0]["description"].upper()
 
 
 def test_preview_parses_euro_amounts_with_balance_column(auth_client):
@@ -290,11 +290,11 @@ def test_preview_parses_space_separated_day_month_year_dates(auth_client):
     rows = resp.get_json()["rows"]
     assert len(rows) == 2
 
-    card = next(r for r in rows if "SAINSBURYS" in r["description"])
+    card = next(r for r in rows if "sainsburys" in r["description"].lower())
     assert card["date"] == "2024-09-19"
     assert card["type"] == "expense"
 
-    salary = next(r for r in rows if "SALARY" in r["description"])
+    salary = next(r for r in rows if "salary" in r["description"].lower())
     assert salary["date"] == "2024-09-22"
     assert salary["type"] == "income"
 
@@ -313,12 +313,12 @@ def test_preview_parses_day_month_year_dates_with_separate_withdraw_deposit_colu
     rows = resp.get_json()["rows"]
     assert len(rows) == 2
 
-    fee = next(r for r in rows if "CARD ANNUAL FEE" in r["description"])
+    fee = next(r for r in rows if "card annual fee" in r["description"].lower())
     assert fee["date"] == "2024-09-19"
     assert fee["type"] == "expense"
     assert fee["amount"] == 600.00
 
-    deposit = next(r for r in rows if "BKASH" in r["description"])
+    deposit = next(r for r in rows if "bkash" in r["description"].lower())
     assert deposit["date"] == "2025-01-05"
     assert deposit["type"] == "income"
     assert deposit["amount"] == 100.00
@@ -463,12 +463,12 @@ def test_preview_parses_row_numbered_statement_with_correct_day_first_dates(auth
     # both correctly excluded — only the two real transactions remain.
     assert len(rows) == 2
 
-    visa = next(r for r in rows if "VISA" in r["description"])
+    visa = next(r for r in rows if "visa" in r["description"].lower())
     assert visa["date"] == "2026-07-27"
     assert visa["type"] == "expense"
     assert visa["amount"] == 2640.00
 
-    npsb = next(r for r in rows if "NPSB" in r["description"])
+    npsb = next(r for r in rows if "npsb" in r["description"].lower())
     assert npsb["date"] == "2026-08-03"  # not 2026-03-08
     assert npsb["type"] == "expense"
     assert npsb["amount"] == 750.35
@@ -513,11 +513,11 @@ def test_preview_recovers_a_page_break_corrupted_row_via_ai_without_duplicating(
     assert len(rows) == 2  # not 3 — the VISA-POS duplicate was dropped
     assert data["notice"]  # AI contributed at least one row, worth flagging
 
-    ridita = next(r for r in rows if "Ridita" in r["description"])
+    ridita = next(r for r in rows if "ridita" in r["description"].lower())
     assert ridita["date"] == "2026-08-05"
     assert ridita["amount"] == 2500.00
 
-    visa_rows = [r for r in rows if "VISA" in r["description"]]
+    visa_rows = [r for r in rows if "visa" in r["description"].lower()]
     assert len(visa_rows) == 1
 
 
@@ -558,10 +558,10 @@ def test_preview_categorizes_transactions_the_keyword_list_misses(auth_client):
     rows = resp.get_json()["rows"]
     assert len(rows) == 2
 
-    phone = next(r for r in rows if "GRAMEENPHONE" in r["description"])
+    phone = next(r for r in rows if "grameenphone" in r["description"].lower())
     assert phone["category"] == "utilities"
 
-    grocer = next(r for r in rows if "SHWAPNO" in r["description"])
+    grocer = next(r for r in rows if "shwapno" in r["description"].lower())
     assert grocer["category"] == "groceries"
 
 

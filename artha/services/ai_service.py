@@ -983,7 +983,7 @@ class AIService:
     # ------------------------------------------------------------------
 
     @classmethod
-    def extract_pdf_transactions(cls, pages_text: list[str]) -> dict:
+    def extract_pdf_transactions(cls, pages_text: list[str], timeout: float | None = None) -> dict:
         """
         Last-resort transaction extraction for a statement PDF the
         deterministic line-regex parser (_parse_statement_pdf in
@@ -998,6 +998,10 @@ class AIService:
         Args:
             pages_text: One string per PDF page, as returned by
                         pdfplumber's page.extract_text().
+            timeout: Seconds this call may take, when the caller has a
+                     budget (an import must finish before the web
+                     server's own 30-second limit); the client's own
+                     default otherwise.
 
         Returns:
             {"transactions": [{"date": "YYYY-MM-DD", "description": str,
@@ -1026,6 +1030,7 @@ class AIService:
                 messages=[{"role": "user", "content": full_text}],
                 tools=[_STATEMENT_TOOL],
                 tool_choice={"type": "tool", "name": "record_transactions"},
+                **({"timeout": timeout} if timeout else {}),
             )
         except APITimeoutError:
             log.warning("Anthropic timeout during PDF statement extraction.")
@@ -1052,7 +1057,7 @@ class AIService:
     # ------------------------------------------------------------------
 
     @classmethod
-    def categorize_transactions(cls, descriptions: list[str]) -> dict:
+    def categorize_transactions(cls, descriptions: list[str], timeout: float | None = None) -> dict:
         """
         Best-effort category for each description, called from
         blueprints/finance/routes.py's import_preview() only for the rows
@@ -1092,6 +1097,7 @@ class AIService:
                 messages=[{"role": "user", "content": numbered}],
                 tools=[_CATEGORIZE_TOOL],
                 tool_choice={"type": "tool", "name": "assign_categories"},
+                **({"timeout": timeout} if timeout else {}),
             )
         except APITimeoutError:
             log.warning("Anthropic timeout during import categorization.")
