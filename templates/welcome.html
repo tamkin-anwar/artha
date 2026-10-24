@@ -2,7 +2,7 @@
 {% set hide_app_shell = true %}
 {% block title %}Artha · Know what's safe to spend{% endblock %}
 {% block meta %}
-    <meta name="description" content="Artha opens on one number: what you can spend today and still end the month on plan. On the web, and in beta for iPhone, iPad and Mac. By Anwar Creative Studio.">
+    <meta name="description" content="Artha opens on one number: what you can spend today and still end the month on plan. On the web, and in beta for iPhone, iPad and Mac. No bank login, no tracking. By Anwar Creative Studio.">
     <meta property="og:title" content="Artha · Know what's safe to spend">
     <meta property="og:description" content="One number for what you can spend today, worked out from your bills, budget and accounts. No bank login, no tracking.">
     <meta property="og:type" content="website">
@@ -11,80 +11,433 @@
 {% endblock %}
 
 {% block content %}
+{#
+  Artha's public home page, in Daybreak (artha-apple/Docs/Design.md): one blue
+  accent, money in rounded figures, green for on pace, amber for "look here",
+  never red for money, and one full-bleed navy band. The screens below are
+  drawn in HTML from the app's own layout, with sample figures.
+#}
 <style>
-    .welcome { min-height: 100vh; background: var(--bg-page); color: var(--text-primary); }
-    .welcome-bar { max-width: 64rem; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: calc(env(safe-area-inset-top, 0px) + 1.25rem) 1.25rem 1.25rem; }
-    .welcome-brand { display: flex; align-items: center; gap: .5rem; font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; color: var(--text-primary); text-decoration: none; }
-    .welcome-brand img { width: 36px; height: 36px; }
-    .welcome-signin { font-weight: 600; font-size: .95rem; color: var(--gold); text-decoration: none; }
-    .welcome-hero { max-width: 44rem; margin: 0 auto; padding: 4rem 1.25rem 3rem; text-align: center; }
-    .welcome-hero h1 { font-family: var(--font-display); font-size: clamp(2.4rem, 7vw, 4rem); line-height: 1.05; letter-spacing: -0.02em; font-weight: 700; margin: 0 0 1.25rem; text-wrap: balance; }
-    .welcome-hero p { font-size: 1.125rem; line-height: 1.6; color: var(--text-secondary); margin: 0 auto 2rem; max-width: 36rem; }
-    .welcome-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
-    .welcome-btn { display: inline-flex; align-items: center; padding: .8rem 1.4rem; border-radius: 999px; font-weight: 600; text-decoration: none; border: 1px solid var(--border-subtle, rgba(127,127,127,.3)); color: var(--text-primary); }
-    .welcome-btn.primary { background: var(--gold); border-color: var(--gold); color: #fff; }
-    .welcome-status { margin-top: 1.25rem; font-size: .85rem; color: var(--text-secondary); }
-    .welcome-grid { max-width: 64rem; margin: 0 auto; padding: 1rem 1.25rem 3rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
-    .welcome-tile { background: var(--bg-card); border: 1px solid var(--border-subtle, rgba(127,127,127,.2)); border-radius: 1rem; padding: 1.4rem; }
-    .welcome-tile h2 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin: 0 0 .4rem; }
-    .welcome-tile p { margin: 0; font-size: .95rem; line-height: 1.55; color: var(--text-secondary); }
-    .welcome-private { max-width: 44rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; text-align: center; }
-    .welcome-private h2 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; margin: 0 0 .75rem; }
-    .welcome-private p { color: var(--text-secondary); line-height: 1.6; margin: 0 0 .75rem; }
-    .welcome-private a { color: var(--gold); }
+  .aw { background: var(--bg-page); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .aw a { color: inherit; text-decoration: none; }
+  .aw-wrap { max-width: 1180px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .aw-fig { font-family: var(--font-figure); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .aw-label { font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-secondary); }
+  .aw-good { color: var(--good); } .aw-caution { color: var(--caution); } .aw-accent { color: var(--gold); }
+
+  /* bar */
+  .aw-bar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg-page) 82%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border-card); padding-top: env(safe-area-inset-top, 0px); }
+  .aw-bar .aw-wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+  .aw-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; }
+  .aw-brand img { width: 30px; height: 30px; }
+  .aw-nav { display: flex; align-items: center; gap: 26px; font-size: .95rem; color: var(--text-secondary); }
+  .aw-nav a:hover { color: var(--text-primary); }
+  .aw-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: .78rem 1.35rem; font-weight: 700; font-size: .98rem; border: 1px solid var(--border-subtle); color: var(--text-primary) !important; transition: transform .15s ease, background-color .15s ease; }
+  .aw-btn:active { transform: scale(.98); }
+  .aw-btn.primary { background: var(--gold); border-color: var(--gold); color: #fff !important; }
+  .aw-btn.small { padding: .5rem 1rem; font-size: .9rem; }
+  @media (max-width: 760px) { .aw-hide-s { display: none; } .aw-nav { gap: 16px; } }
+
+  /* hero */
+  .aw-hero { padding: 72px 0 40px; overflow-x: clip; }
+  .aw-hero .aw-wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; }
+  .aw-hero h1 { font-size: clamp(2.7rem, 6.2vw, 4.6rem); line-height: 1.02; letter-spacing: -0.035em; font-weight: 800; margin: 14px 0 22px; text-wrap: balance; }
+  .aw-hero h1 em { font-style: normal; color: var(--gold); }
+  .aw-lede { font-size: 1.18rem; line-height: 1.6; color: var(--text-secondary); max-width: 34rem; margin: 0 0 30px; }
+  .aw-lede strong { color: var(--text-primary); font-weight: 700; }
+  .aw-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .aw-note { margin-top: 16px; font-size: .88rem; color: var(--text-secondary); }
+  @media (max-width: 900px) { .aw-hero .aw-wrap { grid-template-columns: 1fr; gap: 48px; } .aw-hero { padding-top: 48px; } }
+
+  /* phone */
+  .aw-phone-wrap { position: relative; display: flex; justify-content: center; }
+  .aw-phone { width: min(330px, 80vw); border-radius: 46px; padding: 10px; background: linear-gradient(160deg, #2a3142, #0d111a); box-shadow: 0 40px 80px -30px rgba(10,14,23,.55), 0 0 0 1px rgba(255,255,255,.06) inset; }
+  .aw-screen { border-radius: 37px; background: var(--bg-page); overflow: hidden; padding: 18px 16px 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--border-card); }
+  .aw-status { display: flex; justify-content: space-between; font-size: .72rem; font-weight: 700; padding: 0 8px; }
+  .aw-card { background: var(--bg-surface); border-radius: 22px; border: 1px solid var(--border-card); padding: 16px; }
+  .aw-hero-fig { font-size: 2.6rem; line-height: 1; margin: 6px 0 10px; }
+  .aw-pill { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; border-radius: 999px; padding: 4px 10px; }
+  .aw-pill.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .aw-pill.caution { color: var(--caution); background: color-mix(in srgb, var(--caution) 16%, transparent); }
+  .aw-pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .aw-sentence { font-size: .84rem; color: var(--text-secondary); margin-top: 10px; line-height: 1.45; }
+  .aw-chart { width: 100%; height: auto; display: block; margin-top: 4px; }
+  .aw-rows { display: flex; flex-direction: column; }
+  .aw-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; font-size: .85rem; border-bottom: 1px solid var(--border-card); }
+  .aw-row:last-child { border-bottom: 0; }
+  .aw-row small { display: block; color: var(--text-secondary); font-size: .74rem; }
+  .aw-tile { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; flex: none; font-size: .8rem; font-weight: 800; background: var(--raised); color: var(--text-secondary); }
+  .aw-row > span:first-child { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .aw-float { position: absolute; display: flex; gap: 10px; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: 16px; padding: 10px 14px; box-shadow: 0 18px 40px -18px rgba(10,14,23,.45); font-size: .82rem; max-width: 230px; }
+  .aw-float b { display: block; font-size: .85rem; }
+  .aw-float small { color: var(--text-secondary); }
+  .aw-float.f1 { top: -18px; left: -4%; } .aw-float.f2 { bottom: -22px; right: -4%; }
+  @media (max-width: 900px) { .aw-float.f1 { left: 0; } .aw-float.f2 { right: 0; } }
+  @media (max-width: 480px) { .aw-float { display: none; } }
+
+  /* strip */
+  .aw-strip { border-top: 1px solid var(--border-card); border-bottom: 1px solid var(--border-card); }
+  .aw-strip .aw-wrap { display: flex; flex-wrap: wrap; gap: 10px 28px; justify-content: center; padding-block: 18px; font-size: .9rem; color: var(--text-secondary); }
+  .aw-strip b { color: var(--text-primary); font-weight: 700; }
+
+  /* sections */
+  .aw-sec { padding: 96px 0 24px; }
+  .aw-head { max-width: 40rem; margin-bottom: 56px; }
+  .aw-head h2 { font-size: clamp(2rem, 4.2vw, 3rem); line-height: 1.08; letter-spacing: -0.03em; font-weight: 800; margin: 10px 0 14px; text-wrap: balance; }
+  .aw-head p { font-size: 1.1rem; line-height: 1.6; color: var(--text-secondary); margin: 0; }
+  .aw-story { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; padding: 40px 0; }
+  .aw-story.flip .aw-copy { order: 2; }
+  .aw-copy h3 { font-size: clamp(1.55rem, 2.8vw, 2rem); line-height: 1.15; letter-spacing: -0.02em; font-weight: 800; margin: 8px 0 12px; }
+  .aw-copy p { color: var(--text-secondary); line-height: 1.65; font-size: 1.03rem; margin: 0 0 18px; }
+  .aw-ticks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .aw-ticks li { display: flex; gap: 10px; font-size: .97rem; line-height: 1.45; }
+  .aw-ticks svg { width: 18px; height: 18px; flex: none; margin-top: 2px; stroke: var(--gold); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .aw-visual { display: flex; flex-direction: column; gap: 12px; max-width: 440px; width: 100%; justify-self: center; }
+  @media (max-width: 860px) { .aw-story { grid-template-columns: 1fr; gap: 32px; } .aw-story.flip .aw-copy { order: 0; } }
+
+  /* plan meters */
+  .aw-meter { height: 8px; border-radius: 999px; background: var(--raised); overflow: hidden; margin-top: 8px; }
+  .aw-meter i { display: block; height: 100%; border-radius: inherit; background: var(--gold); }
+  .aw-meter.caution i { background: var(--caution-line, var(--caution)); }
+  .aw-split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .aw-split div { background: var(--raised); border-radius: 14px; padding: 10px; }
+  .aw-split b { display: block; font-size: 1.05rem; }
+  .aw-split small { color: var(--text-secondary); font-size: .74rem; }
+
+  /* assistant */
+  .aw-bubble { max-width: 86%; border-radius: 18px; padding: 11px 14px; font-size: .9rem; line-height: 1.45; }
+  .aw-bubble.me { align-self: flex-end; background: var(--gold); color: #fff; border-bottom-right-radius: 6px; }
+  .aw-bubble.it { align-self: flex-start; background: var(--bg-surface); border: 1px solid var(--border-card); border-bottom-left-radius: 6px; }
+  .aw-confirm { display: flex; gap: 8px; margin-top: 10px; }
+  .aw-confirm span { font-size: .8rem; font-weight: 700; border-radius: 999px; padding: 6px 12px; border: 1px solid var(--border-subtle); }
+  .aw-confirm span:first-child { background: var(--gold); border-color: var(--gold); color: #fff; }
+
+  /* devices */
+  .aw-devices { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr); gap: 20px; align-items: end; }
+  .aw-browser { border-radius: 16px; border: 1px solid var(--border-card); background: var(--bg-surface); overflow: hidden; box-shadow: 0 30px 60px -30px rgba(10,14,23,.4); }
+  .aw-browser-bar { display: flex; gap: 6px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border-card); }
+  .aw-browser-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--raised); }
+  .aw-browser-bar span { margin-left: 10px; font-size: .74rem; color: var(--text-secondary); }
+  .aw-desk { display: grid; grid-template-columns: 150px minmax(0, 1fr); min-height: 260px; }
+  .aw-side { background: var(--bg-sidebar); padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; font-size: .8rem; color: var(--text-secondary); }
+  .aw-side b { color: var(--text-primary); background: var(--bg-hover); border-radius: 10px; padding: 6px 10px; font-weight: 700; }
+  .aw-side span { padding: 6px 10px; }
+  .aw-desk-main { padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-content: start; }
+  .aw-widgets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .aw-widget { aspect-ratio: 1; border-radius: 22px; background: var(--bg-surface); border: 1px solid var(--border-card); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; }
+  .aw-widget.wide { grid-column: span 2; aspect-ratio: auto; min-height: 110px; }
+  @media (max-width: 860px) { .aw-devices { grid-template-columns: 1fr; } .aw-desk { grid-template-columns: 1fr; } .aw-side { display: none; } }
+  @media (max-width: 520px) { .aw-desk-main { grid-template-columns: 1fr; } }
+
+  /* privacy band: Daybreak's one full-bleed navy band */
+  .aw-band { background: var(--band); color: #fff; margin-top: 96px; padding: 88px 0; }
+  .aw-band .aw-label { color: rgba(255,255,255,.62); }
+  .aw-band h2 { font-size: clamp(2rem, 4.2vw, 3rem); line-height: 1.08; letter-spacing: -0.03em; font-weight: 800; margin: 10px 0 14px; max-width: 34rem; }
+  .aw-band > .aw-wrap > p { color: rgba(255,255,255,.75); font-size: 1.1rem; line-height: 1.6; max-width: 38rem; margin: 0 0 40px; }
+  .aw-never { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .aw-never div { border: 1px solid rgba(255,255,255,.14); border-radius: 22px; padding: 18px; background: rgba(255,255,255,.04); }
+  .aw-never b { display: block; font-size: 1.02rem; margin-bottom: 6px; }
+  .aw-never span { color: rgba(255,255,255,.72); font-size: .93rem; line-height: 1.5; }
+  .aw-band a.aw-more { display: inline-block; margin-top: 28px; color: #fff; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,.4); }
+
+  /* pricing */
+  .aw-price { max-width: 560px; margin: 0 auto; text-align: center; }
+  .aw-price .aw-card { padding: 32px; text-align: left; margin-top: 28px; }
+  .aw-price-fig { font-size: 3.4rem; line-height: 1; }
+  .aw-price .aw-ticks { margin: 22px 0 26px; }
+
+  /* faq */
+  .aw-faq { max-width: 760px; }
+  .aw-faq details { border-bottom: 1px solid var(--border-card); padding: 18px 0; }
+  .aw-faq summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  .aw-faq summary::-webkit-details-marker { display: none; }
+  .aw-faq summary::after { content: "+"; color: var(--gold); font-weight: 800; }
+  .aw-faq details[open] summary::after { content: "\2212"; }
+  .aw-faq p { color: var(--text-secondary); line-height: 1.65; margin: 10px 0 0; }
+
+  /* close */
+  .aw-close { text-align: center; padding: 110px 0 40px; }
+  .aw-close img { width: 72px; height: 72px; margin-bottom: 18px; }
+  .aw-close h2 { font-size: clamp(2.2rem, 5vw, 3.4rem); letter-spacing: -0.03em; font-weight: 800; margin: 0 0 14px; }
+  .aw-close p { color: var(--text-secondary); font-size: 1.1rem; margin: 0 0 28px; }
+  .aw-close .aw-cta { justify-content: center; }
+
+  @media (prefers-reduced-motion: reduce) { .aw-btn { transition: none; } }
 </style>
 
-<div class="welcome" data-landing>
-    <header class="welcome-bar">
-        <a class="welcome-brand" href="/">
-            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" width="36" height="36">
-            Artha
-        </a>
-        <a class="welcome-signin" href="{{ url_for('auth.login') }}">Sign in</a>
+<div class="aw" data-landing>
+    <header class="aw-bar">
+        <div class="aw-wrap">
+            <a class="aw-brand" href="/" aria-label="Artha home">
+                <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" width="30" height="30">
+                Artha
+            </a>
+            <nav class="aw-nav" aria-label="Main">
+                <a class="aw-hide-s" href="#features">Features</a>
+                <a class="aw-hide-s" href="#privacy">Privacy</a>
+                <a class="aw-hide-s" href="#pricing">Pricing</a>
+                <a href="{{ url_for('auth.login') }}">Sign in</a>
+                <a class="aw-btn small primary" href="{{ url_for('auth.register') }}">Get started</a>
+            </nav>
+        </div>
     </header>
 
     <main role="main">
-        <section class="welcome-hero">
-            <h1>Know what&rsquo;s safe to spend.</h1>
-            <p>Artha opens on one number: what you can spend today and still end the month on plan. Purchases sort themselves, the bills you forgot to track get noticed, and a single line shows whether you&rsquo;re on pace.</p>
-            <div class="welcome-ctas">
-                <a class="welcome-btn primary" href="{{ url_for('auth.register') }}">Create a free account</a>
-                <a class="welcome-btn" href="https://testflight.apple.com/join/hj61wEUG">Join the iPhone beta</a>
+        <section class="aw-hero">
+            <div class="aw-wrap">
+                <div>
+                    <p class="aw-label">Personal finance for the web, iPhone, iPad and Mac</p>
+                    <h1>Know what&rsquo;s <em>safe to spend.</em></h1>
+                    <p class="aw-lede">Artha opens on <strong>one number</strong>: what you can spend today and still end the month on plan. It counts the bills still to come, notices the ones you forgot to track, and shows in a single line whether you&rsquo;re on pace.</p>
+                    <div class="aw-cta">
+                        <a class="aw-btn primary" href="{{ url_for('auth.register') }}">Create a free account</a>
+                        <a class="aw-btn" href="https://testflight.apple.com/join/hj61wEUG">Join the iPhone beta</a>
+                    </div>
+                    <p class="aw-note">Free on the web. In beta on TestFlight for iPhone, iPad and Mac.</p>
+                </div>
+
+                <div class="aw-phone-wrap">
+                    <div class="aw-float f1" aria-hidden="true">
+                        <span class="aw-pill good"><i></i></span>
+                        <span><b>On pace</b><small>12 days left in October</small></span>
+                    </div>
+                    <div class="aw-phone" role="img" aria-label="Artha's Today screen with sample figures: $64 safe to spend today, on pace, with the month's pace chart and bills coming up.">
+                        <div class="aw-screen">
+                            <div class="aw-status"><span>9:41</span><span>Today</span></div>
+                            <div class="aw-card">
+                                <div class="aw-label">Safe to spend today</div>
+                                <div class="aw-fig aw-hero-fig">$64</div>
+                                <span class="aw-pill good"><i></i>On pace</span>
+                                <p class="aw-sentence">You can spend $64 a day until the 31st and still finish October on plan.</p>
+                            </div>
+                            <div class="aw-card" style="padding:14px 14px 10px">
+                                <div class="aw-label">October so far</div>
+                                <svg class="aw-chart" viewBox="0 0 300 110" aria-hidden="true">
+                                    <line x1="6" y1="100" x2="294" y2="12" stroke="var(--border-subtle)" stroke-width="2" stroke-dasharray="4 5"/>
+                                    <path d="M6 100 L34 94 L62 90 L90 79 L118 74 L146 66 L174 60 L196 55" fill="none" stroke="var(--gold)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <circle cx="196" cy="55" r="5.5" fill="var(--gold)"/>
+                                    <circle cx="196" cy="55" r="10" fill="var(--gold)" opacity=".18"/>
+                                </svg>
+                            </div>
+                            <div class="aw-card" style="padding:6px 14px">
+                                <div class="aw-rows">
+                                    <div class="aw-row"><span><span class="aw-tile">R</span><span>Rent<small>Due Nov 1</small></span></span><span class="aw-fig">$1,450</span></div>
+                                    <div class="aw-row"><span><span class="aw-tile">P</span><span>Phone<small>Due Oct 24</small></span></span><span class="aw-fig">$45</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="aw-float f2" aria-hidden="true">
+                        <span class="aw-tile" style="background:var(--band);color:#fff">&#10003;</span>
+                        <span><b>No bank login</b><small>Nothing to connect, ever</small></span>
+                    </div>
+                </div>
             </div>
-            <p class="welcome-status">On the web now. In beta on TestFlight for iPhone, iPad and Mac.</p>
         </section>
 
-        <section class="welcome-grid" aria-label="What Artha does">
-            <div class="welcome-tile">
-                <h2>Safe to spend</h2>
-                <p>One number for today, worked out from your budget, the bills still to come and what you&rsquo;ve already spent.</p>
+        <div class="aw-strip">
+            <div class="aw-wrap">
+                <span><b>Any of about 160</b> currencies</span>
+                <span><b>Statements</b> you review before saving</span>
+                <span><b>Apple Pay</b> purchases, through Shortcuts</span>
+                <span><b>Widgets</b> for Home Screen and Lock Screen</span>
+                <span><b>Two-factor</b> sign-in</span>
             </div>
-            <div class="welcome-tile">
-                <h2>A plan for the month</h2>
-                <p>The month splits into bills, everyday spending and what&rsquo;s left, with category limits suggested from your own spending.</p>
-            </div>
-            <div class="welcome-tile">
-                <h2>Statements, reviewed by you</h2>
-                <p>Import a statement and check every transaction before anything is saved. The file itself is never stored.</p>
-            </div>
-            <div class="welcome-tile">
-                <h2>An assistant that asks first</h2>
-                <p>Ask about your money in plain language. When it suggests a change, nothing is saved until you say so.</p>
-            </div>
-            <div class="welcome-tile">
-                <h2>Net worth, any currency</h2>
-                <p>Every account in its own currency, from about 160, with net worth over time.</p>
-            </div>
-            <div class="welcome-tile">
-                <h2>On iPhone, iPad and Mac</h2>
-                <p>A native app with widgets for the Home Screen and Lock Screen, in beta now, on the same account as the web.</p>
+        </div>
+
+        <section class="aw-sec" id="features">
+            <div class="aw-wrap">
+                <div class="aw-head">
+                    <p class="aw-label">How Artha works</p>
+                    <h2>Every number answers a question you actually have.</h2>
+                    <p>Can I afford this? Am I on track this month? Where did it all go? Artha puts the answer first and keeps the spreadsheet out of sight.</p>
+                </div>
+
+                <div class="aw-story">
+                    <div class="aw-copy">
+                        <p class="aw-label">Plan</p>
+                        <h3>A month that adds up before it starts.</h3>
+                        <p>Set one budget and Artha splits it into the bills you have to pay, everyday spending, and what&rsquo;s left. Category limits are suggested from what you actually spend, not from a template.</p>
+                        <ul class="aw-ticks">
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Bills paid and still to come, in one list</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Limits per category, only where you want them</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Over a limit shows in amber: information, not a scolding</li>
+                        </ul>
+                    </div>
+                    <div class="aw-visual" role="img" aria-label="Artha's Plan for October with sample figures: a $3,200 budget split into bills, everyday spending and what's left, with category meters.">
+                        <div class="aw-card">
+                            <div class="aw-label">October plan</div>
+                            <div class="aw-fig" style="font-size:2rem;margin-top:6px">$3,200</div>
+                            <div class="aw-split">
+                                <div><b class="aw-fig">$1,840</b><small>Bills</small></div>
+                                <div><b class="aw-fig">$1,050</b><small>Everyday</small></div>
+                                <div><b class="aw-fig aw-good">$310</b><small>Left</small></div>
+                            </div>
+                        </div>
+                        <div class="aw-card">
+                            <div class="aw-row" style="border:0;padding:0"><span>Groceries</span><span class="aw-fig">$312 <small style="display:inline">of $450</small></span></div>
+                            <div class="aw-meter"><i style="width:69%"></i></div>
+                            <div class="aw-row" style="border:0;padding:14px 0 0"><span>Eating out</span><span class="aw-fig aw-caution">$214 <small style="display:inline">of $180</small></span></div>
+                            <div class="aw-meter caution"><i style="width:100%"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="aw-story flip">
+                    <div class="aw-copy">
+                        <p class="aw-label">Adding money</p>
+                        <h3>Type what it was. Artha does the filing.</h3>
+                        <p>Enter an amount and a few words, and Artha picks the category. Import a bank or card statement and every row waits for you to check before anything is saved. The file itself is never stored.</p>
+                        <ul class="aw-ticks">
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Apple Pay purchases can log themselves, through a shortcut you set up</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Search, filter, swipe to delete with Undo</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Kept to the cent, in any of about 160 currencies</li>
+                        </ul>
+                    </div>
+                    <div class="aw-visual" role="img" aria-label="An Artha statement import with sample rows waiting for review, each with a suggested category.">
+                        <div class="aw-card">
+                            <div class="aw-row" style="border:0;padding:0 0 6px"><span><b>Review 14 transactions</b></span><span class="aw-label">Card statement</span></div>
+                            <div class="aw-rows">
+                                <div class="aw-row"><span><span class="aw-tile">G</span><span>Corner Market<small>Groceries · suggested</small></span></span><span class="aw-fig">$58.20</span></div>
+                                <div class="aw-row"><span><span class="aw-tile">T</span><span>Transit card<small>Transport · suggested</small></span></span><span class="aw-fig">$40.00</span></div>
+                                <div class="aw-row"><span><span class="aw-tile">E</span><span>Noodle bar<small>Eating out · suggested</small></span></span><span class="aw-fig">$23.75</span></div>
+                            </div>
+                            <div class="aw-confirm"><span>Save 14</span><span>Edit first</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="aw-story">
+                    <div class="aw-copy">
+                        <p class="aw-label">Assistant</p>
+                        <h3>Ask in plain words. Nothing changes until you say so.</h3>
+                        <p>Ask how a month went, or tell it about a purchase. The assistant can log and fix things for you, but every change waits for your own tap. It never touches your account on its own.</p>
+                        <ul class="aw-ticks">
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Answers from your own numbers, not general advice</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Every suggested change shown before it&rsquo;s saved</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Your data isn&rsquo;t used to train AI models</li>
+                        </ul>
+                    </div>
+                    <div class="aw-visual" role="img" aria-label="A sample conversation with Artha's assistant, which proposes logging a $32 purchase and waits for confirmation.">
+                        <div class="aw-bubble me">Lunch with Sam was $32, I paid</div>
+                        <div class="aw-bubble it">I&rsquo;ll add <b>$32.00</b> to <b>Eating out</b> for today. That leaves $32 safe to spend today.
+                            <div class="aw-confirm"><span>Add it</span><span>Change</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="aw-story flip">
+                    <div class="aw-copy">
+                        <p class="aw-label">Wealth</p>
+                        <h3>Everything you own, in the currency you hold it.</h3>
+                        <p>Add accounts in any of about 160 currencies and see net worth over time. When a balance hasn&rsquo;t been touched in a month, Artha asks you to confirm or update it, so the total stays honest.</p>
+                        <ul class="aw-ticks">
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Net worth over time, not just today</li>
+                            <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Stale balances flagged, never guessed</li>
+                        </ul>
+                    </div>
+                    <div class="aw-visual" role="img" aria-label="Artha's Wealth screen with sample accounts in dollars, taka and euros, and one balance flagged as over a month old.">
+                        <div class="aw-card">
+                            <div class="aw-label">Net worth</div>
+                            <div class="aw-fig" style="font-size:2rem;margin:6px 0 4px">$48,920</div>
+                            <svg class="aw-chart" viewBox="0 0 300 70" aria-hidden="true"><path d="M4 60 C40 58 60 52 90 50 S150 40 180 34 S240 22 296 12" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round"/></svg>
+                            <div class="aw-rows" style="margin-top:6px">
+                                <div class="aw-row"><span><span class="aw-tile">$</span><span>Checking<small>USD</small></span></span><span class="aw-fig">$6,410</span></div>
+                                <div class="aw-row"><span><span class="aw-tile">৳</span><span>Savings<small>BDT</small></span></span><span class="aw-fig">৳ 9,80,000</span></div>
+                                <div class="aw-row"><span><span class="aw-tile">€</span><span>Travel account<small class="aw-caution">Updated 6 weeks ago</small></span></span><span class="aw-fig">€ 1,200</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <section class="welcome-private">
-            <h2>Private by design</h2>
-            <p>Artha never asks for your bank login. There are no ads, no analytics and no tracking, and your data is never sold or shared.</p>
-            <p><a href="{{ url_for('auth.privacy') }}">How Artha handles your data</a></p>
+        <section class="aw-sec" style="padding-top:56px">
+            <div class="aw-wrap">
+                <div class="aw-head">
+                    <p class="aw-label">Everywhere you check</p>
+                    <h2>One Artha, on every screen.</h2>
+                    <p>The website and the apps run on the same account, so a number never disagrees with itself. Widgets put what&rsquo;s safe to spend on your Home Screen and Lock Screen.</p>
+                </div>
+                <div class="aw-devices">
+                    <div class="aw-browser" role="img" aria-label="Artha in a desktop browser with its sidebar and Today overview, sample figures.">
+                        <div class="aw-browser-bar"><i></i><i></i><i></i><span>arthaapp.com</span></div>
+                        <div class="aw-desk">
+                            <div class="aw-side"><b>Today</b><span>Activity</span><span>Plan</span><span>Wealth</span><span>Assistant</span></div>
+                            <div class="aw-desk-main">
+                                <div class="aw-card"><div class="aw-label">Safe to spend today</div><div class="aw-fig" style="font-size:2.1rem;margin:6px 0 8px">$64</div><span class="aw-pill good"><i></i>On pace</span></div>
+                                <div class="aw-card"><div class="aw-label">Where October went</div>
+                                    <div class="aw-row" style="padding:8px 0 4px;border:0"><span>Housing</span><span class="aw-fig">$1,450</span></div>
+                                    <div class="aw-meter"><i style="width:82%"></i></div>
+                                    <div class="aw-row" style="padding:10px 0 4px;border:0"><span>Groceries</span><span class="aw-fig">$312</span></div>
+                                    <div class="aw-meter"><i style="width:30%"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="aw-widgets" role="img" aria-label="Two Artha widgets: safe to spend and spent this month, sample figures.">
+                        <div class="aw-widget"><span class="aw-label">Safe today</span><span class="aw-fig" style="font-size:1.9rem">$64</span><span class="aw-pill good" style="align-self:flex-start"><i></i>On pace</span></div>
+                        <div class="aw-widget"><span class="aw-label">Spent</span><span class="aw-fig" style="font-size:1.9rem">$1,962</span><span style="font-size:.74rem;color:var(--text-secondary)">of $3,200</span></div>
+                        <div class="aw-widget wide"><span class="aw-label">Net worth</span><span class="aw-fig" style="font-size:1.6rem">$48,920</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="aw-band" id="privacy">
+            <div class="aw-wrap">
+                <p class="aw-label">Private by design</p>
+                <h2>Your money is your business. Not ours.</h2>
+                <p>Artha is built so there&rsquo;s very little to protect in the first place: no bank connection, no trackers, nothing to sell.</p>
+                <div class="aw-never">
+                    <div><b>No bank login</b><span>Artha never asks for one. There&rsquo;s no bank connection to give it to.</span></div>
+                    <div><b>No ads, no analytics</b><span>No tracking scripts run anywhere in Artha, on the web or in the apps.</span></div>
+                    <div><b>Statements aren&rsquo;t kept</b><span>An imported file is read once for you to review, and never stored.</span></div>
+                    <div><b>Delete means delete</b><span>Closing your account removes your data after a 30-day window to change your mind.</span></div>
+                </div>
+                <a class="aw-more" href="{{ url_for('auth.privacy') }}">Read how Artha handles your data</a>
+            </div>
+        </section>
+
+        <section class="aw-sec" id="pricing">
+            <div class="aw-wrap aw-price">
+                <p class="aw-label">Pricing</p>
+                <div class="aw-head" style="margin:10px auto 0"><h2>Free, while it grows.</h2></div>
+                <div class="aw-card">
+                    <div class="aw-row" style="border:0;padding:0"><span><b style="font-size:1.2rem">Artha</b></span><span class="aw-fig aw-price-fig">$0</span></div>
+                    <ul class="aw-ticks">
+                        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Safe to spend, the month&rsquo;s plan and pace</li>
+                        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Statement import, the assistant and Wealth</li>
+                        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>The iPhone, iPad and Mac beta, with widgets</li>
+                    </ul>
+                    <a class="aw-btn primary" href="{{ url_for('auth.register') }}" style="width:100%">Create a free account</a>
+                    <p class="aw-note" style="text-align:center">If paid plans ever arrive, you&rsquo;ll hear first, and nothing is charged unless you choose it.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="aw-sec" style="padding-top:72px">
+            <div class="aw-wrap aw-faq">
+                <div class="aw-head" style="margin-bottom:16px"><h2>Questions</h2></div>
+                <details><summary>Does Artha connect to my bank?</summary><p>No. You add spending yourself, from a statement you review, or from Apple Pay through a shortcut you set up. Artha never asks for a bank login.</p></details>
+                <details><summary>How is &ldquo;safe to spend&rdquo; worked out?</summary><p>From your monthly budget, what you&rsquo;ve already spent, and the bills still due before the month ends, spread over the days left. It&rsquo;s only as good as what you&rsquo;ve entered, so the bills list matters.</p></details>
+                <details><summary>Is there an app?</summary><p>Yes. Artha for iPhone, iPad and Mac is in beta on TestFlight, on the same account as the website. <a class="aw-accent" href="https://testflight.apple.com/join/hj61wEUG">Join the beta</a>.</p></details>
+                <details><summary>Does the assistant learn from my data?</summary><p>No. It runs on Anthropic&rsquo;s API, which doesn&rsquo;t train on customer data by default, and Artha never opts in. It can suggest changes, but only you can save them.</p></details>
+                <details><summary>Is Artha financial advice?</summary><p>No. It helps you see and plan your own money. For advice about investments, tax or debt, talk to a qualified professional.</p></details>
+                <details><summary>Who makes Artha?</summary><p>Anwar Creative Studio, an independent software company in California that also makes the email app Corres. Write to <a class="aw-accent" href="mailto:support@arthaapp.com">support@arthaapp.com</a> and a person reads it.</p></details>
+            </div>
+        </section>
+
+        <section class="aw-close">
+            <div class="aw-wrap">
+                <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" width="72" height="72">
+                <h2>Know what&rsquo;s safe to spend.</h2>
+                <p>Free on the web, in beta on iPhone, iPad and Mac.</p>
+                <div class="aw-cta">
+                    <a class="aw-btn primary" href="{{ url_for('auth.register') }}">Create a free account</a>
+                    <a class="aw-btn" href="{{ url_for('auth.login') }}">Sign in</a>
+                </div>
+            </div>
         </section>
     </main>
 
