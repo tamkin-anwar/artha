@@ -146,6 +146,12 @@ def privacy():
     return render_template("privacy.html")
 
 
+@auth_bp.route("/terms")
+def terms():
+    """Artha's terms of use, public like the privacy page."""
+    return render_template("terms.html")
+
+
 class AccountError(Exception):
     """A sign-up or deletion the person can fix; the message is written
     for them and safe to show as-is."""

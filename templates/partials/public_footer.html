@@ -1,0 +1,17 @@
+{# Footer for Artha's public pages: landing, privacy, terms. #}
+<footer class="public-footer">
+    <nav aria-label="Artha">
+        <a href="{{ url_for('auth.privacy') }}">Privacy</a>
+        <a href="{{ url_for('auth.terms') }}">Terms</a>
+        <a href="mailto:support@arthaapp.com">Support</a>
+        <a href="{{ url_for('auth.login') }}">Sign in</a>
+    </nav>
+    <p>Artha, by <a href="https://anwarcreativestudio.com">Anwar Creative Studio</a> &middot; &copy; 2026 Anwar Creative Studio LLC</p>
+</footer>
+<style>
+    .public-footer { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; display: flex; flex-direction: column; align-items: center; gap: .75rem; text-align: center; font-size: .875rem; color: var(--text-secondary); }
+    .public-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem 1.25rem; }
+    .public-footer a { color: var(--text-secondary); text-decoration: none; }
+    .public-footer a:hover { color: var(--text-primary); }
+    .public-footer p a { color: var(--gold); }
+</style>

@@ -45,10 +45,9 @@ def test_delete_account_sets_deleted_at_and_logs_out(auth_client, user):
     refreshed = User.query.filter_by(username=user.username).first()
     assert refreshed.deleted_at is not None
 
-    # Logged out: the dashboard now redirects to login instead of loading.
+    # Logged out: home shows the public landing page, not the dashboard.
     dash_resp = auth_client.get("/")
-    assert dash_resp.status_code == 302
-    assert "/login" in dash_resp.headers["Location"]
+    assert b"data-landing" in dash_resp.data
 
 
 def test_delete_account_blocks_the_sole_remaining_admin(client, app):
@@ -95,6 +94,7 @@ def test_logging_back_in_during_the_window_cancels_deletion(client, user):
     # Actually logged in, not just redirected — the dashboard loads.
     dash_resp = client.get("/")
     assert dash_resp.status_code == 200
+    assert b"data-landing" not in dash_resp.data
 
 
 def test_purge_expired_accounts_cli_command_cascades_and_respects_the_window(app, user):

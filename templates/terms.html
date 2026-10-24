@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set hide_app_shell = true %}
+{% block title %}Terms of Use{% endblock %}
+
+{% block content %}
+{% include 'partials/settings_back.html' %}
+<main class="min-h-screen flex items-center justify-center px-4 py-14 settings-bg" role="main">
+    <div class="w-full max-w-2xl">
+
+        <div class="flex items-center justify-center gap-2 mb-6">
+            <span class="inline-flex items-center justify-center w-[66px] h-[66px]">
+                <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="Artha logo" class="w-full h-full object-contain drop-shadow-md" loading="eager" />
+            </span>
+            <div style="font-family:var(--font-display); font-size:2.25rem; font-weight:700; letter-spacing:-0.5px; color:var(--text-primary);">Artha</div>
+        </div>
+
+        <section class="rounded-2xl p-8 shadow-xl settings-card" aria-label="Terms of use">
+            <h1 style="font-family:var(--font-display);" class="text-center text-2xl font-semibold mb-2">Terms of Use</h1>
+            <p class="text-center text-xs text-secondary mb-8">Effective October 23, 2026</p>
+
+            <div class="space-y-7">
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Who we are</h2>
+                    <p class="text-sm text-secondary leading-relaxed">Artha, on the web at arthaapp.com and in the apps for iPhone and iPad, is made by Anwar Creative Studio LLC, a California company ("we"). By creating an account or using Artha, you agree to these terms.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Your account</h2>
+                    <p class="text-sm text-secondary leading-relaxed">Keep your password safe and turn on two-factor sign-in if you can. You're responsible for what happens under your account. You must be at least 13, or the age of digital consent where you live.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Not financial advice</h2>
+                    <p class="text-sm text-secondary leading-relaxed">Artha helps you see and plan your own money. Its numbers, including what's safe to spend, come from what you enter or import and can be wrong if that information is incomplete. Its assistant can make mistakes. Nothing in Artha is financial, tax, legal or investment advice, and Artha doesn't move money or connect to your bank.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Your data</h2>
+                    <p class="text-sm text-secondary leading-relaxed">What you put into Artha is yours. We use it only to run Artha for you, as described in the <a href="{{ url_for('auth.privacy') }}" class="auth-link">privacy page</a>. You can export your data and delete your account at any time.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Fair use</h2>
+                    <p class="text-sm text-secondary leading-relaxed">Don't misuse Artha: no attempts to reach other people's data, to overload or disrupt the service, or to use it for anything unlawful. We may suspend accounts that do.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Price and changes</h2>
+                    <p class="text-sm text-secondary leading-relaxed">Artha is free to use today. If we introduce paid plans, we'll tell you before anything is charged, and you'll never be charged without choosing to pay. We improve Artha often; features can change, and we'll keep these terms current, with a new date above when they change.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">No warranty, limited liability</h2>
+                    <p class="text-sm text-secondary leading-relaxed">We work hard to keep Artha accurate and available, but it's provided as it is, without warranties. To the extent the law allows, we aren't liable for indirect or consequential losses, and our total liability for any claim is limited to US$50 or the amount you paid us in the 12 months before the claim, whichever is greater.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Ending</h2>
+                    <p class="text-sm text-secondary leading-relaxed">You can stop using Artha and delete your account whenever you like. We may end the service with reasonable notice, and give you time to export your data first.</p>
+                </div>
+                <div>
+                    <h2 style="font-family:var(--font-display);" class="text-lg font-semibold mb-2">Law and contact</h2>
+                    <p class="text-sm text-secondary leading-relaxed">These terms are governed by the laws of the State of California, United States. Questions go to <a href="mailto:support@arthaapp.com" class="auth-link">support@arthaapp.com</a>.</p>
+                </div>
+            </div>
+        </section>
+        {% include 'partials/public_footer.html' %}
+    </div>
+</main>
+{% endblock %}

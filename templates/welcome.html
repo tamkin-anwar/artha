@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set hide_app_shell = true %}
+{% block title %}Artha · Know what's safe to spend{% endblock %}
+{% block meta %}
+    <meta name="description" content="Artha opens on one number: what you can spend today and still end the month on plan. On the web, and in beta for iPhone and iPad. By Anwar Creative Studio.">
+    <meta property="og:title" content="Artha · Know what's safe to spend">
+    <meta property="og:description" content="One number for what you can spend today, worked out from your bills, budget and accounts. No bank login, no tracking.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://arthaapp.com/">
+    <link rel="canonical" href="https://arthaapp.com/">
+{% endblock %}
+
+{% block content %}
+<style>
+    .welcome { min-height: 100vh; background: var(--bg-page); color: var(--text-primary); }
+    .welcome-bar { max-width: 64rem; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: calc(env(safe-area-inset-top, 0px) + 1.25rem) 1.25rem 1.25rem; }
+    .welcome-brand { display: flex; align-items: center; gap: .5rem; font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; color: var(--text-primary); text-decoration: none; }
+    .welcome-brand img { width: 36px; height: 36px; }
+    .welcome-signin { font-weight: 600; font-size: .95rem; color: var(--gold); text-decoration: none; }
+    .welcome-hero { max-width: 44rem; margin: 0 auto; padding: 4rem 1.25rem 3rem; text-align: center; }
+    .welcome-hero h1 { font-family: var(--font-display); font-size: clamp(2.4rem, 7vw, 4rem); line-height: 1.05; letter-spacing: -0.02em; font-weight: 700; margin: 0 0 1.25rem; text-wrap: balance; }
+    .welcome-hero p { font-size: 1.125rem; line-height: 1.6; color: var(--text-secondary); margin: 0 auto 2rem; max-width: 36rem; }
+    .welcome-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
+    .welcome-btn { display: inline-flex; align-items: center; padding: .8rem 1.4rem; border-radius: 999px; font-weight: 600; text-decoration: none; border: 1px solid var(--border-subtle, rgba(127,127,127,.3)); color: var(--text-primary); }
+    .welcome-btn.primary { background: var(--gold); border-color: var(--gold); color: #fff; }
+    .welcome-status { margin-top: 1.25rem; font-size: .85rem; color: var(--text-secondary); }
+    .welcome-grid { max-width: 64rem; margin: 0 auto; padding: 1rem 1.25rem 3rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+    .welcome-tile { background: var(--bg-card); border: 1px solid var(--border-subtle, rgba(127,127,127,.2)); border-radius: 1rem; padding: 1.4rem; }
+    .welcome-tile h2 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; margin: 0 0 .4rem; }
+    .welcome-tile p { margin: 0; font-size: .95rem; line-height: 1.55; color: var(--text-secondary); }
+    .welcome-private { max-width: 44rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; text-align: center; }
+    .welcome-private h2 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; margin: 0 0 .75rem; }
+    .welcome-private p { color: var(--text-secondary); line-height: 1.6; margin: 0 0 .75rem; }
+    .welcome-private a { color: var(--gold); }
+</style>
+
+<div class="welcome" data-landing>
+    <header class="welcome-bar">
+        <a class="welcome-brand" href="/">
+            <img src="{{ url_for('static', filename='icons/artha-logo.png') }}" alt="" width="36" height="36">
+            Artha
+        </a>
+        <a class="welcome-signin" href="{{ url_for('auth.login') }}">Sign in</a>
+    </header>
+
+    <main role="main">
+        <section class="welcome-hero">
+            <h1>Know what&rsquo;s safe to spend.</h1>
+            <p>Artha opens on one number: what you can spend today and still end the month on plan. Purchases sort themselves, the bills you forgot to track get noticed, and a single line shows whether you&rsquo;re on pace.</p>
+            <div class="welcome-ctas">
+                <a class="welcome-btn primary" href="{{ url_for('auth.register') }}">Create a free account</a>
+                <a class="welcome-btn" href="https://testflight.apple.com/join/hj61wEUG">Join the iPhone beta</a>
+            </div>
+            <p class="welcome-status">On the web now. In beta on TestFlight for iPhone and iPad.</p>
+        </section>
+
+        <section class="welcome-grid" aria-label="What Artha does">
+            <div class="welcome-tile">
+                <h2>Safe to spend</h2>
+                <p>One number for today, worked out from your budget, the bills still to come and what you&rsquo;ve already spent.</p>
+            </div>
+            <div class="welcome-tile">
+                <h2>A plan for the month</h2>
+                <p>The month splits into bills, everyday spending and what&rsquo;s left, with category limits suggested from your own spending.</p>
+            </div>
+            <div class="welcome-tile">
+                <h2>Statements, reviewed by you</h2>
+                <p>Import a statement and check every transaction before anything is saved. The file itself is never stored.</p>
+            </div>
+            <div class="welcome-tile">
+                <h2>An assistant that asks first</h2>
+                <p>Ask about your money in plain language. When it suggests a change, nothing is saved until you say so.</p>
+            </div>
+            <div class="welcome-tile">
+                <h2>Net worth, any currency</h2>
+                <p>Every account in its own currency, from about 160, with net worth over time.</p>
+            </div>
+            <div class="welcome-tile">
+                <h2>On iPhone and iPad</h2>
+                <p>A native app with widgets for the Home Screen and Lock Screen, in beta now, on the same account as the web.</p>
+            </div>
+        </section>
+
+        <section class="welcome-private">
+            <h2>Private by design</h2>
+            <p>Artha never asks for your bank login. There are no ads, no analytics and no tracking, and your data is never sold or shared.</p>
+            <p><a href="{{ url_for('auth.privacy') }}">How Artha handles your data</a></p>
+        </section>
+    </main>
+
+    {% include 'partials/public_footer.html' %}
+</div>
+{% endblock %}

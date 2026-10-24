@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from flask import render_template, redirect, url_for, request, flash, jsonify, Response, abort
+from flask import current_app, render_template, redirect, url_for, request, flash, jsonify, Response, abort
 from flask_login import login_required, current_user
 from icalendar import Alarm, Calendar as ICalendar, Event as ICalEvent
 from sqlalchemy import func
@@ -33,8 +33,13 @@ def healthz():
 
 
 @dashboard_bp.route("/", methods=["GET", "POST"])
-@login_required
 def index():
+    # Signed out, the home page introduces Artha instead of jumping to the
+    # login form: it's the public homepage Google's and Apple's reviews see.
+    if not current_user.is_authenticated:
+        if request.method == "GET" and not is_ajax_request():
+            return render_template("welcome.html")
+        return current_app.login_manager.unauthorized()
     if request.method == "POST":
         note_content = sanitize_note_html(request.form.get("note", "").strip())
         if not note_content:

@@ -9,6 +9,27 @@ def test_privacy_page_is_reachable_without_logging_in(client):
     assert b"Privacy" in resp.data
 
 
+def test_home_shows_landing_page_when_signed_out(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"data-landing" in resp.data
+    assert b"safe to spend" in resp.data
+    assert b"/privacy" in resp.data and b"/terms" in resp.data
+
+
+def test_signed_out_post_to_home_still_requires_login(client):
+    resp = client.post("/", data={"note": "hi"})
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_terms_page_is_reachable_without_logging_in(client):
+    resp = client.get("/terms")
+    assert resp.status_code == 200
+    assert b"Terms of Use" in resp.data
+    assert b"Anwar Creative Studio LLC" in resp.data
+
+
 def test_register_creates_user(client, app):
     resp = client.post(
         "/register",
@@ -80,10 +101,11 @@ def test_logout_ends_session(auth_client):
     resp = auth_client.get("/")
     assert resp.status_code == 200
 
+    assert b"data-landing" not in resp.data
+
     auth_client.get("/logout")
     resp = auth_client.get("/")
-    assert resp.status_code == 302
-    assert "/login" in resp.headers["Location"]
+    assert b"data-landing" in resp.data
 
 
 def test_login_is_rate_limited_after_repeated_failures(rate_limited_client):

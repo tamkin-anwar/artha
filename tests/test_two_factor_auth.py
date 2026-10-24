@@ -59,10 +59,9 @@ def test_login_for_2fa_enabled_user_does_not_complete_without_the_second_step(cl
     assert resp.status_code == 302
     assert "/login/verify-2fa" in resp.headers["Location"]
 
-    # Not actually logged in yet.
+    # Not actually logged in yet: home shows the public landing page.
     dash_resp = client.get("/")
-    assert dash_resp.status_code == 302
-    assert "/login" in dash_resp.headers["Location"]
+    assert b"data-landing" in dash_resp.data
 
 
 def test_verify_2fa_correct_totp_code_completes_login(client):
@@ -78,6 +77,7 @@ def test_verify_2fa_correct_totp_code_completes_login(client):
 
     dash_resp = client.get("/")
     assert dash_resp.status_code == 200
+    assert b"data-landing" not in dash_resp.data
 
 
 def test_verify_2fa_wrong_code_is_rejected(client):
@@ -89,7 +89,7 @@ def test_verify_2fa_wrong_code_is_rejected(client):
     assert b"Invalid code" in resp.data
 
     dash_resp = client.get("/")
-    assert dash_resp.status_code == 302  # still not logged in
+    assert b"data-landing" in dash_resp.data  # still not logged in
 
 
 def test_recovery_code_works_exactly_once(client):
